@@ -1,5 +1,5 @@
 .station-popup {
-  width: 260px;
+  width: 290px;
   font-size: 12px;
 }
 
@@ -30,22 +30,25 @@
   color: #444;
 }
 
-.station-popup__mini-forecast {
+.station-popup__legend {
   display: flex;
-  justify-content: space-between;
-  margin-top: 4px;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 2px;
 }
 
-.station-popup__mini-day {
-  text-align: center;
-  flex: 1;
+.station-popup__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #555;
 }
 
-.station-popup__mini-day > div:first-child {
-  text-transform: capitalize;
-  font-weight: 600;
+.station-popup__legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
 }
 
-.station-popup__mini-day > div:nth-child(2) {
-  font-size: 16px;
-}

@@ -49,7 +49,6 @@ export function ForecastPanel({ state, onClose }: Props) {
                   💧 {day.precipitationSum.toFixed(1)}mm
                   {day.precipitationProbabilityMax !== null && ` (${day.precipitationProbabilityMax}%)`}
                 </div>
-                <div className="forecast-day__wind">💨 {Math.round(day.windSpeedMax)} km/h</div>
               </div>
             )
           })}

@@ -28,7 +28,7 @@ function StationMarker({ station }: { station: (typeof STATIC_STATIONS)[number] 
 
   return (
     <Marker position={[station.lat, station.lon]} icon={STATION_ICON} eventHandlers={{ popupopen: handleOpen }}>
-      <Popup minWidth={260} maxWidth={280}>
+      <Popup minWidth={290} maxWidth={310}>
         <StationPopup state={state} />
       </Popup>
     </Marker>

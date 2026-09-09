@@ -8,7 +8,7 @@
   border-radius: 10px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   max-width: 95vw;
-  width: 780px;
+  width: 640px;
   overflow: hidden;
 }
 
@@ -53,13 +53,12 @@
 .forecast-panel__days {
   display: flex;
   overflow-x: auto;
-  gap: 2px;
 }
 
 .forecast-day {
-  flex: 1 0 100px;
-  min-width: 100px;
-  padding: 10px 6px;
+  flex: 1 0 88px;
+  min-width: 88px;
+  padding: 10px 4px;
   text-align: center;
   border-right: 1px solid #f0f0f0;
   font-size: 12px;
@@ -72,20 +71,22 @@
 .forecast-day__date {
   font-weight: 600;
   text-transform: capitalize;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  color: #333;
 }
 
 .forecast-day__emoji {
-  font-size: 26px;
-  margin: 4px 0;
+  font-size: 28px;
+  margin: 6px 0;
 }
 
 .forecast-day__temps {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  font-size: 14px;
 }
 
 .forecast-day__max {
-  font-weight: 600;
+  font-weight: 700;
   margin-right: 6px;
 }
 
@@ -95,11 +96,6 @@
 
 .forecast-day__precip {
   color: #2563eb;
-  margin-bottom: 2px;
-}
-
-.forecast-day__wind {
-  color: #666;
 }
 
 @media (max-width: 640px) {
@@ -109,5 +105,43 @@
     left: 0;
     transform: none;
     border-radius: 10px 10px 0 0;
+  }
+
+  /* Le défilement horizontal de 7 cartes à largeur fixe passait mal sur
+     petit écran (retour utilisateur : "l'affichage n'est pas bon") — une
+     liste verticale, avec chaque jour sur une ligne, est plus lisible et
+     plus naturelle au doigt que de deviner qu'il faut swiper. */
+  .forecast-panel__days {
+    flex-direction: column;
+    overflow-x: visible;
+    max-height: 60dvh;
+    overflow-y: auto;
+  }
+
+  .forecast-day {
+    flex: none;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto 32px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    padding: 8px 12px;
+    border-right: none;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .forecast-day__date {
+    margin-bottom: 0;
+    width: 4.5em;
+  }
+
+  .forecast-day__emoji {
+    font-size: 22px;
+    margin: 0;
+  }
+
+  .forecast-day__temps {
+    margin-bottom: 0;
   }
 }
