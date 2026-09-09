@@ -60,8 +60,12 @@ async function fetchBatch(points, attempt = 0) {
   url.searchParams.set('models', 'best_match')
 
   const res = await fetch(url)
-  if (res.status === 429 && attempt < 5) {
-    console.log(`429, retry dans ${4 * (attempt + 1)}s…`)
+  // 429 = rate-limit (voir plus haut) ; 5xx = erreur transitoire côté
+  // Open-Meteo (observé en usage réel : un 503 isolé au milieu d'une série
+  // de lots par ailleurs valides) — les deux valent la peine d'un retry,
+  // une erreur définitive (400 mauvais paramètre, etc.) non.
+  if ((res.status === 429 || res.status >= 500) && attempt < 5) {
+    console.log(`${res.status}, retry dans ${4 * (attempt + 1)}s…`)
     await wait(4000 * (attempt + 1))
     return fetchBatch(points, attempt + 1)
   }
