@@ -1,0 +1,80 @@
+.rain-controls {
+  position: absolute;
+  top: 60px;
+  left: 12px;
+  z-index: 1000;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  padding: 10px 12px;
+  font-size: 12px;
+  width: 210px;
+}
+
+.rain-controls__header {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.rain-controls__toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.rain-controls__toggle-btn {
+  flex: 1;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 6px;
+  padding: 4px 2px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rain-controls__toggle-btn--active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.rain-controls__load-btn {
+  width: 100%;
+  border: none;
+  background: #2563eb;
+  color: white;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.rain-controls__load-btn:disabled {
+  background: #93b6f0;
+  cursor: default;
+}
+
+.rain-controls__error {
+  margin-top: 8px;
+  color: #dc2626;
+}
+
+.rain-controls__legend {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rain-controls__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rain-controls__legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+}

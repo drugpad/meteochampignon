@@ -1,0 +1,18 @@
+.map-view {
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+}
+
+.station-marker__pin {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 50%;
+  border: 2px solid #2563eb;
+  font-size: 13px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}

@@ -1,0 +1,40 @@
+.mode-switch {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1000;
+  display: flex;
+  gap: 4px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+}
+
+.mode-switch__btn {
+  border: none;
+  background: transparent;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #333;
+}
+
+.mode-switch__btn:hover {
+  background: #f0f0f0;
+}
+
+.mode-switch__btn--active {
+  background: #2563eb;
+  color: white;
+}
+
+.mode-switch__btn--active:hover {
+  background: #1d4ed8;
+}
+
+/* Reste en haut à gauche même sur mobile (auparavant déplacé en bas, ce qui
+   le faisait se superposer avec ForecastPanel/RainControls, eux aussi en
+   bas sur petit écran). */
