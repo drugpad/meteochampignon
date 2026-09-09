@@ -57,18 +57,19 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// Un lot qui échoue en 429 (rate-limit — Open-Meteo semble limiter le débit
-// par nombre de POINTS traités, pas juste par requête HTTP : une dizaine de
-// lots de ~100 points tirés à la suite déclenche vite un 429, même sans clé
-// API) ou en 5xx (erreur transitoire côté Open-Meteo, observée aussi en
-// usage réel) est retenté après une pause croissante, plutôt que de faire
-// échouer toute la grille — voir aussi l'espacement entre lots dans
-// fetchRainGrid.
+// Un lot qui échoue est retenté après une pause croissante, plutôt que de
+// faire échouer toute la grille — que ce soit un 429 (rate-limit : Open-Meteo
+// semble limiter le débit par nombre de POINTS traités, pas juste par
+// requête HTTP), un 5xx (erreur transitoire côté Open-Meteo), ou une erreur
+// réseau pure (fetch() qui rejette — timeout, DNS ; err.message ne contient
+// alors pas "Open-Meteo:"). Les trois cas ont été observés en usage réel.
+// Une erreur définitive (400 mauvais paramètre, etc.) n'est elle pas
+// retentée. Voir aussi l'espacement entre lots dans fetchRainGrid.
 async function fetchBatchWithRetry(batch: { lat: number; lon: number }[], attempt = 0): Promise<(number | null)[]> {
   try {
     return await getHourlyPrecipitationBatch(batch)
   } catch (err) {
-    const retryable = err instanceof Error && /Open-Meteo: (429|5\d\d)/.test(err.message)
+    const retryable = err instanceof Error && (!err.message.startsWith('Open-Meteo:') || /Open-Meteo: (429|5\d\d)/.test(err.message))
     if (attempt >= 5 || !retryable) throw err
     await wait(4000 * (attempt + 1))
     return fetchBatchWithRetry(batch, attempt + 1)

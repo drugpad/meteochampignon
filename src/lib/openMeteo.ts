@@ -120,7 +120,7 @@ export async function getHourlyPrecipitationBatch(points: Point[]): Promise<(num
   url.searchParams.set('timezone', 'Europe/Paris')
   url.searchParams.set('models', 'best_match')
 
-  const res = await fetch(url)
+  const res = await fetch(url, { signal: AbortSignal.timeout(20000) })
   if (!res.ok) throw new Error(`Open-Meteo: ${res.status}`)
   const data = await res.json()
   // Un seul point → l'API renvoie un objet, pas un tableau.

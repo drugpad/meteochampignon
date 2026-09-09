@@ -59,11 +59,23 @@ async function fetchBatch(points, attempt = 0) {
   url.searchParams.set('timezone', 'Europe/Paris')
   url.searchParams.set('models', 'best_match')
 
-  const res = await fetch(url)
-  // 429 = rate-limit (voir plus haut) ; 5xx = erreur transitoire côté
-  // Open-Meteo (observé en usage réel : un 503 isolé au milieu d'une série
-  // de lots par ailleurs valides) — les deux valent la peine d'un retry,
-  // une erreur définitive (400 mauvais paramètre, etc.) non.
+  // fetch() lui-même peut rejeter (timeout de connexion, DNS, etc. — observé
+  // en usage réel sur le runner GitHub Actions : "ConnectTimeoutError" isolé
+  // au milieu d'une série de lots par ailleurs valides), pas seulement
+  // renvoyer un statut HTTP en erreur. Les deux cas méritent un retry avec
+  // pause croissante, une erreur définitive (400 mauvais paramètre, etc.) non.
+  let res
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(20000) })
+  } catch (err) {
+    if (attempt >= 5) throw err
+    console.log(`${err.message}, retry dans ${4 * (attempt + 1)}s…`)
+    await wait(4000 * (attempt + 1))
+    return fetchBatch(points, attempt + 1)
+  }
+  // 429 = rate-limit (Open-Meteo semble limiter le débit par nombre de
+  // points traités, pas juste par requête HTTP) ; 5xx = erreur transitoire
+  // côté Open-Meteo (503 isolé déjà observé aussi).
   if ((res.status === 429 || res.status >= 500) && attempt < 5) {
     console.log(`${res.status}, retry dans ${4 * (attempt + 1)}s…`)
     await wait(4000 * (attempt + 1))
