@@ -59,6 +59,22 @@
   color: #dc2626;
 }
 
+.rain-controls__status {
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.rain-controls__refresh-btn {
+  width: 100%;
+  border: 1px solid #ddd;
+  background: white;
+  color: #444;
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
 .rain-controls__legend {
   margin-top: 10px;
   display: flex;

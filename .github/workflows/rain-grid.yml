@@ -1,0 +1,39 @@
+name: Rafraîchir la carte de pluie
+
+# Recalcule public/rain-grid.json toutes les 30 minutes (voir
+# scripts/fetch-rain-grid.mjs) et commit le résultat s'il a changé.
+# Vercel redéploie automatiquement sur chaque push (intégration Git native),
+# donc le fichier statique servi par l'appli reste à jour sans que le
+# navigateur d'un utilisateur ait à recalculer la grille lui-même.
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {} # déclenchement manuel depuis l'onglet Actions, pratique pour tester
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    # La grille prend ~3-4 min à charger (pacing volontaire anti rate-limit
+    # Open-Meteo, voir CLAUDE.md) — marge large pour ne pas timeout.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Recalculer la grille
+        run: node scripts/fetch-rain-grid.mjs
+
+      - name: Commit si changement
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/rain-grid.json
+          git diff --staged --quiet && echo "Rien à commit" && exit 0
+          git commit -m "Rafraîchir la carte de pluie 24h"
+          git push

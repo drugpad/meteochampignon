@@ -5,11 +5,11 @@ import 'leaflet/dist/leaflet.css'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MapContainer, LayersControl, TileLayer, useMapEvents } from 'react-leaflet'
 import { MIDI_PYRENEES_CENTER, MIDI_PYRENEES_DEFAULT_ZOOM } from '../lib/config'
 import { getDailyForecast } from '../lib/openMeteo'
-import { fetchRainGrid } from '../lib/rainGrid'
+import { fetchCachedRainGrid, fetchRainGrid } from '../lib/rainGrid'
 import { ForecastPanel } from './ForecastPanel'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
@@ -41,7 +41,26 @@ export function MapView() {
       .catch((err: Error) => setForecastState({ status: 'error', point, message: err.message }))
   }, [])
 
-  const handleLoadRainGrid = useCallback(() => {
+  // Au passage en mode Historique, on tente une seule fois le cache
+  // pré-calculé par le job GitHub Actions (quasi instantané) — voir
+  // lib/rainGrid.ts. Le calcul en direct (lent, handleForceRefresh
+  // ci-dessous) reste disponible en secours (bouton) si ce cache est absent
+  // ou trop vieux. Un ref (pas un state) pour "déjà tenté" : ça ne doit
+  // jamais redéclencher cet effet lui-même (sinon boucle avec le
+  // setRainState ci-dessous, vu que rainState.status fait partie des deps).
+  const autoLoadTriedRef = useRef(false)
+  useEffect(() => {
+    if (mode !== 'historique' || rainSource !== 'open-meteo' || autoLoadTriedRef.current) return
+    autoLoadTriedRef.current = true
+    setRainState({ status: 'loading', loaded: 0, total: 1 })
+    fetchCachedRainGrid().then((cached) => {
+      setRainState(
+        cached ? { status: 'ready', points: cached.points, fetchedAt: cached.fetchedAt } : { status: 'idle' },
+      )
+    })
+  }, [mode, rainSource])
+
+  const handleForceRefresh = useCallback(() => {
     setRainState({ status: 'loading', loaded: 0, total: 1 })
     fetchRainGrid((loaded, total) => setRainState({ status: 'loading', loaded, total }))
       .then((points) => setRainState({ status: 'ready', points, fetchedAt: Date.now() }))
@@ -53,7 +72,7 @@ export function MapView() {
       <ModeSwitch mode={mode} onChange={setMode} />
 
       {mode === 'historique' && (
-        <RainControls state={rainState} source={rainSource} onSourceChange={setRainSource} onLoad={handleLoadRainGrid} />
+        <RainControls state={rainState} source={rainSource} onSourceChange={setRainSource} onForceRefresh={handleForceRefresh} />
       )}
 
       <MapContainer
