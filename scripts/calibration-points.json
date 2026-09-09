@@ -1,0 +1,113 @@
+{
+  "_comment": "Points de calibration relevés sur le service commercial de référence (cèpe d'été). Pour chaque point : les valeurs telles qu'affichées par leur panneau (donc leurs entrées, pas les nôtres — ça isole la pondération comme seule inconnue) et le score qu'ils en tirent. Les essences sont leurs pourcentages 'rpp'. Sert à vérifier que notre propre formule (scripts/test-biotope-point.mjs) se comporte de façon cohérente. Relevé le 09/09/2026.",
+  "espece": "cepe d'ete (Boletus aestivalis)",
+  "points": [
+    {
+      "lat": 43.086779,
+      "lon": 0.313968,
+      "score": 85,
+      "libelle": "Zone optimale",
+      "altitude": 527,
+      "ph": 5.2,
+      "orientation": 195,
+      "pente": 15,
+      "essences": {
+        "chataignier": 21, "hetre": 20, "chene_pedoncule": 18, "frene": 11,
+        "bouleau": 6, "saule_marsault": 6, "epicea": 5, "chene_pubescent": 5,
+        "merisier": 5, "chene_rouvre": 4, "tremble": 4, "pin_noir": 3,
+        "aulne": 3, "noisetier": 3, "robinier": 3, "sapin_blanc": 2,
+        "douglas": 2, "pin_sylvestre": 2, "erable": 2, "tilleul": 2,
+        "pin_mugo": 1, "epicea_sitka": 1
+      }
+    },
+    {
+      "lat": 43.085140,
+      "lon": 0.313916,
+      "score": 62,
+      "libelle": "Zone favorable",
+      "altitude": 500,
+      "ph": 5.2,
+      "orientation": 261,
+      "pente": 4,
+      "essences": {
+        "chataignier": 22, "hetre": 21, "chene_pedoncule": 19, "frene": 12,
+        "bouleau": 7, "epicea": 6, "saule_marsault": 6, "chene_pubescent": 6,
+        "tremble": 5, "merisier": 5, "chene_rouvre": 4, "noisetier": 4,
+        "pin_noir": 3, "aulne": 3, "robinier": 3, "erable": 3,
+        "sapin_blanc": 2, "douglas": 2, "pin_sylvestre": 2, "tilleul": 2,
+        "pin_mugo": 1, "epicea_sitka": 1
+      }
+    },
+    {
+      "lat": 43.083295,
+      "lon": 0.317726,
+      "score": 90,
+      "libelle": "Zone optimale",
+      "altitude": 470,
+      "ph": 5.2,
+      "orientation": 181,
+      "pente": 32,
+      "essences": {
+        "chataignier": 24, "hetre": 23, "chene_pedoncule": 19, "frene": 13,
+        "bouleau": 7, "merisier": 6, "saule_marsault": 6, "epicea": 6,
+        "chene_pubescent": 6, "tremble": 5, "noisetier": 4, "chene_rouvre": 4,
+        "sapin_blanc": 3, "robinier": 3, "pin_noir": 3, "erable": 3,
+        "aulne": 3, "tilleul": 3, "douglas": 2, "pin_sylvestre": 2,
+        "pin_mugo": 1, "epicea_sitka": 1
+      }
+    },
+    {
+      "lat": 43.083382,
+      "lon": 0.330318,
+      "score": 47,
+      "libelle": "Zone faiblement favorable",
+      "altitude": 556,
+      "ph": 5.1,
+      "orientation": 239,
+      "pente": 7,
+      "essences": {
+        "hetre": 19, "chataignier": 19, "chene_pedoncule": 15, "frene": 12,
+        "bouleau": 7, "merisier": 6, "chene_pubescent": 6, "saule_marsault": 5,
+        "epicea": 5, "tremble": 5, "noisetier": 4, "robinier": 4,
+        "chene_rouvre": 4, "tilleul": 3, "pin_noir": 3, "aulne": 3,
+        "douglas": 2, "pin_sylvestre": 2, "erable": 2, "sapin_blanc": 2,
+        "pin_mugo": 1
+      }
+    },
+    {
+      "lat": 43.072220,
+      "lon": 0.317552,
+      "score": 84,
+      "libelle": "Zone optimale",
+      "altitude": 494,
+      "ph": 5.3,
+      "orientation": 83,
+      "pente": 23,
+      "essences": {
+        "chataignier": 26, "hetre": 25, "chene_pedoncule": 18, "frene": 15,
+        "epicea": 8, "bouleau": 7, "merisier": 6, "chene_pubescent": 6,
+        "saule_marsault": 5, "noisetier": 5, "tremble": 5, "chene_rouvre": 4,
+        "sapin_blanc": 3, "robinier": 3, "pin_noir": 3, "erable": 3,
+        "aulne": 3, "tilleul": 3, "douglas": 2, "pin_sylvestre": 2,
+        "pin_mugo": 1, "epicea_sitka": 1
+      }
+    },
+    {
+      "lat": 43.066026,
+      "lon": 0.313465,
+      "score": 87,
+      "libelle": "Zone optimale",
+      "altitude": 506,
+      "ph": 5.4,
+      "orientation": 225,
+      "pente": 19,
+      "essences": {
+        "chataignier": 20, "hetre": 19, "chene_pedoncule": 13, "frene": 12,
+        "bouleau": 5, "epicea": 5, "chene_pubescent": 4, "merisier": 4,
+        "chene_rouvre": 3, "saule_marsault": 3, "noisetier": 3, "tremble": 3,
+        "sapin_blanc": 2, "robinier": 2, "pin_noir": 2, "pin_sylvestre": 2,
+        "erable": 2, "aulne": 2, "tilleul": 2, "douglas": 1, "pin_mugo": 1
+      }
+    }
+  ]
+}

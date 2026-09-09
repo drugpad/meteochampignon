@@ -1,6 +1,13 @@
 .map-view {
   position: relative;
+  /* 100dvh (hauteur de viewport "dynamique") plutôt que 100vh : sur mobile,
+     100vh compte la zone masquée par la barre d'adresse du navigateur même
+     quand elle est visible, ce qui laissait un bandeau vide sous la carte.
+     Fallback 100vh pour les navigateurs qui ne connaissent pas dvh (le
+     ResizeObserver de InvalidateSizeOnResize, MapView.tsx, rattrape de
+     toute façon le redimensionnement de Leaflet dans les deux cas). */
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
 }
 

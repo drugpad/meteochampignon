@@ -1,47 +1,29 @@
 // Échelle de couleur pour le cumul de pluie 24h (mm), utilisée par
-// RainOverlay.tsx et la légende. Paliers inspirés des échelles Météo-France
-// habituelles (bleu clair = faible, violet = très fort).
-const STOPS: [number, [number, number, number]][] = [
-  [0, [255, 255, 255]], // pas de pluie : transparent (voir alpha dans rainColor)
-  [1, [186, 228, 255]],
-  [5, [107, 190, 255]],
-  [10, [46, 138, 240]],
-  [20, [40, 90, 220]],
-  [40, [130, 60, 200]],
-  [70, [190, 30, 150]],
-  [120, [140, 10, 60]],
+// RainOverlay.tsx et la légende (RainControls.tsx). Paliers demandés
+// explicitement (pas un dégradé continu) : 0-5mm vert clair, 5-10mm vert
+// foncé, 10-15mm bleu clair, 15-20mm bleu foncé, 20mm+ violet (un seul
+// palier au-delà pour l'instant — à affiner plus tard si besoin de
+// distinguer les très fortes pluies).
+const BINS: { max: number; color: [number, number, number]; label: string }[] = [
+  { max: 5, color: [134, 239, 172], label: '0-5mm' },
+  { max: 10, color: [22, 163, 74], label: '5-10mm' },
+  { max: 15, color: [125, 211, 252], label: '10-15mm' },
+  { max: 20, color: [29, 78, 216], label: '15-20mm' },
+  { max: Infinity, color: [124, 58, 237], label: '20mm+' },
 ]
 
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t
-}
-
-// Renvoie une couleur "rgba(...)" pour un cumul de pluie donné, avec une
-// opacité qui grandit avec l'intensité (0mm quasi invisible, fortes pluies
-// bien visibles) — pensé pour être peint par-dessus un fond de carte.
+// Renvoie une couleur "rgba(...)" pour un cumul de pluie donné — 0mm (ou
+// négatif, ne devrait pas arriver) reste transparent pour ne pas teinter les
+// zones sans pluie ; au-dessus, palier fixe (pas d'interpolation entre
+// couleurs, contrairement à une v1 en dégradé jugée moins lisible).
 export function rainColor(mm: number | null): string {
   if (mm === null || mm <= 0) return 'rgba(255,255,255,0)'
-
-  let lower = STOPS[0]
-  let upper = STOPS[STOPS.length - 1]
-  for (let i = 0; i < STOPS.length - 1; i++) {
-    if (mm >= STOPS[i][0] && mm <= STOPS[i + 1][0]) {
-      lower = STOPS[i]
-      upper = STOPS[i + 1]
-      break
-    }
-  }
-  const [v0, c0] = lower
-  const [v1, c1] = upper
-  const t = v1 === v0 ? 1 : (mm - v0) / (v1 - v0)
-  const r = Math.round(lerp(c0[0], c1[0], t))
-  const g = Math.round(lerp(c0[1], c1[1], t))
-  const b = Math.round(lerp(c0[2], c1[2], t))
-  const alpha = Math.min(0.85, 0.15 + mm / 60)
-  return `rgba(${r},${g},${b},${alpha.toFixed(2)})`
+  const bin = BINS.find((b) => mm <= b.max) ?? BINS[BINS.length - 1]
+  const [r, g, b] = bin.color
+  return `rgba(${r},${g},${b},0.65)`
 }
 
-export const RAIN_LEGEND_STOPS = STOPS.slice(1).map(([mm, rgb]) => ({
-  mm,
-  color: `rgb(${rgb.join(',')})`,
+export const RAIN_LEGEND_STOPS = BINS.map((bin) => ({
+  label: bin.label,
+  color: `rgb(${bin.color.join(',')})`,
 }))

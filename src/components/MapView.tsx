@@ -6,15 +6,18 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MapContainer, LayersControl, TileLayer, useMapEvents } from 'react-leaflet'
-import { MIDI_PYRENEES_CENTER, MIDI_PYRENEES_DEFAULT_ZOOM } from '../lib/config'
+import { MapContainer, LayersControl, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
 import { fetchCachedRainGrid, fetchRainGrid } from '../lib/rainGrid'
+import { REGION_BOUNDS } from '../lib/regionOutline'
 import { ForecastPanel } from './ForecastPanel'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
 import { RainControls } from './RainControls'
 import { RainOverlay } from './RainOverlay'
+import { RegionOutline } from './RegionOutline'
+import { SearchBar } from './SearchBar'
 import { StationsLayer } from './StationsLayer'
 import type { AppMode, ForecastState, RainGridState, RainMapSource } from '../types'
 
@@ -27,11 +30,42 @@ function ClickHandler({ enabled, onClick }: { enabled: boolean; onClick: (lat: n
   return null
 }
 
+// Recentre/zoome la carte sur le résultat sélectionné dans la barre de
+// recherche (voir SearchBar.tsx).
+function RecenterOnSelect({ target }: { target: GeocodeResult | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (target) map.flyTo([target.lat, target.lon], zoomForResultType(target.type))
+  }, [target, map])
+  return null
+}
+
+// Sur mobile, la barre d'adresse du navigateur apparaît/disparaît au fil du
+// scroll et des interactions (dont un simple clic) sans que la fenêtre ne
+// déclenche toujours un `resize` classique — Leaflet, qui mesure son
+// conteneur une fois au montage, se retrouvait alors avec une carte mal
+// dimensionnée ou mal positionnée après un clic (retour utilisateur : "je
+// clique, mais l'affichage n'est pas bon"). On observe donc directement la
+// taille du conteneur (ResizeObserver, plus fiable que `resize`/
+// `orientationchange` sur mobile) et on redemande à Leaflet de se
+// remesurer à chaque changement.
+function InvalidateSizeOnResize() {
+  const map = useMap()
+  useEffect(() => {
+    const container = map.getContainer()
+    const observer = new ResizeObserver(() => map.invalidateSize())
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [map])
+  return null
+}
+
 export function MapView() {
   const [mode, setMode] = useState<AppMode>('previsions')
   const [forecastState, setForecastState] = useState<ForecastState>({ status: 'idle' })
   const [rainState, setRainState] = useState<RainGridState>({ status: 'idle' })
   const [rainSource, setRainSource] = useState<RainMapSource>('open-meteo')
+  const [searchTarget, setSearchTarget] = useState<GeocodeResult | null>(null)
 
   const handleMapClick = useCallback((lat: number, lon: number) => {
     const point = { lat, lon }
@@ -70,18 +104,22 @@ export function MapView() {
   return (
     <div className="map-view">
       <ModeSwitch mode={mode} onChange={setMode} />
+      <SearchBar onSelect={setSearchTarget} />
 
       {mode === 'historique' && (
         <RainControls state={rainState} source={rainSource} onSourceChange={setRainSource} onForceRefresh={handleForceRefresh} />
       )}
 
       <MapContainer
-        center={MIDI_PYRENEES_CENTER}
-        zoom={MIDI_PYRENEES_DEFAULT_ZOOM}
+        bounds={REGION_BOUNDS}
+        maxBounds={REGION_BOUNDS.pad(0.25)}
+        maxBoundsViscosity={1}
         zoomControl={false}
         style={{ height: '100%', width: '100%' }}
       >
         <ClickHandler enabled={mode === 'previsions'} onClick={handleMapClick} />
+        <RecenterOnSelect target={searchTarget} />
+        <InvalidateSizeOnResize />
 
         <LayersControl position="bottomleft">
           <LayersControl.BaseLayer checked name="Plan">
@@ -99,6 +137,8 @@ export function MapView() {
             />
           </LayersControl.BaseLayer>
         </LayersControl>
+
+        <RegionOutline />
 
         {mode === 'historique' && (
           <>

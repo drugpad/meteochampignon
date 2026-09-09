@@ -9,9 +9,6 @@ export const MIDI_PYRENEES_BOUNDS = {
   lonMax: 3.4,
 }
 
-export const MIDI_PYRENEES_CENTER: [number, number] = [43.85, 1.5]
-export const MIDI_PYRENEES_DEFAULT_ZOOM = 8
-
 // Pas de la grille pour la carte de pluie Option A (voir rainGrid.ts), en
 // degrés. ~0.08° ≈ 8-9km de maille, dans la fourchette visée par la spec
 // (5-10km) sans exploser le nombre de points à interroger (usage restreint,

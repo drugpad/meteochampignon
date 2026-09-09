@@ -23,3 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 .claude/scheduled_tasks.lock
+
+# Rasters JRC RPP telecharges par scripts/ (volumineux, regenerables)
+.cache-rpp/
+
+# Export Excel des points de calibration (genere par
+# scripts/export-calibration-xlsx.mjs, deja livre a l'utilisateur)
+points-calibration-cepe-ete.xlsx
