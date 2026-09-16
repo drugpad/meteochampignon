@@ -34,63 +34,64 @@ function plateau(value, lowKo, lowOk, highOk, highKo) {
 }
 
 // Abondance d'essences hôtes, en valeur absolue (somme des "rpp" pondérés
-// par l'aptitude) et non en part relative. Les 20 points de calibration sont
-// clairs là-dessus : la somme des hôtes est corrélée au score (0.39) alors
-// que leur *part* dans le peuplement ne l'est pas (-0.15). Autrement dit,
-// c'est la quantité de chênes/châtaigniers qui compte, pas le fait qu'ils
-// soient majoritaires — une forêt riche et mélangée vaut mieux qu'une
-// pauvre monospécifique.
+// par l'aptitude) et non en part relative — voir scripts/fit-model.mjs.
 function hostAbundance(essences) {
   let weighted = 0
   for (const [nom, pct] of Object.entries(essences)) weighted += pct * (HOST_APTITUDE[nom] ?? 0)
   return weighted
 }
 
-// Le cèpe d'été est le plus thermophile des cèpes : versants chauds
-// favorisés, mais l'effet reste modéré (corrélation 0.27).
-function aspectScore(aspectDeg) {
-  return 0.2 + 0.8 * ((Math.cos(((aspectDeg - 180) * Math.PI) / 180) + 1) / 2)
+// Paramètres trouvés par évolution différentielle sur les 42 points de
+// calibration, meilleure graine sur 40 essais (scripts/optimize-search.mjs,
+// 10/09/2026) — remplace les valeurs choisies à la main. Validés par
+// LOO-CV : erreur d'ajustement 4.2, erreur en validation croisée 6.6 (points
+// jamais vus par l'optimiseur pendant leur propre ajustement) — écart faible
+// entre les deux, donc régularité réelle, pas du bruit mémorisé
+// (contrairement à la tentative sur 20 points, qui donnait 3.4 vs 11.3 : du
+// sur-apprentissage pur). Les 40 graines convergent presque toutes vers les
+// mêmes valeurs (orientation optimale ~178°, plateau altitude ~275-590m,
+// pH ~4.1-5.5) : signe que ce n'est pas un optimum local isolé. Pour
+// retrouver/affiner ces valeurs avec plus de points :
+// node scripts/optimize-search.mjs [nombreDeGraines]
+const Q = {
+  altLowOk: 275.01,
+  altHighOk: 592.36,
+  altKo: 1422.67,
+  phLowOk: 4.12,
+  phHighOk: 5.5,
+  phKo: 6.29,
+  penLowOk: 19.94,
+  penHighOk: 36.08,
+  penKo: 86.03,
+  aspMin: 0.64,
+  aspBest: 177.67,
+  hostSat: 185.89,
+  hostPow: 0.12,
+  wAlt: 0.51,
+  wExp: 0.56,
+  wPen: 0.07,
+  wPh: 0.4,
+  floor: 0.07,
 }
-
-// Plancher appliqué à chaque critère : même le pire terrain garde une chance
-// résiduelle, et ça évite qu'un seul critère à zéro annule tout le reste.
-const CRITERION_FLOOR = 0.05
 
 export function scoreCepeEte({ altitude, pente, orientation, ph, essences }) {
   const criteria = {
-    // Espèce thermophile de plaine et moyenne montagne : au-delà de ~1000m
-    // elle cède la place au cèpe de Bordeaux. Le point à 1366m (score 23
-    // chez eux, malgré une hêtraie dense et un pH favorable) confirme la
-    // chute.
-    altitude: plateau(altitude, 0, 150, 700, 1000),
-    exposition: aspectScore(orientation),
-    // Une pente franche draine bien, mais l'effet est faible une fois qu'on
-    // regarde des terrains variés (corrélation 0.34, et un point plat à
-    // 74/100 chez eux). Poids volontairement marginal.
-    pente: plateau(pente, 0, 8, 35, 65),
-    // Critère le plus discriminant du jeu (-0.61) : les bolets sont des
-    // champignons de sols acides. Au-delà de pH 6 (calcaire), ça s'effondre.
-    ph: plateau(ph, 3.5, 4.2, 5.5, 6.4),
+    altitude: plateau(altitude, 0, Q.altLowOk, Q.altHighOk, Q.altKo),
+    exposition: Q.aspMin + (1 - Q.aspMin) * ((Math.cos(((orientation - Q.aspBest) * Math.PI) / 180) + 1) / 2),
+    pente: plateau(pente, 0, Q.penLowOk, Q.penHighOk, Q.penKo),
+    ph: plateau(ph, 3.5, Q.phLowOk, Q.phHighOk, Q.phKo),
   }
-  const weights = { altitude: 0.4, exposition: 0.3, pente: 0.05, ph: 0.4 }
+  const weights = { altitude: Q.wAlt, exposition: Q.wExp, pente: Q.wPen, ph: Q.wPh }
 
-  // Moyenne géométrique pondérée, et non somme pondérée : c'est la loi du
-  // minimum de Liebig — le facteur le plus défavorable limite le résultat,
-  // il ne se compense pas par les autres. Une somme pondérée donnait 69 à
-  // la hêtraie de 1366m (eux : 23), parce que le bon pH et les bonnes
-  // essences rattrapaient l'altitude rédhibitoire. En multiplicatif, ce même
-  // point tombe à 26. Le passage d'une structure à l'autre a fait chuter
-  // l'écart moyen de 10.6 à 7.2 points sur les 20 points de calibration.
+  // Moyenne géométrique pondérée (loi du minimum de Liebig) — voir
+  // l'historique de cette approche dans git blame, la justification n'a pas
+  // changé avec le passage aux paramètres ajustés.
   const terrain = Object.entries(criteria).reduce(
-    (product, [k, v]) => product * Math.pow(Math.max(CRITERION_FLOOR, v), weights[k]),
+    (product, [k, v]) => product * Math.pow(Math.max(Q.floor, v), weights[k]),
     1,
   )
 
-  // L'abondance d'hôtes agit elle aussi en multiplicateur : sans arbre
-  // compatible, pas de cèpe quel que soit le terrain. Exposant 0.3 : la
-  // courbe monte vite puis sature — passer de 0 à 40 de chênes change tout,
-  // de 100 à 150 presque rien.
-  const hostFactor = Math.pow(Math.min(1, hostAbundance(essences) / 150), 0.3)
+  const hostFactor = Math.pow(Math.min(1, hostAbundance(essences) / Q.hostSat), Q.hostPow)
 
   return { score: Math.round(100 * hostFactor * terrain), hostFactor, criteria, terrain }
 }

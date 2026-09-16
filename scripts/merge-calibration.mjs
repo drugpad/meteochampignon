@@ -72,6 +72,106 @@ for (const line of lines) {
   })
 }
 
-const out = { espece: base.espece, releve: '2026-09-09', points }
+// Troisième source : séries d'échantillonnage contrôlé (ring orientation,
+// transect altitude, contraste pH, plantations résineuses), relevées le
+// 10/09/2026 — déjà au format {lat, lon, score, altitude, ph, orientation,
+// pente, essences} avec libellés français, seule la normalisation des
+// essences est nécessaire.
+const lines2 = readFileSync(new URL('./calibration-releves-2.jsonl', import.meta.url), 'utf8')
+  .split('\n')
+  .filter((l) => l.trim())
+for (const line of lines2) {
+  const r = JSON.parse(line)
+  points.push({
+    lat: r.lat,
+    lon: r.lon,
+    score: r.score,
+    altitude: r.altitude,
+    ph: r.ph,
+    orientation: r.orientation,
+    pente: r.pente,
+    essences: normEssences(r.essences),
+    source: `serie-${r.serie}`,
+  })
+}
+
+// Quatrième source : 21 points pris au hasard sur toute la région (pas une
+// série ciblée), capturés automatiquement via l'observateur DOM installé
+// dans la page (scripts non applicable ici, capture faite en direct dans le
+// navigateur) — même format que la source 3.
+const lines3 = readFileSync(new URL('./calibration-releves-3.jsonl', import.meta.url), 'utf8')
+  .split('\n')
+  .filter((l) => l.trim())
+for (const line of lines3) {
+  const r = JSON.parse(line)
+  points.push({
+    lat: r.lat,
+    lon: r.lon,
+    score: r.score,
+    altitude: r.altitude,
+    ph: r.ph,
+    orientation: r.orientation,
+    pente: r.pente,
+    essences: normEssences(r.essences),
+    source: 'aleatoire',
+  })
+}
+
+// Cinquième source : 91 points capturés le 16/09/2026 via clics rapides +
+// observateur DOM (mêmes clés que la source 4).
+const lines4 = readFileSync(new URL('./calibration-releves-4.jsonl', import.meta.url), 'utf8')
+  .split('\n')
+  .filter((l) => l.trim())
+for (const line of lines4) {
+  const r = JSON.parse(line)
+  points.push({
+    lat: r.lat,
+    lon: r.lon,
+    score: r.score,
+    altitude: r.altitude,
+    ph: r.ph,
+    orientation: r.orientation,
+    pente: r.pente,
+    essences: normEssences(r.essences),
+    source: 'aleatoire2',
+  })
+}
+
+// Sixième source : cluster de points voisins (16/09/2026) pour isoler
+// l'effet du terrain seul (essences quasi constantes sur une petite zone).
+const lines5 = readFileSync(new URL('./calibration-releves-5.jsonl', import.meta.url), 'utf8')
+  .split('\n')
+  .filter((l) => l.trim())
+for (const line of lines5) {
+  const r = JSON.parse(line)
+  points.push({
+    lat: r.lat,
+    lon: r.lon,
+    score: r.score,
+    altitude: r.altitude,
+    ph: r.ph,
+    orientation: r.orientation,
+    pente: r.pente,
+    essences: normEssences(r.essences),
+    source: 'cluster',
+  })
+}
+
+// Déduplication : deux clics peuvent tomber sur la même case interne (même
+// score + mêmes essences + même terrain) malgré des coordonnées affichées
+// différentes — repéré en pratique (16/09/2026, clic répété par erreur sur
+// la même case). Un doublon exact ne serait pas un "point jamais vu"
+// pendant la validation croisée, donc fausserait l'estimation.
+const seenKeys = new Set()
+const deduped = []
+for (const p of points) {
+  const key = JSON.stringify([p.score, p.altitude, p.ph, p.orientation, p.pente, p.essences])
+  if (seenKeys.has(key)) continue
+  seenKeys.add(key)
+  deduped.push(p)
+}
+const nDupes = points.length - deduped.length
+
+const out = { espece: base.espece, releve: '2026-09-16', points: deduped }
 writeFileSync(new URL('./calibration-dataset.json', import.meta.url), JSON.stringify(out, null, 1))
-console.log(`${points.length} points fusionnés dans scripts/calibration-dataset.json`)
+console.log(`${points.length} points bruts, ${nDupes} doublons exacts retirés → ${deduped.length} points dans scripts/calibration-dataset.json`)
