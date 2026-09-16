@@ -8,6 +8,16 @@
 // dans src/data/stations-midi-pyrenees.json plutôt que refaite à chaque
 // chargement — la liste des stations ne change quasiment jamais).
 //
+// L'historique horaire (pluie + température, jusqu'à 10 jours) n'est PAS
+// tiré en direct depuis le navigateur au clic : un job GitHub Actions
+// (voir scripts/fetch-station-history.mjs) accumule un point par station et
+// par heure dans public/station-history.json, lu ici une seule fois par
+// session (même principe que public/rain-grid.json pour la carte de pluie).
+// Deux raisons : 24 appels en parallèle par station tirés depuis le
+// navigateur déclenchaient par moments des erreurs réseau pures ("Failed to
+// fetch") en rafale, et l'API ne renvoie qu'une heure à la fois — remonter
+// à 10 jours en direct aurait voulu dire 240 appels par clic.
+//
 // Le réseau Infoclimat (StatIC), prévu en complément dans la spec pour
 // densifier encore, nécessite son propre compte + clé API gratuite
 // (https://www.infoclimat.fr/opendata/) — pas branché pour l'instant, voir
@@ -20,58 +30,65 @@ export const STATIC_STATIONS: Station[] = (
   stationsData as { id: string; name: string; lat: number; lon: number; altitude: number }[]
 ).map((s) => ({ ...s, network: 'synop' as const }))
 
-const DPOBS_BASE_URL = 'https://public-api.meteofrance.fr/public/DPObs/v2'
+const HISTORY_URL = '/station-history.json'
 
-function apiKey(): string {
-  const key = import.meta.env.VITE_METEOFRANCE_API_TOKEN
-  if (!key) {
-    throw new Error(
-      "VITE_METEOFRANCE_API_TOKEN manquant — voir .env.example (données de station Météo-France).",
-    )
+type HistoryPoint = { time: string; rr1: number | null; temp: number | null }
+type HistoryByStation = Record<string, HistoryPoint[]>
+
+// Un seul fetch du fichier statique par session (pas un par clic sur une
+// station) : promesse mémoïsée, remise à zéro en cas d'échec pour permettre
+// un nouvel essai au clic suivant plutôt que de rester bloqué sur une
+// erreur transitoire (ex. déploiement en cours).
+let historyPromise: Promise<HistoryByStation> | null = null
+
+function loadHistory(): Promise<HistoryByStation> {
+  if (!historyPromise) {
+    historyPromise = fetch(HISTORY_URL, { cache: 'no-store' })
+      .then((res) => {
+        if (!res.ok) throw new Error("Historique des stations indisponible (fichier absent).")
+        return res.json() as Promise<{ stations: HistoryByStation }>
+      })
+      .then((data) => data.stations ?? {})
+      .catch((err) => {
+        historyPromise = null
+        throw err
+      })
   }
-  return key
+  return historyPromise
 }
 
-type HourlyObservation = {
-  validity_time: string
-  t: number | null // Kelvin
-  rr1: number | null // mm, cumul de l'heure précédente
-}
-
-// Une heure ronde UTC, `hoursAgo` heures avant maintenant (ex. "2026-09-09T14:00:00Z").
-function hourTimestamp(hoursAgo: number): string {
-  const date = new Date()
-  date.setUTCMinutes(0, 0, 0)
-  date.setUTCHours(date.getUTCHours() - hoursAgo)
-  return date.toISOString().replace(/\.\d{3}Z$/, 'Z')
-}
-
-async function fetchHourlyObservation(stationId: string, hoursAgo: number): Promise<HourlyObservation | null> {
-  const url = new URL(`${DPOBS_BASE_URL}/station/horaire`)
-  url.searchParams.set('id_station', stationId)
-  url.searchParams.set('format', 'json')
-  if (hoursAgo > 0) url.searchParams.set('date', hourTimestamp(hoursAgo))
-
-  const res = await fetch(url, { headers: { apikey: apiKey() } })
-  if (!res.ok) return null // heure sans donnée (trou de mesure) : on l'ignore plutôt que de faire échouer tout le graphique
-  const data = (await res.json()) as HourlyObservation[]
-  return data[0] ?? null
+function dayKey(isoTime: string): string {
+  return isoTime.slice(0, 10) // yyyy-mm-dd (validity_time est en UTC, comme pour la grille de pluie)
 }
 
 export async function fetchStationDetail(station: Station): Promise<StationDetail> {
-  const hours = Array.from({ length: 24 }, (_, i) => 23 - i) // du plus ancien au plus récent
-  const [observations, miniForecast] = await Promise.all([
-    Promise.all(hours.map((h) => fetchHourlyObservation(station.id, h))),
+  const [historyByStation, miniForecast] = await Promise.all([
+    loadHistory(),
     getDailyForecast({ lat: station.lat, lon: station.lon }, 5),
   ])
 
-  const rainHistory: { time: string; rain: number }[] = []
-  const tempHistory: { time: string; temp: number }[] = []
-  observations.forEach((obs) => {
-    if (!obs) return
-    if (obs.rr1 !== null) rainHistory.push({ time: obs.validity_time, rain: Math.max(0, obs.rr1) })
-    if (obs.t !== null) tempHistory.push({ time: obs.validity_time, temp: Math.round((obs.t - 273.15) * 10) / 10 })
-  })
+  const points = (historyByStation[station.id] ?? []).slice().sort((a, b) => a.time.localeCompare(b.time))
+  const last24h = points.slice(-24)
 
-  return { station, rainHistory, tempHistory, miniForecast }
+  const rainHistory = last24h
+    .filter((p) => p.rr1 !== null)
+    .map((p) => ({ time: p.time, rain: p.rr1 as number }))
+  const tempHistory = last24h
+    .filter((p) => p.temp !== null)
+    .map((p) => ({ time: p.time, temp: p.temp as number }))
+
+  // Cumul par jour calendaire (UTC) sur toute la fenêtre disponible (jusqu'à
+  // 10 jours) — un jour partiel (premier jour de la fenêtre glissante, ou
+  // jour courant pas terminé) reste inclus tel quel plutôt qu'exclu.
+  const dailyTotals = new Map<string, number>()
+  for (const p of points) {
+    if (p.rr1 === null) continue
+    const key = dayKey(p.time)
+    dailyTotals.set(key, (dailyTotals.get(key) ?? 0) + p.rr1)
+  }
+  const dailyRain = [...dailyTotals.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, rain]) => ({ date, rain: Math.round(rain * 10) / 10 }))
+
+  return { station, rainHistory, tempHistory, dailyRain, miniForecast }
 }

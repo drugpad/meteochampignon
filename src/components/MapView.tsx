@@ -103,12 +103,16 @@ export function MapView() {
 
   return (
     <div className="map-view">
-      <ModeSwitch mode={mode} onChange={setMode} />
-      <SearchBar onSelect={setSearchTarget} />
+      <div className="floating-controls">
+        <div className="floating-controls__row">
+          <ModeSwitch mode={mode} onChange={setMode} />
+          <SearchBar onSelect={setSearchTarget} />
+        </div>
 
-      {mode === 'historique' && (
-        <RainControls state={rainState} source={rainSource} onSourceChange={setRainSource} onForceRefresh={handleForceRefresh} />
-      )}
+        {mode === 'historique' && (
+          <RainControls state={rainState} source={rainSource} onSourceChange={setRainSource} onForceRefresh={handleForceRefresh} />
+        )}
+      </div>
 
       <MapContainer
         bounds={REGION_BOUNDS}
