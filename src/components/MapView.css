@@ -11,6 +11,35 @@
   width: 100vw;
 }
 
+/* Empile les panneaux flottants (mode/recherche puis carte de pluie) par
+   flux normal plutôt que par positions absolues en dur pour chacun — évite
+   les chevauchements quand la largeur du sélecteur de mode ou le nombre de
+   lignes (recherche qui passe à la ligne sur mobile) varie. */
+.floating-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.floating-controls > * {
+  pointer-events: auto;
+}
+
+.floating-controls__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
 .station-marker__pin {
   width: 26px;
   height: 26px;

@@ -1,9 +1,6 @@
 .mode-switch {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 1000;
   display: flex;
+  flex: none;
   gap: 4px;
   background: white;
   border-radius: 8px;
@@ -34,7 +31,3 @@
 .mode-switch__btn--active:hover {
   background: #1d4ed8;
 }
-
-/* Reste en haut à gauche même sur mobile (auparavant déplacé en bas, ce qui
-   le faisait se superposer avec ForecastPanel/RainControls, eux aussi en
-   bas sur petit écran). */

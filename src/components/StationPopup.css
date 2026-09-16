@@ -52,3 +52,9 @@
   display: inline-block;
 }
 
+.station-popup__message {
+  padding: 8px 0;
+  color: #888;
+  text-align: center;
+}
+
