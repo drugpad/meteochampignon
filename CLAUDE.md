@@ -27,9 +27,10 @@ Clic sur la carte → `getDailyForecast` (`lib/openMeteo.ts`), Open-Meteo `forec
 Source : API Météo-France **DonneesPubliquesObservation v2** (`public-api.meteofrance.fr/public/DPObs/v2`), pas Infoclimat pour l'instant (voir 2).
 
 - **Liste des stations** : récupérée une fois via `/liste-stations` (CSV ~2150 stations RADOME nationales), filtrée sur l'emprise Midi-Pyrénées (`lib/config.ts`, `MIDI_PYRENEES_BOUNDS`) et figée dans `src/data/stations-midi-pyrenees.json` (239 stations) — pas un appel réseau à chaque chargement, la liste des stations ne bouge quasiment jamais. Pour la régénérer (nouvelles stations, emprise différente) : refaire l'appel `GET /public/DPObs/v2/liste-stations` avec le token, puis refiltrer sur `MIDI_PYRENEES_BOUNDS`.
-- **Détail au clic** (`lib/stations.ts`, `fetchStationDetail`) : 24 appels parallèles à `/station/horaire?id_station=...&format=json&date=...` (un par heure des dernières 24h — l'API ne renvoie qu'une heure à la fois, pas de "paquet" 24h identifié pour l'instant malgré l'existence d'une "Package Observations" dans la doc du portail, non exploré). Champs utilisés : `rr1` (pluie de l'heure précédente, mm) pour l'historique pluie, `t` (température, **en Kelvin**, converti en °C) pour l'historique température. Une heure sans réponse (trou de mesure) est simplement ignorée plutôt que de faire échouer tout le graphique.
-- **Mini prévision 5 jours** : Open-Meteo au point de la station (`getDailyForecast(point, 5)`), pas une donnée Météo-France.
-- Sans token configuré, les marqueurs s'affichent quand même (liste statique) mais le clic renvoie une erreur explicite dans le popup.
+- **Historique horaire (24h) + cumul quotidien (10j)** : plus tiré en direct depuis le navigateur (l'ancienne version faisait 24 appels parallèles à `/station/horaire` par clic, ce qui déclenchait par moments des erreurs réseau pures — "Failed to fetch" — en rafale, et ne permettait pas de remonter au-delà de 24h sans exploser en nombre d'appels). Un job GitHub Actions (`.github/workflows/station-history.yml`, toutes les heures à H+5, voir `scripts/fetch-station-history.mjs`) tire l'heure courante pour chacune des 239 stations (espacé, ~35 req/min, sous la limite 50 req/min de l'API) et l'accumule dans `public/station-history.json` (fenêtre glissante de 10 jours, trous tolérés si un run échoue) — même principe que `public/rain-grid.json` pour la carte de pluie. Le navigateur lit ce fichier statique une seule fois par session (`lib/stations.ts`, `loadHistory`), sans plus jamais appeler l'API Météo-France directement. Champs utilisés : `rr1` (pluie de l'heure précédente, mm) pour l'historique pluie et le cumul quotidien, `t` (température, **en Kelvin**, converti en °C) pour l'historique température.
+- **Secret requis** : le job utilise le secret GitHub Actions `METEOFRANCE_API_TOKEN` (à créer manuellement dans les settings du repo — jamais commité, distinct du fichier `.env.local` utilisé côté build Vite).
+- **Mini prévision 5 jours** : Open-Meteo au point de la station (`getDailyForecast(point, 5)`), pas une donnée Météo-France — seul appel encore fait en direct depuis le navigateur au clic sur une station.
+- Sans `public/station-history.json` peuplé (avant le premier run du job, ou si le secret n'est pas configuré), les marqueurs s'affichent quand même (liste statique) et le popup s'ouvre, mais l'historique 24h/10j reste vide (message explicite plutôt qu'un graphique vide silencieux).
 
 ### 3.4 Carte de pluie 24h (mode Historique)
 
@@ -63,7 +64,7 @@ Pas tranché — à décider une fois qu'on a une préférence après usage rée
 
 ## 5. Déploiement
 
-Pas encore déployé. Prévu sur Vercel (comme Unmask, `vercel.json` déjà en place — simple rewrite SPA) une fois l'appli jugée prête, avec accord explicite de l'utilisateur avant le premier déploiement (variable d'env `VITE_METEOFRANCE_API_TOKEN` à configurer côté Vercel, pas commitée).
+Déployé sur Vercel (`vercel.json`, simple rewrite SPA) : https://meteochampignon.vercel.app/ — branche `master` = production. Variable d'env `VITE_METEOFRANCE_API_TOKEN` à tenir à jour côté Vercel (token valide 1 an, voir section 2), pas commitée.
 
 ## 6. Pas encore un dépôt git
 

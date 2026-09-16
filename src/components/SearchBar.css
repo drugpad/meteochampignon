@@ -1,10 +1,7 @@
 .search-bar {
-  position: absolute;
-  top: 12px;
-  left: 170px;
-  right: 12px;
+  position: relative;
+  flex: 1 1 200px;
   max-width: 360px;
-  z-index: 1000;
 }
 
 .search-bar input {
@@ -61,9 +58,7 @@
 
 @media (max-width: 640px) {
   .search-bar {
-    top: 60px;
-    left: 12px;
-    right: 12px;
+    flex-basis: 100%;
     max-width: none;
   }
 }

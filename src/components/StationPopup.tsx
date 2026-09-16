@@ -9,6 +9,7 @@ import type { StationDetailState } from '../types'
 
 const HOUR_FORMATTER = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit' })
 const WEEKDAY_FORMATTER = new Intl.DateTimeFormat('fr-FR', { weekday: 'short' })
+const DAY_FORMATTER = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit' })
 
 type Props = { state: StationDetailState }
 
@@ -37,8 +38,10 @@ export function StationPopup({ state }: Props) {
     return <div className="station-popup station-popup--message station-popup--error">{state.message}</div>
   }
 
-  const { station, rainHistory, tempHistory, miniForecast } = state.detail
+  const { station, rainHistory, tempHistory, dailyRain, miniForecast } = state.detail
   const totalRain = Math.round(rainHistory.reduce((sum, p) => sum + p.rain, 0) * 10) / 10
+  const totalRain10d = Math.round(dailyRain.reduce((sum, d) => sum + d.rain, 0) * 10) / 10
+  const dailyRainData = dailyRain.map((d) => ({ ...d, label: DAY_FORMATTER.format(new Date(d.date)) }))
 
   // Fusion pluie + température par horodatage (les deux viennent des mêmes
   // observations horaires mais une valeur peut manquer côté station pour
@@ -86,6 +89,24 @@ export function StationPopup({ state }: Props) {
           <Line yAxisId="temp" type="monotone" dataKey="temp" stroke="#dc2626" dot={false} strokeWidth={2} />
         </ComposedChart>
       </ResponsiveContainer>
+
+      <div className="station-popup__section-title">
+        Cumul de pluie — {dailyRain.length} derniers jours ({totalRain10d} mm)
+      </div>
+      {dailyRainData.length > 0 ? (
+        <ResponsiveContainer width="100%" height={100}>
+          <ComposedChart data={dailyRainData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+            <XAxis dataKey="label" fontSize={10} interval={dailyRainData.length > 6 ? 1 : 0} />
+            <YAxis fontSize={10} width={28} />
+            <Tooltip formatter={(v) => [`${v} mm`, 'Pluie']} />
+            <Bar dataKey="rain" fill="#2563eb" radius={[2, 2, 0, 0]} barSize={14} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="station-popup__message">
+          Historique pas encore accumulé pour cette station (revenir dans quelques heures).
+        </div>
+      )}
 
       <div className="station-popup__section-title">Mini prévision 5 jours</div>
       <div className="station-popup__legend">
