@@ -47,11 +47,13 @@ export type RainGridState =
   | { status: 'error'; message: string }
   | { status: 'ready'; points: RainGridPoint[]; fetchedAt: number }
 
-// Historique 24h + mini-prévision 5 jours pour une station cliquée.
+// Historique 24h + cumul quotidien 10j + mini-prévision 5 jours pour une
+// station cliquée.
 export type StationDetail = {
   station: Station
   rainHistory: { time: string; rain: number }[] // mm/h, 24 dernières heures
   tempHistory: { time: string; temp: number }[] // °C, 24 dernières heures
+  dailyRain: { date: string; rain: number }[] // mm/jour, jusqu'à 10 derniers jours
   miniForecast: ForecastDay[] // 5 jours, source Open-Meteo pour ce point
 }
 
