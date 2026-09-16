@@ -10,10 +10,18 @@ export const MIDI_PYRENEES_BOUNDS = {
 }
 
 // Pas de la grille pour la carte de pluie Option A (voir rainGrid.ts), en
-// degrés. ~0.08° ≈ 8-9km de maille, dans la fourchette visée par la spec
-// (5-10km) sans exploser le nombre de points à interroger (usage restreint,
-// mais pas la peine d'en abuser).
-export const RAIN_GRID_STEP_DEG = 0.08
+// degrés. Le modèle sous-jacent d'Open-Meteo pour la France (`best_match`)
+// est en réalité AROME (Météo-France), nativement en ~1.3km de maille — la
+// grille à 0.08° (~8-9km) sous-échantillonnait donc largement un modèle
+// déjà assez précis pour l'usage visé. ~0.03° (~3-3.5km) exploite mieux
+// cette résolution native sans tomber dans l'illusion (le modèle n'est pas
+// magiquement plus précis que 1.3km, inutile de descendre sous ce seuil).
+// Contrepartie : ~7x plus de points qu'à 0.08°, donc un job qui prend
+// nettement plus longtemps (voir RAIN_GRID_BATCH_DELAY_MS et le cron dans
+// .github/workflows/rain-grid.yml, passé à un rythme horaire en
+// conséquence) — assumé, l'app vise 2 utilisateurs occasionnels, pas un
+// rafraîchissement temps réel.
+export const RAIN_GRID_STEP_DEG = 0.03
 
 // Nombre de points groupés par appel à Open-Meteo (voir rainGrid.ts) — testé
 // jusqu'à 150 points en un seul appel HTTP sans erreur (ça, ce n'est pas le
