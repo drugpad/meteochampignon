@@ -79,7 +79,7 @@ export function RainControls({ state, source, onSourceChange, onForceRefresh }: 
             <>
               <div className="rain-controls__status">Actualisé à {TIME_FORMATTER.format(state.fetchedAt)}</div>
               <button type="button" className="rain-controls__refresh-btn" onClick={onForceRefresh}>
-                Recalculer maintenant (lent, ~3 min)
+                Recalculer maintenant (très lent, ~30 min)
               </button>
             </>
           )}

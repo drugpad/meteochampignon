@@ -7,7 +7,7 @@ name: Rafraîchir la carte de pluie
 # navigateur d'un utilisateur ait à recalculer la grille lui-même.
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '0 * * * *' # toutes les heures (grille à 0.03° ≈ 10800 points, trop long pour du 30 min)
   workflow_dispatch: {} # déclenchement manuel depuis l'onglet Actions, pratique pour tester
 
 permissions:
@@ -16,9 +16,10 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    # La grille prend ~3-4 min à charger (pacing volontaire anti rate-limit
-    # Open-Meteo, voir CLAUDE.md) — marge large pour ne pas timeout.
-    timeout-minutes: 10
+    # ~10800 points à 0.03° (voir RAIN_GRID_STEP_DEG, src/lib/config.ts) —
+    # ~25-30 min de pacing anti rate-limit Open-Meteo, marge large pour les
+    # retries (429/5xx) observés en usage réel.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 

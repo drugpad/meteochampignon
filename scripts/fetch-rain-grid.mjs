@@ -15,7 +15,8 @@
 import { writeFile } from 'node:fs/promises'
 
 const BOUNDS = { latMin: 42.6, latMax: 45.15, lonMin: -0.4, lonMax: 3.4 }
-const STEP_DEG = 0.08
+// Synchro à la main avec RAIN_GRID_STEP_DEG dans src/lib/config.ts.
+const STEP_DEG = 0.03
 const BATCH_SIZE = 100
 const BATCH_DELAY_MS = 12000
 

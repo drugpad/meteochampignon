@@ -38,25 +38,24 @@ Deux options, comme demandé par la spec, avec toggle (`RainControls.tsx`, affic
 
 #### Option A — Open-Meteo (implémentée)
 
-- Grille régulière sur `MIDI_PYRENEES_BOUNDS`, pas `RAIN_GRID_STEP_DEG` = 0.08° (~8-9km, `lib/config.ts`).
+- Grille régulière sur `MIDI_PYRENEES_BOUNDS`, pas `RAIN_GRID_STEP_DEG` = 0.03° (~3-3.5km, `lib/config.ts`). Historique : d'abord à 0.08° (~8-9km), resserré après avoir réalisé que le modèle `best_match` d'Open-Meteo pour la France est en fait **AROME** (Météo-France, nativement ~1.3km de maille) — 0.08° le sous-échantillonnait largement. Inutile de descendre sous ~1.3km, ça n'ajouterait rien (résolution native du modèle).
 - Cumul 24h glissant (pas le cumul "hier" calendaire) : `rolling24hSum` (`lib/openMeteo.ts`) somme les 24 dernières valeurs horaires de précipitation jusqu'à l'heure courante.
 - Récupéré par lots multi-points (`getHourlyPrecipitationBatch`), un seul appel HTTP par lot (Open-Meteo accepte des listes lat/lon séparées par virgules).
-- **Point de vigilance rate-limit** : la limite de débit gratuite d'Open-Meteo semble compter chaque point d'un appel multi-lieux comme des appels unitaires pour son quota par minute — un enchaînement de lots de ~100-150 points tirés rapidement déclenche un 429 en quelques secondes (observé en test réel). D'où un lot modéré (`RAIN_GRID_BATCH_SIZE` = 100) et une pause volontairement longue entre lots (`RAIN_GRID_BATCH_DELAY_MS` = 12s, `lib/config.ts`) — le chargement complet de la grille prend donc **plusieurs minutes**, avec retry automatique en cas de 429 malgré tout (`fetchBatchWithRetry`, `lib/rainGrid.ts`). Assumé : l'app vise 2 utilisateurs occasionnels, pas un rafraîchissement temps réel.
+- **Point de vigilance rate-limit** : la limite de débit gratuite d'Open-Meteo semble compter chaque point d'un appel multi-lieux comme des appels unitaires pour son quota par minute — un enchaînement de lots de ~100-150 points tirés rapidement déclenche un 429 en quelques secondes (observé en test réel). D'où un lot modéré (`RAIN_GRID_BATCH_SIZE` = 100) et une pause volontairement longue entre lots (`RAIN_GRID_BATCH_DELAY_MS` = 12s, `lib/config.ts`) — à 0.03° (~10 800 points), le chargement complet de la grille prend **~25-40 min**, avec retry automatique en cas de 429 malgré tout (`fetchBatchWithRetry`, `lib/rainGrid.ts`). Le job planifié (`.github/workflows/rain-grid.yml`) tourne donc toutes les heures (pas toutes les 30 min comme avant le resserrage — un run empiéterait sur le suivant). Assumé : l'app vise 2 utilisateurs occasionnels, pas un rafraîchissement temps réel.
 - Rendu : `RainOverlay.tsx` peint la grille dans un canvas (interpolation bilinéaire entre les 4 points de grille encadrants chaque pixel, pas une vraie interpolation géostatistique), affiché comme `ImageOverlay` Leaflet par-dessus la carte. Échelle de couleur : `lib/color.ts`.
 
-#### Option B — Radar Météo-France (client prêt, décodage pas branché)
+#### Option B — Radar Météo-France (client prêt, décodage pas branché — mise en pause)
 
-API `DonneesPubliquesRadar v1` (`lib/meteoFranceRadar.ts`), vérifiée avec un vrai token le 09/09/2026 :
+API `DonneesPubliquesRadar v1` (`lib/meteoFranceRadar.ts`), vérifiée avec un vrai token le 09/09/2026 puis re-vérifiée le 16/09/2026 :
 
 - Zone **METROPOLE** confirmée sur `/mosaiques`.
 - Observation **LAME_D_EAU** confirmée sur `/mosaiques/METROPOLE/observations` (à côté de `REFLECTIVITE`) — c'est bien le produit "lame d'eau" (cumul radar) visé par la spec.
-- `/produit?maille=500` → `application/x-hdf` (HDF5, la plus précise, 500m). `/produit?maille=1000` → `application/octet-stream+gzip` (1km).
+- **Format réel identifié le 16/09/2026 (corrige une erreur des notes précédentes)** : `/produit?maille=500` et `maille=1000` renvoient tous les deux du **BUFR** gzippé (pas du HDF5, pas du GRIB) — en-tête `BUFR` confirmé après téléchargement et décompression d'un vrai fichier. Centre émetteur 85 (Toulouse), table locale version 14.
+- **Panne observée** : l'endpoint `/produit` a renvoyé une erreur serveur (`303001`, `APIproductionEndpoint SUSPENDED`) pendant ~15-20 min le 16/09/2026, résolue d'elle-même — les endpoints de métadonnées (`/mosaiques`, `.../observations`) n'étaient eux pas affectés. Possible incident ponctuel côté Météo-France, à surveiller si ça se reproduit.
+- **Décodage** : le format BUFR utilise des tables de descripteurs propriétaires (table locale Météo-France centre 85 v14, pas les tables OMM standard) — `pybufrkit` (pur Python) échoue sans elles. Un dépôt tiers, [theperk08/Meteo_France_Radars](https://github.com/theperk08/Meteo_France_Radars), fournit des tables locales déjà au bon format (`tables/localtabb_85_14.csv`, `localtabd_85_14.csv`) et un décodeur de référence (notebook). Pas encore testé de bout en bout dans ce projet.
+- **Écueil non résolu signalé par la communauté** (forum Infoclimat) : désalignement géographique de plusieurs km entre la grille décodée et la réalité (projection Lambert conforme conique, paramètres pas clairement documentés) — personne n'a l'air d'avoir totalement résolu ça publiquement. À vérifier avant d'investir dans le reste (le décodage des valeurs ne sert à rien si le géoréférencement est faux).
 
-**Ce qui manque** : le décodage du fichier (HDF5 ou GRIB gzippé) pour en extraire une grille de valeurs affichable — contrairement à l'Option A, ce n'est plus "quasi entièrement frontend" si on décode du HDF5/GRIB dans le navigateur. Deux pistes pour la suite :
-1. Une lib WASM de décodage HDF5 côté client (ex. [h5wasm](https://github.com/usnistgov/h5wasm)) — reste 100% frontend mais poids/complexité à évaluer.
-2. Une petite fonction serveur (Vercel Function) qui télécharge + décode + renvoie une grille JSON légère — plus simple à coder (une lib serveur type `netcdf4`/`gribberish`/`eccodes` a plus de choix que côté navigateur), mais casse le "quasi entièrement frontend".
-
-Pas tranché — à décider une fois qu'on a une préférence après usage réel de l'Option A.
+**Décision du 16/09/2026** : mis en pause au profit d'un resserrage de la grille Option A (voir plus haut) — bien moins risqué, et Open-Meteo/AROME est déjà proche de la résolution native visée. Option B resterait pertinente si on veut un jour la vraie pluie mesurée (pas un modèle), mais le décodage BUFR + l'alignement géographique représentent un chantier significatif, pas encore chiffré. Si repris un jour : commencer par valider le géoréférencement sur un point connu (ex. Toulouse) avant de brancher quoi que ce soit sur la carte.
 
 ## 4. Emprise géographique
 
