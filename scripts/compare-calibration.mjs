@@ -41,37 +41,38 @@ function hostAbundance(essences) {
   return weighted
 }
 
-// Paramètres trouvés par évolution différentielle sur les 42 points de
-// calibration, meilleure graine sur 40 essais (scripts/optimize-search.mjs,
-// 10/09/2026) — remplace les valeurs choisies à la main. Validés par
-// LOO-CV : erreur d'ajustement 4.2, erreur en validation croisée 6.6 (points
-// jamais vus par l'optimiseur pendant leur propre ajustement) — écart faible
-// entre les deux, donc régularité réelle, pas du bruit mémorisé
-// (contrairement à la tentative sur 20 points, qui donnait 3.4 vs 11.3 : du
-// sur-apprentissage pur). Les 40 graines convergent presque toutes vers les
-// mêmes valeurs (orientation optimale ~178°, plateau altitude ~275-590m,
-// pH ~4.1-5.5) : signe que ce n'est pas un optimum local isolé. Pour
+// Paramètres trouvés par évolution différentielle sur 222 points de
+// calibration, meilleure graine sur 25 essais (scripts/optimize-search.mjs,
+// 16/09/2026) — remplace la version précédente (calée sur 82 points).
+// Validés par LOO-CV : erreur d'ajustement 8.4, erreur en validation croisée
+// 9.2 (points jamais vus par l'optimiseur pendant leur propre ajustement) —
+// écart faible entre les deux, donc régularité réelle. L'erreur globale a
+// augmenté par rapport à la version 82 points (5.8/7.1) parce que le jeu de
+// données couvre désormais une bien plus grande diversité de terrains
+// (points aléatoires sur toute la région + un cluster de cases voisines
+// pour isoler l'effet du terrain seul) — c'est une estimation plus fiable
+// de la vraie performance du modèle, pas une régression. Pour
 // retrouver/affiner ces valeurs avec plus de points :
 // node scripts/optimize-search.mjs [nombreDeGraines]
 const Q = {
-  altLowOk: 275.01,
-  altHighOk: 592.36,
-  altKo: 1422.67,
-  phLowOk: 4.12,
-  phHighOk: 5.5,
-  phKo: 6.29,
-  penLowOk: 19.94,
-  penHighOk: 36.08,
-  penKo: 86.03,
-  aspMin: 0.64,
-  aspBest: 177.67,
-  hostSat: 185.89,
-  hostPow: 0.12,
-  wAlt: 0.51,
-  wExp: 0.56,
-  wPen: 0.07,
-  wPh: 0.4,
-  floor: 0.07,
+  altLowOk: 84.8,
+  altHighOk: 602.74,
+  altKo: 1647.89,
+  phLowOk: 4.15,
+  phHighOk: 5.51,
+  phKo: 6.32,
+  penLowOk: 20,
+  penHighOk: 40.59,
+  penKo: 55,
+  aspMin: 0.67,
+  aspBest: 192.98,
+  hostSat: 199.78,
+  hostPow: 0.11,
+  wAlt: 0.79,
+  wExp: 0.6,
+  wPen: 0.12,
+  wPh: 0.65,
+  floor: 0.3,
 }
 
 export function scoreCepeEte({ altitude, pente, orientation, ph, essences }) {
