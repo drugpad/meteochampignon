@@ -37,4 +37,14 @@ jobs:
           git add public/station-history.json
           git diff --staged --quiet && echo "Rien à commit" && exit 0
           git commit -m "Accumuler l'historique des stations"
-          git push
+          # Même précaution que rain-grid.yml : un push peut être rejeté si
+          # master a bougé pendant les ~7 min que prend ce job (autre push,
+          # merge de PR). Un seul fichier de données modifié par ce job :
+          # rebase + retry plutôt qu'abandonner le cycle.
+          for i in 1 2 3; do
+            git push && exit 0
+            echo "Push rejeté, rebase et retry ($i/3)…"
+            git fetch origin master
+            git rebase origin/master
+          done
+          exit 1

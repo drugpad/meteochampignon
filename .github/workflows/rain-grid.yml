@@ -36,4 +36,16 @@ jobs:
           git add public/rain-grid.json
           git diff --staged --quiet && echo "Rien à commit" && exit 0
           git commit -m "Rafraîchir la carte de pluie 24h"
-          git push
+          # `git push` peut être rejeté si master a bougé depuis le checkout
+          # (un autre push pendant les ~4 min que prend ce job — observé en
+          # usage réel avec un merge de PR en même temps qu'un run planifié).
+          # Un seul fichier de données modifié par ce job : le rebase ne peut
+          # pas entrer en conflit avec un autre contenu, retry avec un
+          # rebase à chaque tentative plutôt qu'abandonner le cycle.
+          for i in 1 2 3; do
+            git push && exit 0
+            echo "Push rejeté, rebase et retry ($i/3)…"
+            git fetch origin master
+            git rebase origin/master
+          done
+          exit 1
