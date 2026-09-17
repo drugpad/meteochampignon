@@ -3,6 +3,16 @@
   font-size: 12px;
 }
 
+/* Variante plein-écran mobile (voir StationFullscreen.tsx) : largeur
+   fluide plutôt que la largeur fixe de la bulle Leaflet, un peu plus
+   lisible au doigt (texte/graphiques légèrement agrandis). */
+.station-popup--page {
+  width: 100%;
+  font-size: 13px;
+  padding: 4px 16px 24px;
+  box-sizing: border-box;
+}
+
 .station-popup--message {
   padding: 12px;
   text-align: center;

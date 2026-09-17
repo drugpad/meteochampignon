@@ -1,13 +1,23 @@
 name: Rafraîchir la carte de pluie
 
-# Recalcule public/rain-grid.json toutes les 30 minutes (voir
-# scripts/fetch-rain-grid.mjs) et commit le résultat s'il a changé.
-# Vercel redéploie automatiquement sur chaque push (intégration Git native),
-# donc le fichier statique servi par l'appli reste à jour sans que le
-# navigateur d'un utilisateur ait à recalculer la grille lui-même.
+# Recalcule public/rain-grid.json par TRANCHES (voir scripts/fetch-rain-grid.mjs)
+# et commit le résultat s'il a changé. Vercel redéploie automatiquement sur
+# chaque push (intégration Git native), donc le fichier statique servi par
+# l'appli reste à jour sans que le navigateur d'un utilisateur ait à
+# recalculer la grille lui-même.
+#
+# Découpage en 6 tranches de 10 min (grille complète ~10800 points à 0.03°,
+# voir RAIN_GRID_STEP_DEG dans src/lib/config.ts) : un run qui tire toute la
+# grille d'affilée (~30-40 min) finissait par échouer de façon persistante
+# après ~20-25 min de sollicitation continue auprès d'Open-Meteo (429 qui ne
+# se dissipe plus malgré les retries) — un run court (~1800 points, ~5-6 min)
+# est le format qui s'est montré fiable. Chaque run ne traite qu'une tranche
+# et fusionne son résultat dans le fichier existant (voir fetch-rain-grid.mjs)
+# — la grille complète se rafraîchit donc toujours en ~1h, comme avant,
+# juste réparti en 6 runs courts au lieu d'un seul run long.
 on:
   schedule:
-    - cron: '0 * * * *' # toutes les heures (grille à 0.03° ≈ 10800 points, trop long pour du 30 min)
+    - cron: '*/10 * * * *'
   workflow_dispatch: {} # déclenchement manuel depuis l'onglet Actions, pratique pour tester
 
 permissions:
@@ -16,10 +26,9 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    # ~10800 points à 0.03° (voir RAIN_GRID_STEP_DEG, src/lib/config.ts) —
-    # ~25-30 min de pacing anti rate-limit Open-Meteo, marge large pour les
-    # retries (429/5xx) observés en usage réel.
-    timeout-minutes: 60
+    # ~1800 points/tranche — ~5-6 min de pacing anti rate-limit Open-Meteo,
+    # marge large pour les retries (429/5xx) observés en usage réel.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -27,8 +36,16 @@ jobs:
         with:
           node-version: 22
 
-      - name: Recalculer la grille
-        run: node scripts/fetch-rain-grid.mjs
+      - name: Recalculer la tranche de grille
+        run: |
+          # Le cron tombe pile sur :00/:10/:20/:30/:40/:50, donc minute/10
+          # donne directement l'index de tranche 0..5. Pour un déclenchement
+          # manuel (workflow_dispatch) hors de ces créneaux, le calcul reste
+          # valide (résultat toujours dans 0..5), juste pas déterministe.
+          MINUTE=$(date -u +%M)
+          SLICE_INDEX=$(( 10#$MINUTE / 10 ))
+          echo "Minute UTC=$MINUTE -> tranche $SLICE_INDEX"
+          SLICE_INDEX=$SLICE_INDEX SLICE_COUNT=6 node scripts/fetch-rain-grid.mjs
 
       - name: Commit si changement
         run: |

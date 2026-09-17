@@ -11,7 +11,13 @@ const HOUR_FORMATTER = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit' })
 const WEEKDAY_FORMATTER = new Intl.DateTimeFormat('fr-FR', { weekday: 'short' })
 const DAY_FORMATTER = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit' })
 
-type Props = { state: StationDetailState }
+type Props = {
+  state: StationDetailState
+  // 'popup' (défaut) : bulle Leaflet classique, largeur fixe, titre inclus.
+  // 'page' : plein écran mobile (voir StationFullscreen.tsx) — largeur
+  // fluide, pas de titre (déjà affiché dans l'en-tête de la page).
+  variant?: 'popup' | 'page'
+}
 
 // Tick d'axe X personnalisé pour la mini prévision : weekday + emoji météo
 // empilés, positionnés par Recharts lui-même (donc alignés pile sous
@@ -27,15 +33,17 @@ function DayTick({ x, y, payload }: { x: number; y: number; payload: { value: st
   )
 }
 
-export function StationPopup({ state }: Props) {
+export function StationPopup({ state, variant = 'popup' }: Props) {
+  const rootClassName = variant === 'page' ? 'station-popup station-popup--page' : 'station-popup'
+
   if (state.status === 'idle') return null
 
   if (state.status === 'loading') {
-    return <div className="station-popup station-popup--message">Chargement…</div>
+    return <div className={`${rootClassName} station-popup--message`}>Chargement…</div>
   }
 
   if (state.status === 'error') {
-    return <div className="station-popup station-popup--message station-popup--error">{state.message}</div>
+    return <div className={`${rootClassName} station-popup--message station-popup--error`}>{state.message}</div>
   }
 
   const { station, rainHistory, tempHistory, dailyRain, miniForecast } = state.detail
@@ -64,9 +72,13 @@ export function StationPopup({ state }: Props) {
   })
 
   return (
-    <div className="station-popup">
-      <div className="station-popup__title">{station.name}</div>
-      {station.altitude !== undefined && <div className="station-popup__altitude">{station.altitude} m d'altitude</div>}
+    <div className={rootClassName}>
+      {variant === 'popup' && (
+        <>
+          <div className="station-popup__title">{station.name}</div>
+          {station.altitude !== undefined && <div className="station-popup__altitude">{station.altitude} m d'altitude</div>}
+        </>
+      )}
 
       <div className="station-popup__section-title">
         Pluie ({totalRain} mm cumulés) et température — 24 dernières heures
