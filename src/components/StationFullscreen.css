@@ -1,0 +1,67 @@
+.station-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000; /* au-dessus des panneaux flottants (1000) et des panes Leaflet */
+  background: white;
+  display: flex;
+  flex-direction: column;
+  animation: station-fullscreen-slide-in 220ms ease-out;
+}
+
+@keyframes station-fullscreen-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.station-fullscreen__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.station-fullscreen__back {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #f0f0f0;
+  border-radius: 50%;
+  font-size: 22px;
+  line-height: 1;
+  color: #333;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.station-fullscreen__title {
+  min-width: 0;
+}
+
+.station-fullscreen__name {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.station-fullscreen__altitude {
+  font-size: 12px;
+  color: #888;
+}
+
+.station-fullscreen__body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
