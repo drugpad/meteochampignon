@@ -11,6 +11,8 @@ import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
 import { fetchCachedRainGrid, fetchRainGrid } from '../lib/rainGrid'
 import { REGION_BOUNDS } from '../lib/regionOutline'
+import { useIsMobile } from '../lib/useIsMobile'
+import { ForecastFullscreen } from './ForecastFullscreen'
 import { ForecastPanel } from './ForecastPanel'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
@@ -89,6 +91,7 @@ function InvalidateSizeOnResize() {
 }
 
 export function MapView() {
+  const isMobile = useIsMobile()
   const [mode, setMode] = useState<AppMode>('previsions')
   const [forecastState, setForecastState] = useState<ForecastState>({ status: 'idle' })
   const [rainState, setRainState] = useState<RainGridState>({ status: 'idle' })
@@ -182,7 +185,12 @@ export function MapView() {
         )}
       </MapContainer>
 
-      {mode === 'previsions' && <ForecastPanel state={forecastState} onClose={() => setForecastState({ status: 'idle' })} />}
+      {mode === 'previsions' && isMobile && forecastState.status !== 'idle' && (
+        <ForecastFullscreen state={forecastState} onClose={() => setForecastState({ status: 'idle' })} />
+      )}
+      {mode === 'previsions' && (!isMobile || forecastState.status === 'idle') && (
+        <ForecastPanel state={forecastState} onClose={() => setForecastState({ status: 'idle' })} />
+      )}
     </div>
   )
 }
