@@ -11,6 +11,23 @@
   width: 100vw;
 }
 
+/* Fines lignes blanches visibles entre les tuiles (retour utilisateur,
+   surtout visible sur le fond Plan) — même correctif que sur Unmask (voir
+   ../unmask/src/components/MapView.css, notes détaillées là-bas) : Leaflet
+   positionne chaque tuile via un transform CSS pas toujours un nombre
+   entier de pixels, laissant un interstice sous-pixel anti-aliasé entre
+   tuiles adjacentes. Fix : agrandir chaque tuile de 1px pour chevaucher
+   légèrement ses voisines et masquer l'interstice — mais `leaflet.css` pose
+   par défaut `mix-blend-mode: plus-lighter` sur `.leaflet-tile` (pensé pour
+   fondre des tuiles PNG semi-transparentes), qui additionne les couleurs
+   des tuiles opaques dans la bande chevauchée et la sur-expose vers le
+   blanc ; repasser en fusion `normal` réglait ça sur Unmask. */
+.leaflet-tile {
+  width: 257px !important;
+  height: 257px !important;
+  mix-blend-mode: normal !important;
+}
+
 /* Empile les panneaux flottants (mode/recherche puis carte de pluie) par
    flux normal plutôt que par positions absolues en dur pour chacun — évite
    les chevauchements quand la largeur du sélecteur de mode ou le nombre de
