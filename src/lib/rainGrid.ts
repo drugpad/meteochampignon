@@ -92,7 +92,18 @@ export async function fetchRainGrid(
 
   for (const [i, batch] of batches.entries()) {
     if (i > 0) await wait(RAIN_GRID_BATCH_DELAY_MS)
-    const values = await fetchBatchWithRetry(batch)
+
+    // Un lot qui échoue malgré les retries (429 persistant, voir
+    // fetchBatchWithRetry) ne doit pas faire perdre toute la grille déjà
+    // récupérée — trou traité comme un point sans donnée (RainOverlay
+    // l'affiche comme 0), même logique que fetch-rain-grid.mjs côté CI.
+    let values: (number | null)[]
+    try {
+      values = await fetchBatchWithRetry(batch)
+    } catch {
+      values = batch.map(() => null)
+    }
+
     batch.forEach((p, j) => {
       results.push({ lat: p.lat, lon: p.lon, rain24h: values[j] })
     })
