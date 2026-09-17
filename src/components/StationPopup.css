@@ -3,10 +3,51 @@
   font-size: 12px;
 }
 
+/* Hauteur plafonnée + défilement interne (popup Leaflet uniquement, pas la
+   page plein-écran mobile) : voir le commentaire détaillé sur
+   `.station-popup--message` ci-dessous — la même hauteur MAXIMALE ici
+   garantit qu'une fois les graphiques chargés, la popup ne dépasse jamais
+   la taille que l'autoPan de l'ouverture avait déjà prévue. */
+.station-popup:not(.station-popup--page) {
+  max-height: 505px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* Variante plein-écran mobile (voir StationFullscreen.tsx) : largeur
+   fluide plutôt que la largeur fixe de la bulle Leaflet, un peu plus
+   lisible au doigt (texte/graphiques légèrement agrandis). */
+.station-popup--page {
+  width: 100%;
+  font-size: 13px;
+  padding: 4px 16px 24px;
+  box-sizing: border-box;
+}
+
 .station-popup--message {
   padding: 12px;
   text-align: center;
   color: #666;
+}
+
+/* Dans une popup Leaflet (pas en plein-écran mobile), même hauteur EXACTE
+   que le plafond posé sur `.station-popup` ci-dessus, pendant le
+   "Chargement…" : Leaflet ne recalcule sa position/son autoPan qu'à
+   l'OUVERTURE de la popup (donc sur ce court état "Chargement…", petit par
+   défaut) — une fois les graphiques chargés, la popup grandissait
+   fortement mais restait ancrée là où l'autoPan initial l'avait placée,
+   poussant le bouton fermer hors de l'écran pour une station proche du
+   bord (retour utilisateur, capture à l'appui). En donnant au
+   "Chargement…" la même hauteur que le plafond du contenu final, le SEUL
+   autoPan qui se déclenche (celui de l'ouverture) voit déjà la taille
+   définitive — plus de dépassement possible ensuite, quel que soit le
+   contenu réel (défilement interne si besoin, via le plafond ci-dessus). */
+.station-popup--message:not(.station-popup--page) {
+  height: 505px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .station-popup--error {
