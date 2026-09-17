@@ -21,6 +21,34 @@ import { SearchBar } from './SearchBar'
 import { StationsLayer } from './StationsLayer'
 import type { AppMode, ForecastState, RainGridState, RainMapSource } from '../types'
 
+// Bug constaté sur Unmask (même fond Plan/Satellite) et reproduit ici : de
+// grands carrés gris/blancs apparaissent sur la carte — des tuiles qui
+// n'ont jamais fini de charger (le fond de `.leaflet-container` transparaît
+// derrière une tuile en échec). Les tuiles Leaflet sont de simples <img>,
+// donc hors de tout planificateur de débit — un panoramique/zoom rapide
+// peut déclencher assez de requêtes en parallèle pour dépasser une limite
+// de débit côté serveur de tuiles (429, timeout), sans que Leaflet ne
+// réessaie jamais de lui-même par défaut. On relance donc nous-mêmes la
+// tuile en échec, avec un paramètre anti-cache pour forcer une vraie
+// nouvelle requête (sinon le navigateur peut resservir la même réponse en
+// échec depuis son cache HTTP). Voir ../unmask/src/components/MapView.tsx.
+const TILE_RETRY_DELAYS_MS = [1000, 2000, 4000]
+
+function handleTileError(event: L.TileErrorEvent) {
+  const tile = event.tile as HTMLImageElement & { _retryCount?: number }
+  const retryIndex = tile._retryCount ?? 0
+  if (retryIndex >= TILE_RETRY_DELAYS_MS.length) return
+  tile._retryCount = retryIndex + 1
+  const baseSrc = tile.src.replace(/&_retry=\d+$/, '')
+  // + un peu de délai aléatoire (jusqu'à 500ms) : plusieurs tuiles échouent
+  // souvent ensemble (même rafale à l'origine du dépassement de débit), les
+  // relancer toutes exactement au même instant recréerait la même rafale.
+  const jitterMs = Math.random() * 500
+  window.setTimeout(() => {
+    tile.src = `${baseSrc}&_retry=${Date.now()}`
+  }, TILE_RETRY_DELAYS_MS[retryIndex] + jitterMs)
+}
+
 function ClickHandler({ enabled, onClick }: { enabled: boolean; onClick: (lat: number, lon: number) => void }) {
   useMapEvents({
     click(e) {
@@ -130,6 +158,7 @@ export function MapView() {
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              eventHandlers={{ tileerror: handleTileError }}
             />
           </LayersControl.BaseLayer>
           <LayersControl.BaseLayer name="Satellite">
@@ -138,6 +167,7 @@ export function MapView() {
               url="https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg"
               maxNativeZoom={19}
               crossOrigin="anonymous"
+              eventHandlers={{ tileerror: handleTileError }}
             />
           </LayersControl.BaseLayer>
         </LayersControl>

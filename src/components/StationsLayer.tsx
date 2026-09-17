@@ -37,6 +37,13 @@ function StationMarkerDesktop({ station }: { station: Station }) {
     loadDetail(station, setState)
   }
 
+  // Leaflet ne recalcule le positionnement/l'autoPan de la popup qu'à
+  // l'ouverture — à ce moment-là le contenu n'est encore que "Chargement…".
+  // Le correctif est dans StationPopup.css : `.station-popup--message`
+  // réserve déjà la même hauteur (plafonnée, défilement interne) que le
+  // contenu final, donc le seul autoPan qui se déclenche (celui de
+  // l'ouverture) voit déjà la bonne taille — pas de repositionnement après
+  // coup nécessaire.
   return (
     <Marker position={[station.lat, station.lon]} icon={STATION_ICON} eventHandlers={{ popupopen: handleOpen }}>
       <Popup minWidth={290} maxWidth={310}>
