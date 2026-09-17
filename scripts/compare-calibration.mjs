@@ -26,75 +26,74 @@ const HOST_APTITUDE = {
   tremble: 0.05,
 }
 
-function plateau(value, lowKo, lowOk, highOk, highKo) {
-  if (value <= lowKo || value >= highKo) return 0
-  if (value < lowOk) return (value - lowKo) / (lowOk - lowKo)
-  if (value > highOk) return (highKo - value) / (highKo - highOk)
-  return 1
-}
-
 // Abondance d'essences hôtes, en valeur absolue (somme des "rpp" pondérés
-// par l'aptitude) et non en part relative — voir scripts/fit-model.mjs.
+// par l'aptitude) et non en part relative.
 function hostAbundance(essences) {
   let weighted = 0
   for (const [nom, pct] of Object.entries(essences)) weighted += pct * (HOST_APTITUDE[nom] ?? 0)
   return weighted
 }
 
-// Paramètres trouvés par évolution différentielle sur 222 points de
-// calibration, meilleure graine sur 25 essais (scripts/optimize-search.mjs,
-// 16/09/2026) — remplace la version précédente (calée sur 82 points).
-// Validés par LOO-CV : erreur d'ajustement 8.4, erreur en validation croisée
-// 9.2 (points jamais vus par l'optimiseur pendant leur propre ajustement) —
-// écart faible entre les deux, donc régularité réelle. L'erreur globale a
-// augmenté par rapport à la version 82 points (5.8/7.1) parce que le jeu de
-// données couvre désormais une bien plus grande diversité de terrains
-// (points aléatoires sur toute la région + un cluster de cases voisines
-// pour isoler l'effet du terrain seul) — c'est une estimation plus fiable
-// de la vraie performance du modèle, pas une régression. Pour
-// retrouver/affiner ces valeurs avec plus de points :
-// node scripts/optimize-search.mjs [nombreDeGraines]
+// Paramètres ajustés sur 222 points (scripts/fit-compact.mjs, 17/09/2026),
+// validation croisée 5 blocs : 8.11 en ajustement, 8.73 en validation —
+// contre 8.56 / 9.21 pour la version précédente, avec 12 paramètres au lieu
+// de 18.
+//
+// Cette version corrige trois erreurs de la précédente, mises en évidence en
+// extrayant les courbes de réponse réelles des données au lieu de les
+// supposer (scripts/response-curves.mjs) :
+//
+//   1. le pH n'a PAS un large plateau favorable de 4.15 à 5.5 : son optimum
+//      est étroit (~5.4-5.5) et il s'effondre au-delà — c'est de loin le
+//      facteur dominant (28 points d'amplitude sur 100) ;
+//   2. l'altitude est neutre jusqu'à ~670 m puis décroche, au lieu de
+//      décliner progressivement dès 600 m ;
+//   3. la pente n'a quasiment aucun effet (4.6 points d'amplitude) : elle
+//      est retirée du modèle, alors qu'elle y pesait auparavant. L'effet des
+//      essences est lui aussi bien plus faible qu'on ne le croyait (2.4
+//      points) : le facteur est conservé mais son influence est plafonnée.
+//
+// Limite connue, mesurée : deux cases strictement indiscernables sur toutes
+// les valeurs affichées par le service de référence diffèrent quand même de
+// 6.5 points de score en moyenne (scripts/noise-floor.mjs). Aucune formule
+// fondée sur ces seules variables ne peut donc descendre sous ~4.6 points
+// d'erreur : il leur reste une information à haute résolution qu'on ne voit
+// pas (probablement la structure réelle du couvert forestier, type LiDAR).
 const Q = {
-  altLowOk: 84.8,
-  altHighOk: 602.74,
-  altKo: 1647.89,
-  phLowOk: 4.15,
-  phHighOk: 5.51,
-  phKo: 6.32,
-  penLowOk: 20,
-  penHighOk: 40.59,
-  penKo: 55,
-  aspMin: 0.67,
-  aspBest: 192.98,
-  hostSat: 199.78,
-  hostPow: 0.11,
-  wAlt: 0.79,
-  wExp: 0.6,
-  wPen: 0.12,
-  wPh: 0.65,
-  floor: 0.3,
+  phAcidKo: 3.087,
+  phLo: 5.399,
+  phHi: 5.501,
+  phDrop: 1.097,
+  altBreak: 670.1,
+  altSpan: 714.5,
+  altFloor: 0.376,
+  aspMin: 0.833,
+  aspBest: 177.07,
+  hostMin: 0.765,
+  hostSat: 40.17,
+  amp: 79.8,
 }
 
-export function scoreCepeEte({ altitude, pente, orientation, ph, essences }) {
-  const criteria = {
-    altitude: plateau(altitude, 0, Q.altLowOk, Q.altHighOk, Q.altKo),
-    exposition: Q.aspMin + (1 - Q.aspMin) * ((Math.cos(((orientation - Q.aspBest) * Math.PI) / 180) + 1) / 2),
-    pente: plateau(pente, 0, Q.penLowOk, Q.penHighOk, Q.penKo),
-    ph: plateau(ph, 3.5, Q.phLowOk, Q.phHighOk, Q.phKo),
-  }
-  const weights = { altitude: Q.wAlt, exposition: Q.wExp, pente: Q.wPen, ph: Q.wPh }
+export function scoreCepeEte({ altitude, orientation, ph, essences }) {
+  // pH : montée depuis le seuil acide, optimum étroit, puis chute.
+  const fPh =
+    ph < Q.phLo
+      ? Math.max(0, (ph - Q.phAcidKo) / (Q.phLo - Q.phAcidKo))
+      : ph <= Q.phHi
+        ? 1
+        : Math.max(0, 1 - (ph - Q.phHi) / Q.phDrop)
 
-  // Moyenne géométrique pondérée (loi du minimum de Liebig) — voir
-  // l'historique de cette approche dans git blame, la justification n'a pas
-  // changé avec le passage aux paramètres ajustés.
-  const terrain = Object.entries(criteria).reduce(
-    (product, [k, v]) => product * Math.pow(Math.max(Q.floor, v), weights[k]),
-    1,
-  )
+  // Altitude : neutre jusqu'au décrochage, puis descente vers un plancher.
+  const fAlt =
+    altitude <= Q.altBreak
+      ? 1
+      : Math.max(Q.altFloor, 1 - ((altitude - Q.altBreak) / Q.altSpan) * (1 - Q.altFloor))
 
-  const hostFactor = Math.pow(Math.min(1, hostAbundance(essences) / Q.hostSat), Q.hostPow)
+  const fExpo = Q.aspMin + (1 - Q.aspMin) * ((Math.cos(((orientation - Q.aspBest) * Math.PI) / 180) + 1) / 2)
+  const fHost = Q.hostMin + (1 - Q.hostMin) * Math.min(1, hostAbundance(essences) / Q.hostSat)
 
-  return { score: Math.round(100 * hostFactor * terrain), hostFactor, criteria, terrain }
+  const criteria = { ph: fPh, altitude: fAlt, exposition: fExpo }
+  return { score: Math.round(Q.amp * fPh * fAlt * fExpo * fHost), hostFactor: fHost, criteria, terrain: fPh * fAlt * fExpo }
 }
 
 const data = JSON.parse(readFileSync(new URL('./calibration-dataset.json', import.meta.url), 'utf8'))
