@@ -109,6 +109,16 @@ async function writeResults(results) {
   await writeFile(OUTPUT_PATH, JSON.stringify(output))
 }
 
+// Au-delà de ce taux de lots en échec, le run est jugé trop dégradé pour
+// être mis en ligne — mieux vaut garder l'ancienne grille (encore bonne)
+// que de publier une carte trouée où les zones manquantes s'afficheraient
+// comme "0mm" (RainOverlay traite null comme 0, voir son commentaire) :
+// ça pourrait laisser croire qu'une zone est sèche alors qu'on n'a
+// simplement pas pu vérifier. En dessous du seuil, quelques trous isolés
+// sont un compromis acceptable plutôt que de perdre tout le run pour un
+// 429 ponctuel.
+const MAX_FAILED_BATCH_RATIO = 0.05
+
 async function main() {
   const points = buildGridPoints()
   const batches = chunk(points, BATCH_SIZE)
@@ -122,11 +132,13 @@ async function main() {
 
     // Un lot qui échoue malgré les retries (429 persistant en fin de run,
     // voir BATCH_DELAY_MS) ne doit pas faire perdre tout le travail déjà
-    // fait sur les lots précédents — on le marque en trou (points à null,
-    // RainOverlay les ignore déjà) et on continue, plutôt que de planter
-    // tout le run. Écrit après CHAQUE lot (pas seulement à la fin) : un
-    // Ctrl-C, un timeout du job, ou un échec plus loin laisse quand même
-    // une grille partielle utilisable au lieu de rien du tout.
+    // fait sur les lots précédents — on le marque en trou (points à null)
+    // et on continue, plutôt que de planter tout le run immédiatement.
+    // Écrit sur le disque du runner après chaque lot (pas seulement à la
+    // fin) : rien n'est perdu en cas de Ctrl-C/timeout, mais ça reste sans
+    // conséquence tant que l'étape "Commit si changement" du workflow n'a
+    // pas tourné (le disque du runner est jeté à la fin du job) — voir le
+    // seuil MAX_FAILED_BATCH_RATIO plus bas, qui décide si on va jusque-là.
     let values
     try {
       values = await fetchBatch(batch)
@@ -141,7 +153,17 @@ async function main() {
     console.log(`Lot ${i + 1}/${batches.length} ok (${results.length}/${points.length} points)`)
   }
 
-  console.log(`Terminé (${failedBatches} lot(s) en échec sur ${batches.length}). Écrit dans public/rain-grid.json`)
+  const failedRatio = failedBatches / batches.length
+  console.log(`Terminé : ${failedBatches}/${batches.length} lot(s) en échec (${Math.round(failedRatio * 100)}%).`)
+
+  if (failedRatio > MAX_FAILED_BATCH_RATIO) {
+    // Le fichier local reste écrit (utile pour inspection dans les logs du
+    // job), mais on sort en erreur pour que l'étape "Commit si changement"
+    // du workflow ne s'exécute pas — l'ancienne grille en prod n'est pas
+    // remplacée par une version trop dégradée.
+    console.error(`Trop de lots en échec (>${Math.round(MAX_FAILED_BATCH_RATIO * 100)}%) — run abandonné, rien ne sera commité.`)
+    process.exit(1)
+  }
 }
 
 main().catch((err) => {
