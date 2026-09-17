@@ -1,0 +1,104 @@
+.forecast-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000; /* au-dessus des panneaux flottants (1000) et des panes Leaflet */
+  background: white;
+  display: flex;
+  flex-direction: column;
+  animation: forecast-fullscreen-slide-in 220ms ease-out;
+}
+
+@keyframes forecast-fullscreen-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.forecast-fullscreen__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.forecast-fullscreen__back {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #f0f0f0;
+  border-radius: 50%;
+  font-size: 22px;
+  line-height: 1;
+  color: #333;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.forecast-fullscreen__title {
+  min-width: 0;
+}
+
+.forecast-fullscreen__name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.forecast-fullscreen__coords {
+  font-size: 12px;
+  color: #888;
+}
+
+.forecast-fullscreen__body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Liste verticale (un jour par ligne) plutôt que les cartes à défilement
+   horizontal du panneau desktop — même principe que le media query mobile
+   de ForecastPanel.css, mais appliqué ici sans condition de largeur
+   puisque cet écran n'est de toute façon utilisé que sur mobile (voir
+   MapView.tsx). Réutilise les classes `.forecast-panel__days`/
+   `.forecast-day` (styles de base dans ForecastPanel.css, toujours chargé
+   car ForecastPanel reste monté pour l'indice "idle") — ces règles-ci les
+   surchargent, scopées à ce conteneur plutôt qu'à un media query. */
+.forecast-fullscreen__body .forecast-panel__days {
+  display: flex;
+  flex-direction: column;
+}
+
+.forecast-fullscreen__body .forecast-day {
+  flex: none;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 32px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 12px;
+  border-right: none;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.forecast-fullscreen__body .forecast-day__date {
+  margin-bottom: 0;
+  width: 4.5em;
+}
+
+.forecast-fullscreen__body .forecast-day__emoji {
+  font-size: 22px;
+  margin: 0;
+}
+
+.forecast-fullscreen__body .forecast-day__temps {
+  margin-bottom: 0;
+}
