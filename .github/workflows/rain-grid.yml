@@ -1,23 +1,32 @@
 name: Rafraîchir la carte de pluie
 
 # Recalcule public/rain-grid.json par TRANCHES (voir scripts/fetch-rain-grid.mjs)
-# et commit le résultat s'il a changé. Vercel redéploie automatiquement sur
-# chaque push (intégration Git native), donc le fichier statique servi par
-# l'appli reste à jour sans que le navigateur d'un utilisateur ait à
+# et commit le résultat après chaque tranche. Vercel redéploie automatiquement
+# sur chaque push (intégration Git native), donc le fichier statique servi
+# par l'appli reste à jour sans que le navigateur d'un utilisateur ait à
 # recalculer la grille lui-même.
 #
-# Découpage en 6 tranches de 10 min (grille complète ~10800 points à 0.03°,
-# voir RAIN_GRID_STEP_DEG dans src/lib/config.ts) : un run qui tire toute la
-# grille d'affilée (~30-40 min) finissait par échouer de façon persistante
-# après ~20-25 min de sollicitation continue auprès d'Open-Meteo (429 qui ne
-# se dissipe plus malgré les retries) — un run court (~1800 points, ~5-6 min)
-# est le format qui s'est montré fiable. Chaque run ne traite qu'une tranche
-# et fusionne son résultat dans le fichier existant (voir fetch-rain-grid.mjs)
-# — la grille complète se rafraîchit donc toujours en ~1h, comme avant,
-# juste réparti en 6 runs courts au lieu d'un seul run long.
+# Historique : d'abord un cron `*/10 * * * *` (un déclenchement séparé par
+# tranche). Constat en usage réel : le cron natif GitHub Actions ignore
+# silencieusement la quasi-totalité des déclenchements en dessous d'~1h —
+# limite documentée de la plateforme (charge partagée, best-effort), pas un
+# bug de ce fichier. Résultat observé : au lieu d'un run toutes les 10 min,
+# un run toutes les 4-5h seulement, largement au-delà du seuil de fraîcheur
+# de l'appli (CACHED_GRID_MAX_AGE_MS, src/lib/rainGrid.ts) — la carte
+# retombait sur "Charger la carte de pluie" au lieu de précharger.
+#
+# D'où : UN SEUL déclenchement (cron horaire, bien plus fiable que du
+# sub-horaire) dont le job boucle lui-même sur les 6 tranches, avec une
+# pause entre chaque pour ne pas recréer le problème initial (un run continu
+# de ~30-40 min sur toute la grille à 0.03°/~10800 points finissait par
+# subir des 429 persistants après ~20-25 min de sollicitation continue
+# auprès d'Open-Meteo — un run court de ~1800 points/~5-6 min est le format
+# qui s'est montré fiable). Chaque tranche committe son résultat au fur et à
+# mesure (pas seulement à la fin) : la fraîcheur progresse toutes les ~10
+# min pendant le job plutôt que d'attendre la fin des 6 tranches.
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '0 * * * *'
   workflow_dispatch: {} # déclenchement manuel depuis l'onglet Actions, pratique pour tester
 
 permissions:
@@ -26,9 +35,9 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    # ~1800 points/tranche — ~5-6 min de pacing anti rate-limit Open-Meteo,
-    # marge large pour les retries (429/5xx) observés en usage réel.
-    timeout-minutes: 15
+    # 6 tranches × (~6 min de fetch + 5 min de pause) ≈ 65 min — marge large
+    # pour les retries (429/5xx) observés en usage réel.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -36,34 +45,41 @@ jobs:
         with:
           node-version: 22
 
-      - name: Recalculer la tranche de grille
+      - name: Recalculer les 6 tranches de la grille
         run: |
-          # Le cron tombe pile sur :00/:10/:20/:30/:40/:50, donc minute/10
-          # donne directement l'index de tranche 0..5. Pour un déclenchement
-          # manuel (workflow_dispatch) hors de ces créneaux, le calcul reste
-          # valide (résultat toujours dans 0..5), juste pas déterministe.
-          MINUTE=$(date -u +%M)
-          SLICE_INDEX=$(( 10#$MINUTE / 10 ))
-          echo "Minute UTC=$MINUTE -> tranche $SLICE_INDEX"
-          SLICE_INDEX=$SLICE_INDEX SLICE_COUNT=6 node scripts/fetch-rain-grid.mjs
+          for SLICE in 0 1 2 3 4 5; do
+            echo "=== Tranche $SLICE/5 ==="
+            SLICE_INDEX=$SLICE SLICE_COUNT=6 node scripts/fetch-rain-grid.mjs
 
-      - name: Commit si changement
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add public/rain-grid.json
-          git diff --staged --quiet && echo "Rien à commit" && exit 0
-          git commit -m "Rafraîchir la carte de pluie 24h"
-          # `git push` peut être rejeté si master a bougé depuis le checkout
-          # (un autre push pendant les ~4 min que prend ce job — observé en
-          # usage réel avec un merge de PR en même temps qu'un run planifié).
-          # Un seul fichier de données modifié par ce job : le rebase ne peut
-          # pas entrer en conflit avec un autre contenu, retry avec un
-          # rebase à chaque tentative plutôt qu'abandonner le cycle.
-          for i in 1 2 3; do
-            git push && exit 0
-            echo "Push rejeté, rebase et retry ($i/3)…"
-            git fetch origin master
-            git rebase origin/master
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add public/rain-grid.json
+            if git diff --staged --quiet; then
+              echo "Rien à commit pour cette tranche"
+            else
+              git commit -m "Rafraîchir la carte de pluie 24h (tranche $SLICE/5)"
+              # `git push` peut être rejeté si master a bougé depuis le
+              # checkout (peu probable en cours de job, mais un push externe
+              # reste possible) — rebase + retry plutôt qu'abandonner tout
+              # le cycle pour une seule tranche.
+              PUSHED=0
+              for i in 1 2 3; do
+                if git push; then PUSHED=1; break; fi
+                echo "Push rejeté, rebase et retry ($i/3)…"
+                git fetch origin master
+                git rebase origin/master
+              done
+              if [ "$PUSHED" != "1" ]; then
+                echo "::error::Push définitivement rejeté pour la tranche $SLICE"
+                exit 1
+              fi
+            fi
+
+            # Pause entre tranches (pas après la dernière) : casse la
+            # sollicitation continue d'Open-Meteo qui posait problème sur un
+            # run d'un seul tenant (voir commentaire en tête de fichier).
+            if [ "$SLICE" != "5" ]; then
+              echo "Pause avant la tranche suivante…"
+              sleep 300
+            fi
           done
-          exit 1
