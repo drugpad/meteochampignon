@@ -5,15 +5,17 @@ import 'leaflet/dist/leaflet.css'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, LayersControl, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
+import { fetchCachedRainForecastGrid, fetchRainForecastGrid } from '../lib/rainForecastGrid'
 import { fetchCachedRainGrid, fetchRainGrid } from '../lib/rainGrid'
 import { REGION_BOUNDS } from '../lib/regionOutline'
 import { useIsMobile } from '../lib/useIsMobile'
 import { ForecastFullscreen } from './ForecastFullscreen'
 import { ForecastPanel } from './ForecastPanel'
+import { ForecastRainControls } from './ForecastRainControls'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
 import { RainControls } from './RainControls'
@@ -21,7 +23,7 @@ import { RainOverlay } from './RainOverlay'
 import { RegionOutline } from './RegionOutline'
 import { SearchBar } from './SearchBar'
 import { StationsLayer } from './StationsLayer'
-import type { AppMode, ForecastState, RainGridState, RainMapSource } from '../types'
+import type { AppMode, ForecastState, RainForecastGridState, RainGridPoint, RainGridState, RainMapSource } from '../types'
 
 // Bug constaté sur Unmask (même fond Plan/Satellite) et reproduit ici : de
 // grands carrés gris/blancs apparaissent sur la carte — des tuiles qui
@@ -96,6 +98,8 @@ export function MapView() {
   const [forecastState, setForecastState] = useState<ForecastState>({ status: 'idle' })
   const [rainState, setRainState] = useState<RainGridState>({ status: 'idle' })
   const [rainSource, setRainSource] = useState<RainMapSource>('open-meteo')
+  const [forecastRainState, setForecastRainState] = useState<RainForecastGridState>({ status: 'idle' })
+  const [selectedForecastDay, setSelectedForecastDay] = useState(0)
   const [searchTarget, setSearchTarget] = useState<GeocodeResult | null>(null)
 
   const handleMapClick = useCallback((lat: number, lon: number) => {
@@ -132,6 +136,36 @@ export function MapView() {
       .catch((err: Error) => setRainState({ status: 'error', message: err.message }))
   }, [])
 
+  // Même principe que le cache de la carte 24h ci-dessus, mais au passage
+  // en mode Prévisions (voir lib/rainForecastGrid.ts).
+  const autoLoadForecastRainTriedRef = useRef(false)
+  useEffect(() => {
+    if (mode !== 'previsions' || autoLoadForecastRainTriedRef.current) return
+    autoLoadForecastRainTriedRef.current = true
+    setForecastRainState({ status: 'loading', loaded: 0, total: 1 })
+    fetchCachedRainForecastGrid().then((cached) => {
+      setForecastRainState(
+        cached ? { status: 'ready', points: cached.points, dates: cached.dates, fetchedAt: cached.fetchedAt } : { status: 'idle' },
+      )
+    })
+  }, [mode])
+
+  const handleForecastRainForceRefresh = useCallback(() => {
+    setForecastRainState({ status: 'loading', loaded: 0, total: 1 })
+    fetchRainForecastGrid((loaded, total) => setForecastRainState({ status: 'loading', loaded, total }))
+      .then(({ points, dates }) => setForecastRainState({ status: 'ready', points, dates, fetchedAt: Date.now() }))
+      .catch((err: Error) => setForecastRainState({ status: 'error', message: err.message }))
+  }, [])
+
+  // RainOverlay attend une seule valeur par point (voir RainGridPoint) —
+  // projette le jour sélectionné du tableau `rain` de chaque point de la
+  // grille prévue dans cette forme, plutôt que de généraliser RainOverlay
+  // pour un gain qui ne concernerait que cet appelant.
+  const selectedForecastRainPoints = useMemo((): RainGridPoint[] => {
+    if (forecastRainState.status !== 'ready') return []
+    return forecastRainState.points.map((p) => ({ lat: p.lat, lon: p.lon, rain24h: p.rain[selectedForecastDay] ?? null }))
+  }, [forecastRainState, selectedForecastDay])
+
   return (
     <div className="map-view">
       <div className="floating-controls">
@@ -142,6 +176,14 @@ export function MapView() {
 
         {mode === 'historique' && (
           <RainControls state={rainState} source={rainSource} onSourceChange={setRainSource} onForceRefresh={handleForceRefresh} />
+        )}
+        {mode === 'previsions' && (
+          <ForecastRainControls
+            state={forecastRainState}
+            selectedDay={selectedForecastDay}
+            onSelectDay={setSelectedForecastDay}
+            onForceRefresh={handleForecastRainForceRefresh}
+          />
         )}
       </div>
 
@@ -183,6 +225,8 @@ export function MapView() {
             {rainSource === 'open-meteo' && rainState.status === 'ready' && <RainOverlay points={rainState.points} />}
           </>
         )}
+
+        {mode === 'previsions' && forecastRainState.status === 'ready' && <RainOverlay points={selectedForecastRainPoints} />}
       </MapContainer>
 
       {mode === 'previsions' && isMobile && forecastState.status !== 'idle' && (

@@ -132,3 +132,41 @@ export async function getHourlyPrecipitationBatch(points: Point[]): Promise<(num
     return rolling24hSum(hourly)
   })
 }
+
+export type DailyPrecipitationBatch = {
+  dates: string[] // ISO yyyy-mm-dd, partagées par tous les points (même timezone/forecast_days pour tous)
+  values: (number | null)[][] // un tableau par point, aligné sur `dates`
+}
+
+// Requête groupée multi-points, cumul de pluie prévu par jour (jusqu'à 7,
+// comme le panneau Prévisions) — sert à la grille de pluie prévue (mode
+// Prévisions, recouvrement carte, voir rainForecastGrid.ts). Même principe
+// de groupage qu'getHourlyPrecipitationBatch, mais `daily` plutôt que
+// `hourly` : un seul appel par lot donne directement les 7 jours pour
+// chaque point, pas besoin de 7 grilles séparées.
+export async function getDailyPrecipitationBatch(points: Point[], forecastDays = 7): Promise<DailyPrecipitationBatch> {
+  if (points.length === 0) return { dates: [], values: [] }
+  const url = new URL(BASE_URL)
+  url.searchParams.set('latitude', points.map((p) => p.lat.toFixed(4)).join(','))
+  url.searchParams.set('longitude', points.map((p) => p.lon.toFixed(4)).join(','))
+  url.searchParams.set('daily', 'precipitation_sum')
+  url.searchParams.set('forecast_days', String(forecastDays))
+  url.searchParams.set('timezone', 'Europe/Paris')
+  url.searchParams.set('models', 'best_match')
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(20000) })
+  if (!res.ok) throw new Error(`Open-Meteo: ${res.status}`)
+  const data = await res.json()
+  const results: unknown[] = Array.isArray(data) ? data : [data]
+
+  type DailyEntry = { daily?: { time: string[]; precipitation_sum: (number | null)[] } }
+  let dates: string[] = []
+  const values = results.map((entry) => {
+    const daily = (entry as DailyEntry).daily
+    if (!daily) return []
+    if (dates.length === 0) dates = daily.time // toutes les entrées partagent les mêmes dates (même timezone/forecast_days)
+    return daily.precipitation_sum
+  })
+
+  return { dates, values }
+}
