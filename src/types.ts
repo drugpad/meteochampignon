@@ -47,6 +47,21 @@ export type RainGridState =
   | { status: 'error'; message: string }
   | { status: 'ready'; points: RainGridPoint[]; fetchedAt: number }
 
+// Un point de la grille de pluie PRÉVUE (mode Prévisions, recouvrement carte)
+// — même grille géographique que RainGridPoint, mais un cumul par jour
+// (jusqu'à 7) au lieu d'une seule valeur 24h glissante.
+export type RainForecastGridPoint = {
+  lat: number
+  lon: number
+  rain: (number | null)[] // mm/jour, un par entrée de RainForecastGridState.dates
+}
+
+export type RainForecastGridState =
+  | { status: 'idle' }
+  | { status: 'loading'; loaded: number; total: number }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; points: RainForecastGridPoint[]; dates: string[]; fetchedAt: number }
+
 // Historique 24h + cumul quotidien 10j + mini-prévision 5 jours pour une
 // station cliquée.
 export type StationDetail = {

@@ -20,7 +20,9 @@ Sélecteur de mode **Prévisions / Historique** (`ModeSwitch.tsx`), panneau flot
 
 ### 3.2 Prévisions 7 jours (mode Prévisions)
 
-Clic sur la carte → `getDailyForecast` (`lib/openMeteo.ts`), Open-Meteo `forecast`, `models=best_match`, `forecast_days=7`. Résultat affiché dans un panneau flottant en bas de l'écran (`ForecastPanel.tsx`) : icône météo (mapping WMO simplifié, `lib/weatherCode.ts`), températures min/max, cumul de pluie + probabilité, vent max, par jour.
+Clic sur la carte → `getDailyForecast` (`lib/openMeteo.ts`), Open-Meteo `forecast`, `models=best_match`, `forecast_days=7`. Résultat affiché dans un panneau flottant en bas de l'écran (`ForecastPanel.tsx`) : icône météo (mapping WMO simplifié, `lib/weatherCode.ts`), températures min/max, cumul de pluie + probabilité, vent max, par jour. Sur mobile, un écran plein-écran (`ForecastFullscreen.tsx`) remplace ce panneau — même principe que les stations en mode Historique, voir 3.3.
+
+**Carte de pluie prévue (recouvrement carte, 7 jours)** : en plus du clic ponctuel ci-dessus, un recouvrement `RainOverlay` (le même composant que la carte de pluie 24h mesurée, 3.4) affiche le cumul de pluie **prévu** sur toute la zone, avec un sélecteur de jour (`ForecastRainControls.tsx`, jusqu'à 7 jours). Architecture identique à la carte de pluie 24h : grille précalculée par un job GitHub Actions découpé en tranches (`lib/rainForecastGrid.ts`, `scripts/fetch-rain-forecast-grid.mjs`, `.github/workflows/rain-forecast-grid.yml`) — un seul appel Open-Meteo par point donne directement les 7 jours (`daily=precipitation_sum&forecast_days=7`), pas besoin de 7 grilles séparées. Différence avec la carte 24h : cron toutes les 3h plutôt que toutes les heures (une prévision change moins vite qu'un cumul mesuré) et `CACHED_GRID_MAX_AGE_MS` à 6h en conséquence.
 
 ### 3.3 Stations (mode Historique)
 
