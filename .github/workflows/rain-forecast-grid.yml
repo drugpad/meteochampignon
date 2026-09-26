@@ -32,29 +32,44 @@ jobs:
 
       - name: Recalculer les 6 tranches de la grille prévue
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           for SLICE in 0 1 2 3 4 5; do
             echo "=== Tranche $SLICE/5 ==="
-            SLICE_INDEX=$SLICE SLICE_COUNT=6 node scripts/fetch-rain-forecast-grid.mjs
-
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add public/rain-forecast-grid.json
-            if git diff --staged --quiet; then
-              echo "Rien à commit pour cette tranche"
+            # Voir rain-grid.yml pour le raisonnement détaillé : `set -e`
+            # (par défaut sur les steps GitHub Actions) tuerait toute la
+            # boucle au premier `process.exit(1)` du script (tranche trop
+            # dégradée, voir MAX_FAILED_BATCH_RATIO côté script) sans ce
+            # `if` — observé en usage réel sur rain-grid.yml.
+            if SLICE_INDEX=$SLICE SLICE_COUNT=6 node scripts/fetch-rain-forecast-grid.mjs; then
+              SCRIPT_OK=1
             else
-              git commit -m "Rafraîchir la carte de pluie prévue (tranche $SLICE/5)"
-              PUSHED=0
-              for i in 1 2 3; do
-                if git push; then PUSHED=1; break; fi
-                echo "Push rejeté, rebase et retry ($i/3)…"
-                git fetch origin master
-                git rebase origin/master
-              done
-              if [ "$PUSHED" != "1" ]; then
-                echo "::error::Push définitivement rejeté pour la tranche $SLICE"
-                exit 1
+              SCRIPT_OK=0
+              echo "Tranche $SLICE abandonnée (trop dégradée) — pas de commit pour cette tranche, on continue."
+            fi
+
+            if [ "$SCRIPT_OK" = "1" ]; then
+              git add public/rain-forecast-grid.json
+              if git diff --staged --quiet; then
+                echo "Rien à commit pour cette tranche"
+              else
+                git commit -m "Rafraîchir la carte de pluie prévue (tranche $SLICE/5)"
+                PUSHED=0
+                for i in 1 2 3; do
+                  if git push; then PUSHED=1; break; fi
+                  echo "Push rejeté, rebase et retry ($i/3)…"
+                  git fetch origin master
+                  git rebase origin/master
+                done
+                if [ "$PUSHED" != "1" ]; then
+                  echo "::error::Push définitivement rejeté pour la tranche $SLICE"
+                  exit 1
+                fi
               fi
             fi
+
+            git checkout -- public/rain-forecast-grid.json 2>/dev/null || true
 
             if [ "$SLICE" != "5" ]; then
               echo "Pause avant la tranche suivante…"
