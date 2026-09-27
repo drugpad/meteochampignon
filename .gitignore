@@ -30,3 +30,20 @@ dist-ssr
 # Export Excel des points de calibration (genere par
 # scripts/export-calibration-xlsx.mjs, deja livre a l'utilisateur)
 points-calibration-cepe-ete.xlsx
+
+# Travail d'analyse/calibration biotope (donnees d'un service tiers) —
+# jamais commite, l'historique en a ete purge le 27/09/2026 (depot passe en
+# public entre-temps). Fichiers en local uniquement, jamais pousses.
+scripts/compact-tcd-libre-model.json
+scripts/compact-tcd-model.json
+scripts/copernicus-all.json
+scripts/copernicus-autres.json
+scripts/couvert-voisinage-model.json
+scripts/fit-compact-tcd-libre.mjs
+scripts/fit-compact-tcd.mjs
+scripts/fit-couvert-voisinage.mjs
+scripts/method-sweep.json
+scripts/method-sweep.mjs
+scripts/test-copernicus-autres.mjs
+scripts/test-copernicus.mjs
+scripts/test-grille-exacte.mjs
