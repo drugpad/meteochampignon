@@ -1,13 +1,22 @@
 name: Accumuler l'historique des stations
 
 # Récupère l'heure courante pour chaque station (public/station-history.json,
-# voir scripts/fetch-station-history.mjs) toutes les heures et commit le
-# résultat s'il a changé — même principe que rain-grid.yml pour la carte de
-# pluie : l'appli lit ce fichier statique au lieu d'appeler l'API Météo-
-# France depuis le navigateur au clic sur une station.
+# voir scripts/fetch-station-history.mjs) et commit le résultat s'il a
+# changé — même principe que rain-grid.yml pour la carte de pluie : l'appli
+# lit ce fichier statique au lieu d'appeler l'API Météo-France depuis le
+# navigateur au clic sur une station.
+#
+# Toutes les 12h, pas toutes les heures : ce dépôt est PRIVÉ (2000 min/mois
+# gratuites sur GitHub Actions) — un run hourly (~7-10 min à chaque fois),
+# cumulé avec les deux autres jobs planifiés (carte de pluie 24h + prévue),
+# faisait largement dépasser ce quota (voir rain-grid.yml pour le détail de
+# l'incident : tous les runs du dépôt bloqués pendant un moment). Perte
+# acceptée : jusqu'à 10 jours d'historique station se remplissent un peu
+# plus lentement (2 points/jour au lieu de 24), ce qui reste largement
+# suffisant pour l'usage visé (2 utilisateurs occasionnels).
 on:
   schedule:
-    - cron: '5 * * * *' # à H+5 min, pour laisser l'heure pile se stabiliser côté Météo-France
+    - cron: '5 */12 * * *'
   workflow_dispatch: {}
 
 permissions:

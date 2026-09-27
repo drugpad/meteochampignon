@@ -15,13 +15,14 @@ import type { RainGridPoint } from '../types'
 // lit d'abord (quasi instantané) et ne retombe sur le calcul en direct
 // (fetchRainGrid ci-dessous) que si ce cache est absent ou trop vieux.
 const CACHED_GRID_URL = '/rain-grid.json'
-// 150 min — le cron GitHub Actions natif ignore silencieusement la plupart
-// des déclenchements en dessous d'~1h (limite documentée de la plateforme,
-// pas un bug côté appli — voir CLAUDE.md et .github/workflows/rain-grid.yml)
-// : marge pour un cycle horaire (~60 min de job, tranches commitées au fur
-// et à mesure) qui accuserait en plus un retard de déclenchement (5-20 min
-// observés en pratique, parfois plus).
-const CACHED_GRID_MAX_AGE_MS = 150 * 60 * 1000
+// 3h — chaque tranche (voir .github/workflows/rain-grid.yml) est un run
+// séparé toutes les 2h (pas un job unique toutes les heures qui bouclait en
+// interne sur les 6 tranches avec des pauses `sleep` : ce dépôt est PRIVÉ,
+// et ces pauses facturées comme du temps GitHub Actions ont fait dépasser
+// le quota gratuit de 2000 min/mois en un jour et demi — tous les runs du
+// dépôt ont fini par être bloqués). Marge au-delà de 2h pour un éventuel
+// retard de déclenchement du cron (observé en pratique sur un cron ≥1h).
+const CACHED_GRID_MAX_AGE_MS = 3 * 60 * 60 * 1000
 
 export type CachedRainGrid = { points: RainGridPoint[]; fetchedAt: number }
 

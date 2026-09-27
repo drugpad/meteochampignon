@@ -9,11 +9,11 @@ import { getDailyPrecipitationBatch } from './openMeteo'
 import type { RainForecastGridPoint } from '../types'
 
 const CACHED_GRID_URL = '/rain-forecast-grid.json'
-// Une prévision change beaucoup moins vite qu'un cumul mesuré — le job
-// planifié tourne toutes les 3h (voir .github/workflows/rain-forecast-grid.yml),
-// marge généreuse pour un cycle + un éventuel retard de déclenchement du
-// cron (voir rainGrid.ts pour le même sujet côté carte 24h).
-const CACHED_GRID_MAX_AGE_MS = 6 * 60 * 60 * 1000
+// 3h — même cadence que rainGrid.ts désormais (une tranche toutes les 2h,
+// pas un job unique toutes les 3h avec pauses `sleep` internes qui faisait
+// dépasser le quota GitHub Actions gratuit, voir rainGrid.ts pour le détail
+// de l'incident).
+const CACHED_GRID_MAX_AGE_MS = 3 * 60 * 60 * 1000
 
 export type CachedRainForecastGrid = { points: RainForecastGridPoint[]; dates: string[]; fetchedAt: number }
 

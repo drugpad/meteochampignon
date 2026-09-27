@@ -1,32 +1,29 @@
 name: Rafraîchir la carte de pluie
 
-# Recalcule public/rain-grid.json par TRANCHES (voir scripts/fetch-rain-grid.mjs)
-# et commit le résultat après chaque tranche. Vercel redéploie automatiquement
-# sur chaque push (intégration Git native), donc le fichier statique servi
-# par l'appli reste à jour sans que le navigateur d'un utilisateur ait à
-# recalculer la grille lui-même.
+# Recalcule public/rain-grid.json par TRANCHES (voir scripts/fetch-rain-grid.mjs).
+# Vercel redéploie automatiquement sur chaque push (intégration Git native),
+# donc le fichier statique servi par l'appli reste à jour sans que le
+# navigateur d'un utilisateur ait à recalculer la grille lui-même.
 #
-# Historique : d'abord un cron `*/10 * * * *` (un déclenchement séparé par
-# tranche). Constat en usage réel : le cron natif GitHub Actions ignore
-# silencieusement la quasi-totalité des déclenchements en dessous d'~1h —
-# limite documentée de la plateforme (charge partagée, best-effort), pas un
-# bug de ce fichier. Résultat observé : au lieu d'un run toutes les 10 min,
-# un run toutes les 4-5h seulement, largement au-delà du seuil de fraîcheur
-# de l'appli (CACHED_GRID_MAX_AGE_MS, src/lib/rainGrid.ts) — la carte
-# retombait sur "Charger la carte de pluie" au lieu de précharger.
+# Historique : d'abord un job unique tournant toutes les heures, qui bouclait
+# lui-même sur les 6 tranches avec une pause de 5 min entre chacune (~65 min
+# de run à chaque fois). Problème découvert en usage réel : ce dépôt est
+# PRIVÉ — GitHub Actions n'y est gratuit que jusqu'à 2000 min/mois, et une
+# pause `sleep` compte comme du temps facturé au même titre qu'un calcul.
+# Un job de ~65 min toutes les heures = ~1560 min/JOUR, largement au-delà du
+# quota mensuel en un jour et demi — tous les runs ont fini par échouer
+# instantanément ("recent account payments have failed or your spending
+# limit needs to be increased", visible dans les annotations du run).
 #
-# D'où : UN SEUL déclenchement (cron horaire, bien plus fiable que du
-# sub-horaire) dont le job boucle lui-même sur les 6 tranches, avec une
-# pause entre chaque pour ne pas recréer le problème initial (un run continu
-# de ~30-40 min sur toute la grille à 0.03°/~10800 points finissait par
-# subir des 429 persistants après ~20-25 min de sollicitation continue
-# auprès d'Open-Meteo — un run court de ~1800 points/~5-6 min est le format
-# qui s'est montré fiable). Chaque tranche committe son résultat au fur et à
-# mesure (pas seulement à la fin) : la fraîcheur progresse toutes les ~10
-# min pendant le job plutôt que d'attendre la fin des 6 tranches.
+# D'où : CHAQUE tranche est maintenant un run séparé et court (~6-8 min, pas
+# de pause interne), déclenché par cron toutes les 2h — la tranche à traiter
+# se déduit de l'heure UTC courante (SLICE_INDEX = (heure/2) % 6), donnant un
+# cycle complet (6 tranches) toutes les 12h. Cron à un intervalle ≥1h : bien
+# honoré par GitHub (contrairement à un cron sub-horaire, voir la même
+# discussion pour l'historique de ce fichier dans son évolution précédente).
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '5 */2 * * *'
   workflow_dispatch: {} # déclenchement manuel depuis l'onglet Actions, pratique pour tester
 
 permissions:
@@ -35,9 +32,9 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    # 6 tranches × (~6 min de fetch + 5 min de pause) ≈ 65 min — marge large
-    # pour les retries (429/5xx) observés en usage réel.
-    timeout-minutes: 90
+    # ~1800 points/tranche — ~5-6 min de pacing anti rate-limit Open-Meteo,
+    # marge large pour les retries (429/5xx) observés en usage réel.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -45,66 +42,48 @@ jobs:
         with:
           node-version: 22
 
-      - name: Recalculer les 6 tranches de la grille
+      - name: Recalculer la tranche de grille
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Cycle de 12h : 6 tranches, une toutes les 2h. HEURE/2 donne
+          # 0..11, %6 donne directement l'index de tranche 0..5 (répété
+          # deux fois par jour). Déclenchement manuel hors de ces créneaux :
+          # calcul toujours valide (résultat dans 0..5), juste pas
+          # déterministe par rapport au cycle en cours.
+          HEURE=$(date -u +%H)
+          SLICE_INDEX=$(( (10#$HEURE / 2) % 6 ))
+          echo "Heure UTC=$HEURE -> tranche $SLICE_INDEX"
 
-          for SLICE in 0 1 2 3 4 5; do
-            echo "=== Tranche $SLICE/5 ==="
-            # `set -e` (par défaut sur les steps GitHub Actions) tuerait toute
-            # la boucle au premier `process.exit(1)` du script — qui sort
-            # volontairement en erreur quand une tranche est trop dégradée
-            # pour être publiée (voir MAX_FAILED_BATCH_RATIO côté script),
-            # sans qu'on veuille abandonner les tranches suivantes pour
-            # autant (observé en usage réel : sans ce `if`, une seule tranche
-            # dégradée faisait échouer tout le job, empêchant les tranches
-            # suivantes de tourner). SCRIPT_OK contrôle explicitement le
-            # commit ci-dessous plutôt que de se fier à `git diff` seul — le
-            # fichier local peut avoir changé même sur un run abandonné
-            # (points des lots réussis avant l'abandon), mais ne doit pas
-            # être publié.
-            if SLICE_INDEX=$SLICE SLICE_COUNT=6 node scripts/fetch-rain-grid.mjs; then
-              SCRIPT_OK=1
+          # `set -e` (par défaut sur les steps GitHub Actions) tuerait le
+          # step entier si le script sort volontairement en erreur (tranche
+          # trop dégradée, voir MAX_FAILED_BATCH_RATIO côté script) — ici ça
+          # ne concerne qu'un seul run (pas une boucle interne), mais on
+          # garde le même contrôle explicite plutôt que de se fier à
+          # `git diff` seul pour décider du commit.
+          if SLICE_INDEX=$SLICE_INDEX SLICE_COUNT=6 node scripts/fetch-rain-grid.mjs; then
+            SCRIPT_OK=1
+          else
+            SCRIPT_OK=0
+            echo "Tranche $SLICE_INDEX abandonnée (trop dégradée) — pas de commit."
+          fi
+
+          if [ "$SCRIPT_OK" = "1" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add public/rain-grid.json
+            if git diff --staged --quiet; then
+              echo "Rien à commit"
             else
-              SCRIPT_OK=0
-              echo "Tranche $SLICE abandonnée (trop dégradée) — pas de commit pour cette tranche, on continue."
+              git commit -m "Rafraîchir la carte de pluie 24h (tranche $SLICE_INDEX/5)"
+              # `git push` peut être rejeté si master a bougé depuis le
+              # checkout (un autre job planifié, un merge de PR) — rebase +
+              # retry plutôt qu'abandonner ce run.
+              for i in 1 2 3; do
+                git push && exit 0
+                echo "Push rejeté, rebase et retry ($i/3)…"
+                git fetch origin master
+                git rebase origin/master
+              done
+              echo "::error::Push définitivement rejeté"
+              exit 1
             fi
-
-            if [ "$SCRIPT_OK" = "1" ]; then
-              git add public/rain-grid.json
-              if git diff --staged --quiet; then
-                echo "Rien à commit pour cette tranche"
-              else
-                git commit -m "Rafraîchir la carte de pluie 24h (tranche $SLICE/5)"
-                # `git push` peut être rejeté si master a bougé depuis le
-                # checkout (peu probable en cours de job, mais un push externe
-                # reste possible) — rebase + retry plutôt qu'abandonner tout
-                # le cycle pour une seule tranche.
-                PUSHED=0
-                for i in 1 2 3; do
-                  if git push; then PUSHED=1; break; fi
-                  echo "Push rejeté, rebase et retry ($i/3)…"
-                  git fetch origin master
-                  git rebase origin/master
-                done
-                if [ "$PUSHED" != "1" ]; then
-                  echo "::error::Push définitivement rejeté pour la tranche $SLICE"
-                  exit 1
-                fi
-              fi
-            fi
-
-            # Repart d'un état propre pour la prochaine tranche, que celle-ci
-            # ait été commitée ou abandonnée (fichier local potentiellement
-            # modifié sans avoir été commité dans le cas SCRIPT_OK=0).
-            git checkout -- public/rain-grid.json 2>/dev/null || true
-
-            # Pause entre tranches (pas après la dernière) : casse la
-            # sollicitation continue d'Open-Meteo qui posait problème sur un
-            # run d'un seul tenant (voir commentaire en tête de fichier).
-            if [ "$SLICE" != "5" ]; then
-              echo "Pause avant la tranche suivante…"
-              sleep 300
-            fi
-          done
+          fi

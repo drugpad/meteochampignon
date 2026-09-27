@@ -1,19 +1,22 @@
 name: Rafraîchir la carte de pluie prévue
 
 # Recalcule public/rain-forecast-grid.json par TRANCHES (voir
-# scripts/fetch-rain-forecast-grid.mjs) — même principe que rain-grid.yml
-# (carte de pluie 24h mesurée) : un seul cron (bien honoré par GitHub tant
-# qu'il reste ≥1h — voir les commentaires détaillés dans rain-grid.yml sur
-# la fiabilité du cron natif en dessous de ce seuil) dont le job boucle en
-# interne sur les 6 tranches, avec une pause entre chaque pour ne pas
-# soutenir une sollicitation continue trop longue auprès d'Open-Meteo.
+# scripts/fetch-rain-forecast-grid.mjs) — voir rain-grid.yml (carte de pluie
+# 24h mesurée) pour le raisonnement détaillé, repris ici à l'identique :
+# chaque tranche est un run court et séparé (pas de pause interne facturée),
+# déclenché par cron toutes les 2h — la tranche à traiter se déduit de
+# l'heure UTC courante, donnant un cycle complet (6 tranches) toutes les 12h.
 #
-# Différence : toutes les 3h, pas toutes les heures — une prévision change
-# beaucoup moins vite qu'un cumul mesuré, pas besoin d'un cycle aussi
-# fréquent (voir CACHED_GRID_MAX_AGE_MS, src/lib/rainForecastGrid.ts).
+# Coût GitHub Actions (dépôt privé, 2000 min/mois gratuites) : une
+# précédente version (un seul job/heure bouclant en interne sur les 6
+# tranches avec pause `sleep`, ~65 min facturées à chaque fois) a fait
+# dépasser le quota mensuel en un jour et demi, bloquant tous les runs du
+# dépôt ("recent account payments have failed..."). D'où l'architecture
+# ci-dessous, bien moins coûteuse (courts runs espacés par le cron lui-même,
+# pas par un sleep facturé).
 on:
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '5 */2 * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -22,7 +25,7 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -30,49 +33,34 @@ jobs:
         with:
           node-version: 22
 
-      - name: Recalculer les 6 tranches de la grille prévue
+      - name: Recalculer la tranche de grille prévue
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          HEURE=$(date -u +%H)
+          SLICE_INDEX=$(( (10#$HEURE / 2) % 6 ))
+          echo "Heure UTC=$HEURE -> tranche $SLICE_INDEX"
 
-          for SLICE in 0 1 2 3 4 5; do
-            echo "=== Tranche $SLICE/5 ==="
-            # Voir rain-grid.yml pour le raisonnement détaillé : `set -e`
-            # (par défaut sur les steps GitHub Actions) tuerait toute la
-            # boucle au premier `process.exit(1)` du script (tranche trop
-            # dégradée, voir MAX_FAILED_BATCH_RATIO côté script) sans ce
-            # `if` — observé en usage réel sur rain-grid.yml.
-            if SLICE_INDEX=$SLICE SLICE_COUNT=6 node scripts/fetch-rain-forecast-grid.mjs; then
-              SCRIPT_OK=1
+          if SLICE_INDEX=$SLICE_INDEX SLICE_COUNT=6 node scripts/fetch-rain-forecast-grid.mjs; then
+            SCRIPT_OK=1
+          else
+            SCRIPT_OK=0
+            echo "Tranche $SLICE_INDEX abandonnée (trop dégradée) — pas de commit."
+          fi
+
+          if [ "$SCRIPT_OK" = "1" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add public/rain-forecast-grid.json
+            if git diff --staged --quiet; then
+              echo "Rien à commit"
             else
-              SCRIPT_OK=0
-              echo "Tranche $SLICE abandonnée (trop dégradée) — pas de commit pour cette tranche, on continue."
+              git commit -m "Rafraîchir la carte de pluie prévue (tranche $SLICE_INDEX/5)"
+              for i in 1 2 3; do
+                git push && exit 0
+                echo "Push rejeté, rebase et retry ($i/3)…"
+                git fetch origin master
+                git rebase origin/master
+              done
+              echo "::error::Push définitivement rejeté"
+              exit 1
             fi
-
-            if [ "$SCRIPT_OK" = "1" ]; then
-              git add public/rain-forecast-grid.json
-              if git diff --staged --quiet; then
-                echo "Rien à commit pour cette tranche"
-              else
-                git commit -m "Rafraîchir la carte de pluie prévue (tranche $SLICE/5)"
-                PUSHED=0
-                for i in 1 2 3; do
-                  if git push; then PUSHED=1; break; fi
-                  echo "Push rejeté, rebase et retry ($i/3)…"
-                  git fetch origin master
-                  git rebase origin/master
-                done
-                if [ "$PUSHED" != "1" ]; then
-                  echo "::error::Push définitivement rejeté pour la tranche $SLICE"
-                  exit 1
-                fi
-              fi
-            fi
-
-            git checkout -- public/rain-forecast-grid.json 2>/dev/null || true
-
-            if [ "$SLICE" != "5" ]; then
-              echo "Pause avant la tranche suivante…"
-              sleep 300
-            fi
-          done
+          fi
