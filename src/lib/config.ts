@@ -13,14 +13,19 @@ export const MIDI_PYRENEES_BOUNDS = {
 // degrés. Le modèle sous-jacent d'Open-Meteo pour la France (`best_match`)
 // est en réalité AROME (Météo-France), nativement en ~1.3km de maille — la
 // grille à 0.08° (~8-9km) sous-échantillonnait donc largement un modèle
-// déjà assez précis pour l'usage visé. ~0.03° (~3-3.5km) exploite mieux
-// cette résolution native sans tomber dans l'illusion (le modèle n'est pas
-// magiquement plus précis que 1.3km, inutile de descendre sous ce seuil).
-// Contrepartie : ~7x plus de points qu'à 0.08°, donc un job qui prend
-// nettement plus longtemps (voir RAIN_GRID_BATCH_DELAY_MS et le cron dans
-// .github/workflows/rain-grid.yml, passé à un rythme horaire en
-// conséquence) — assumé, l'app vise 2 utilisateurs occasionnels, pas un
-// rafraîchissement temps réel.
+// déjà assez précis pour l'usage visé. ~0.03° (~3-3.5km, ~10800 points)
+// exploite mieux cette résolution native sans tomber dans l'illusion (le
+// modèle n'est pas magiquement plus précis que 1.3km, inutile de descendre
+// sous ce seuil).
+//
+// Envisagé un temps de reculer à 0.05° pour limiter le coût GitHub Actions
+// (le dépôt était privé, 2000 min/mois gratuites, dépassées par les jobs
+// planifiés) — finalement pas nécessaire : le dépôt est passé en **public**
+// (Actions illimité et gratuit, voir section 5 de CLAUDE.md), donc la
+// densité n'a plus besoin d'être sacrifiée pour le coût. Le découpage en
+// tranches (voir .github/workflows/rain-grid.yml) reste nécessaire quel que
+// soit le coût : c'est une limite d'Open-Meteo (sollicitation continue trop
+// longue), pas de facturation GitHub.
 export const RAIN_GRID_STEP_DEG = 0.03
 
 // Nombre de points groupés par appel à Open-Meteo (voir rainGrid.ts) — testé
