@@ -23,6 +23,11 @@ name: Rafraîchir la carte de pluie
 # discussion pour l'historique de ce fichier dans son évolution précédente).
 on:
   schedule:
+    # Minute 5 exprès (rain-forecast-grid.yml est à 35, pas 5) : les deux
+    # tournaient au départ sur le même cron, donc pile au même instant
+    # toutes les 2h — repéré après un trou de ~8h une nuit touchant les 3
+    # jobs planifiés du dépôt simultanément. Voir rain-forecast-grid.yml
+    # pour le détail.
     - cron: '5 */2 * * *'
   workflow_dispatch: {} # déclenchement manuel depuis l'onglet Actions, pratique pour tester
 

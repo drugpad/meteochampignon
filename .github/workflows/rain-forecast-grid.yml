@@ -16,7 +16,17 @@ name: Rafraîchir la carte de pluie prévue
 # pas par un sleep facturé).
 on:
   schedule:
-    - cron: '5 */2 * * *'
+    # 35 (pas 5) : décalé de rain-grid.yml exprès. Les deux workflows avaient
+    # le même cron ('5 */2 * * *') — deux déclenchements planifiés du même
+    # dépôt pile au même instant, toutes les 2h. Repéré après un trou de ~8h
+    # une nuit sur les 3 jobs simultanément (pas juste un run isolé) :
+    # GitHub documente explicitement que des cron qui tombent au même
+    # instant (ou sur des minutes "rondes" trop demandées) peuvent se
+    # retarder/sauter mutuellement sur une charge partagée. Pas de certitude
+    # absolue que c'était la cause exacte de ce trou-là, mais c'est un vrai
+    # risque évitable à coût nul — décaler les deux plutôt que se fier au
+    # hasard.
+    - cron: '35 */2 * * *'
   workflow_dispatch: {}
 
 permissions:
