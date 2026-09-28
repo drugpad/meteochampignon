@@ -9,11 +9,15 @@ import { getDailyPrecipitationBatch } from './openMeteo'
 import type { RainForecastGridPoint } from '../types'
 
 const CACHED_GRID_URL = '/rain-forecast-grid.json'
-// 3h — même cadence que rainGrid.ts désormais (une tranche toutes les 2h,
-// pas un job unique toutes les 3h avec pauses `sleep` internes qui faisait
-// dépasser le quota GitHub Actions gratuit, voir rainGrid.ts pour le détail
-// de l'incident).
-const CACHED_GRID_MAX_AGE_MS = 3 * 60 * 60 * 1000
+// Contrairement à rainGrid.ts (cumul 24h glissant, reste valable même vieux
+// de quelques heures — voir son commentaire sur la suppression de tout
+// seuil d'âge), ici `dates[0]` = "aujourd'hui" au moment du fetch : passé un
+// certain âge, ce n'est plus juste une donnée "un peu vieille", les dates
+// elles-mêmes sont fausses (le jour a changé). Seuil généreux (36h, pas 3h)
+// pour absorber les trous occasionnels du cron (toutes les 2h en théorie,
+// jusqu'à ~8h de trou observé en pratique) sans jamais cacher la carte pour
+// ça — seulement si le job est vraiment resté en panne plus d'un jour.
+const CACHED_GRID_MAX_AGE_MS = 36 * 60 * 60 * 1000
 
 export type CachedRainForecastGrid = { points: RainForecastGridPoint[]; dates: string[]; fetchedAt: number }
 
@@ -23,7 +27,7 @@ export async function fetchCachedRainForecastGrid(): Promise<CachedRainForecastG
     if (!res.ok) return null
     const data = (await res.json()) as { fetchedAt: string; dates: string[]; points: RainForecastGridPoint[] }
     const fetchedAt = new Date(data.fetchedAt).getTime()
-    if (Number.isNaN(fetchedAt) || Date.now() - fetchedAt > CACHED_GRID_MAX_AGE_MS) return null
+    if (Number.isNaN(fetchedAt) || data.points.length === 0 || Date.now() - fetchedAt > CACHED_GRID_MAX_AGE_MS) return null
     return { points: data.points, dates: data.dates, fetchedAt }
   } catch {
     return null

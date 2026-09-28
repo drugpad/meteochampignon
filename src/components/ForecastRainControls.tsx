@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './ForecastRainControls.css'
 import { RAIN_LEGEND_STOPS } from '../lib/color'
+import { formatRelativeAge } from '../lib/formatRelativeAge'
 import type { RainForecastGridState } from '../types'
 
 const TIME_FORMATTER = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -60,7 +61,9 @@ export function ForecastRainControls({ state, selectedDay, onSelectDay, onForceR
 
           {state.status === 'ready' && (
             <>
-              <div className="forecast-rain-controls__status">Actualisé à {TIME_FORMATTER.format(state.fetchedAt)}</div>
+              <div className="forecast-rain-controls__status">
+                Actualisé à {TIME_FORMATTER.format(state.fetchedAt)} ({formatRelativeAge(state.fetchedAt)})
+              </div>
 
               <div className="forecast-rain-controls__days">
                 {state.dates.map((date, i) => (

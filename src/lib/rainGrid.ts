@@ -15,28 +15,30 @@ import type { RainGridPoint } from '../types'
 // lit d'abord (quasi instantané) et ne retombe sur le calcul en direct
 // (fetchRainGrid ci-dessous) que si ce cache est absent ou trop vieux.
 const CACHED_GRID_URL = '/rain-grid.json'
-// 3h — chaque tranche (voir .github/workflows/rain-grid.yml) est un run
-// séparé toutes les 2h (pas un job unique toutes les heures qui bouclait en
-// interne sur les 6 tranches avec des pauses `sleep` : ce dépôt est PRIVÉ,
-// et ces pauses facturées comme du temps GitHub Actions ont fait dépasser
-// le quota gratuit de 2000 min/mois en un jour et demi — tous les runs du
-// dépôt ont fini par être bloqués). Marge au-delà de 2h pour un éventuel
-// retard de déclenchement du cron (observé en pratique sur un cron ≥1h).
-const CACHED_GRID_MAX_AGE_MS = 3 * 60 * 60 * 1000
 
 export type CachedRainGrid = { points: RainGridPoint[]; fetchedAt: number }
 
 // Tente de lire la grille pré-calculée par le job planifié. Renvoie `null`
-// si le fichier n'existe pas encore (avant le premier run du job, ou en dev
-// local sans avoir lancé le script), ou s'il est trop vieux pour être fiable
-// — dans les deux cas l'appelant sait qu'il doit retomber sur fetchRainGrid.
+// seulement si le fichier n'existe pas encore (avant le premier run du job,
+// ou en dev local sans avoir lancé le script) ou est illisible — dans ce cas
+// l'appelant sait qu'il doit retomber sur fetchRainGrid.
+//
+// Pas de seuil d'âge ici (il y en a eu un, CACHED_GRID_MAX_AGE_MS = 3h) :
+// même le cron `.github/workflows/rain-grid.yml` (toutes les 2h en théorie)
+// saute parfois un créneau (best-effort côté GitHub, observé en pratique :
+// un trou de ~8h une nuit) — masquer la carte pendant ce trou en attendant
+// un rechargement manuel ("Charger la carte de pluie") est pire que
+// d'afficher une grille vieille de quelques heures avec son horodatage
+// (`fetchedAt`, voir RainControls.tsx "Actualisé à HH:MM") : la donnée
+// reste utile, l'utilisateur voit qu'elle n'est pas toute fraîche plutôt que
+// de se retrouver sans rien.
 export async function fetchCachedRainGrid(): Promise<CachedRainGrid | null> {
   try {
     const res = await fetch(CACHED_GRID_URL, { cache: 'no-store' })
     if (!res.ok) return null
     const data = (await res.json()) as { fetchedAt: string; points: RainGridPoint[] }
     const fetchedAt = new Date(data.fetchedAt).getTime()
-    if (Number.isNaN(fetchedAt) || Date.now() - fetchedAt > CACHED_GRID_MAX_AGE_MS) return null
+    if (Number.isNaN(fetchedAt) || data.points.length === 0) return null
     return { points: data.points, fetchedAt }
   } catch {
     return null

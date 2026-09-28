@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './RainControls.css'
 import { RAIN_LEGEND_STOPS } from '../lib/color'
+import { formatRelativeAge } from '../lib/formatRelativeAge'
 import type { RainGridState, RainMapSource } from '../types'
 
 const HAS_RADAR_TOKEN = Boolean(import.meta.env.VITE_METEOFRANCE_API_TOKEN)
@@ -77,7 +78,9 @@ export function RainControls({ state, source, onSourceChange, onForceRefresh }: 
 
           {source === 'open-meteo' && state.status === 'ready' && (
             <>
-              <div className="rain-controls__status">Actualisé à {TIME_FORMATTER.format(state.fetchedAt)}</div>
+              <div className="rain-controls__status">
+                Actualisé à {TIME_FORMATTER.format(state.fetchedAt)} ({formatRelativeAge(state.fetchedAt)})
+              </div>
               <button type="button" className="rain-controls__refresh-btn" onClick={onForceRefresh}>
                 Recalculer maintenant (très lent, ~30 min)
               </button>
