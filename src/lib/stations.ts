@@ -65,6 +65,19 @@ function loadHistory(): Promise<HistoryByStation> {
   return historyPromise
 }
 
+const HOUR_MS = 3600000
+const HISTORY_WINDOW_MS = 240 * HOUR_MS // même fenêtre que fetch-station-history.mjs
+export const COMPLETE_RATIO = 0.8
+
+// Nombre d'heures de ce jour (UTC) qui peuvent exister dans l'historique :
+// borné par le début de la fenêtre glissante et par maintenant.
+function observableHours(date: string, now: number): number {
+  const dayStart = new Date(`${date}T00:00:00Z`).getTime()
+  const from = Math.max(dayStart, now - HISTORY_WINDOW_MS)
+  const to = Math.min(dayStart + 24 * HOUR_MS, now)
+  return Math.max(1, Math.floor((to - from) / HOUR_MS))
+}
+
 function dayKey(isoTime: string): string {
   return isoTime.slice(0, 10) // yyyy-mm-dd (validity_time est en UTC, comme pour la grille de pluie)
 }
@@ -76,7 +89,10 @@ export async function fetchStationDetail(station: Station): Promise<StationDetai
   ])
 
   const points = (historyByStation[station.id] ?? []).slice().sort((a, b) => a.time.localeCompare(b.time))
-  const last24h = points.slice(-24)
+  const now = Date.now()
+  // 24 dernières HEURES (pas les 24 derniers points : avec un historique
+  // clairsemé, 24 points peuvent s'étaler sur plusieurs jours).
+  const last24h = points.filter((p) => new Date(p.time).getTime() > now - 24 * HOUR_MS)
 
   const rainHistory = last24h
     .filter((p) => p.rr1 !== null)
@@ -94,9 +110,21 @@ export async function fetchStationDetail(station: Station): Promise<StationDetai
     const key = dayKey(p.time)
     dailyTotals.set(key, (dailyTotals.get(key) ?? 0) + p.rr1)
   }
+  // Un jour est "complet" s'il a au moins 80% des heures observables dans la
+  // fenêtre (jour courant et premier jour de la fenêtre = partiels par
+  // nature, on compare à ce qui pouvait exister). Calculé sur la couverture
+  // réelle, pas sur un drapeau posé à la main : le message disparaît tout
+  // seul quand le job horaire / le rattrapage a comblé les trous (ou quand
+  // le jour sort de la fenêtre de 10 jours).
+  const pointsPerDay = new Map<string, number>()
+  for (const p of points) pointsPerDay.set(dayKey(p.time), (pointsPerDay.get(dayKey(p.time)) ?? 0) + 1)
   const dailyRain = [...dailyTotals.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, rain]) => ({ date, rain: Math.round(rain * 10) / 10 }))
+    .map(([date, rain]) => ({
+      date,
+      rain: Math.round(rain * 10) / 10,
+      complete: (pointsPerDay.get(date) ?? 0) >= COMPLETE_RATIO * observableHours(date, now),
+    }))
 
-  return { station, rainHistory, tempHistory, dailyRain, miniForecast }
+  return { station, rainHistory, tempHistory, dailyRain, miniForecast, last24hCoverage: last24h.length }
 }

@@ -81,6 +81,16 @@
   background: #eff6ff;
 }
 
+.station-popup__notice {
+  margin: 4px 0;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .station-popup__section-title {
   font-weight: 600;
   margin: 10px 0 2px;

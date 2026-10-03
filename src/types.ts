@@ -68,7 +68,10 @@ export type StationDetail = {
   station: Station
   rainHistory: { time: string; rain: number }[] // mm/h, 24 dernières heures
   tempHistory: { time: string; temp: number }[] // °C, 24 dernières heures
-  dailyRain: { date: string; rain: number }[] // mm/jour, jusqu'à 10 derniers jours
+  // mm/jour, jusqu'à 10 derniers jours ; complete=false : trop peu d'heures
+  // observées ce jour-là, le cumul est un minimum.
+  dailyRain: { date: string; rain: number; complete: boolean }[]
+  last24hCoverage: number // nombre d'heures observées sur les 24 dernières (sur 24)
   miniForecast: ForecastDay[] // 5 jours, source Open-Meteo pour ce point
 }
 
