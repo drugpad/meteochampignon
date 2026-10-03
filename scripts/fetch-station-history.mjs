@@ -61,7 +61,10 @@ async function fetchStationHour(stationId, key, attempt = 0) {
     return fetchStationHour(stationId, key, attempt + 1)
   }
 
-  if (res.status === 429 && attempt < 2) {
+  // Plus patient que le strict nécessaire : ce job peut chevaucher le
+  // rattrapage ponctuel (backfill-station-history.yml), qui partage la
+  // limite de débit de l'API.
+  if (res.status === 429 && attempt < 4) {
     await wait(5000 * (attempt + 1))
     return fetchStationHour(stationId, key, attempt + 1)
   }

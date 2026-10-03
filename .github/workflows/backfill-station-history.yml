@@ -1,0 +1,63 @@
+name: Rattraper l'historique des stations
+
+# Lancement MANUEL uniquement (une fois, après le passage du job horaire de
+# station-history.yml de 12h à 1h) : récupère les ~4 jours d'observations
+# horaires que l'API Météo-France garde encore, pour combler les heures
+# manquées (voir scripts/backfill-station-history.mjs).
+#
+# ~27 000 appels à ~40/min ≈ 11h au total, découpé en 4 tranches de stations
+# exécutées l'une après l'autre (max-parallel: 1 : la limite de débit de
+# l'API, 50 req/min, est commune à toutes les tranches). Gratuit : le dépôt
+# est public.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        slice: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Récupérer les heures manquantes
+        env:
+          METEOFRANCE_API_TOKEN: ${{ secrets.METEOFRANCE_API_TOKEN }}
+          BACKFILL_SLICE: ${{ matrix.slice }}
+          BACKFILL_SLICE_COUNT: 4
+          BACKFILL_TMP: ${{ runner.temp }}/backfill-points.json
+        run: node scripts/backfill-station-history.mjs collect
+
+      # `always()` : même un run interrompu (timeout…) garde ce qu'il a déjà
+      # tiré. Le fichier d'historique est repris à neuf à chaque tentative
+      # (reset sur origin/master) : le job horaire pousse en parallèle et un
+      # rebase d'un JSON sur une seule ligne échouerait systématiquement.
+      - name: Fusionner et committer
+        if: always()
+        env:
+          BACKFILL_TMP: ${{ runner.temp }}/backfill-points.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for i in 1 2 3 4 5; do
+            git fetch origin master
+            git reset --hard origin/master
+            node scripts/backfill-station-history.mjs merge
+            git add public/station-history.json
+            git diff --staged --quiet && echo "Rien à commit" && exit 0
+            git commit -m "Rattraper l'historique des stations (tranche ${{ matrix.slice }})"
+            git push && exit 0
+            echo "Push rejeté, nouvelle tentative ($i/5)…"
+          done
+          exit 1

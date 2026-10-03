@@ -6,17 +6,17 @@ name: Accumuler l'historique des stations
 # lit ce fichier statique au lieu d'appeler l'API Météo-France depuis le
 # navigateur au clic sur une station.
 #
-# Toutes les 12h, pas toutes les heures : ce dépôt est PRIVÉ (2000 min/mois
-# gratuites sur GitHub Actions) — un run hourly (~7-10 min à chaque fois),
-# cumulé avec les deux autres jobs planifiés (carte de pluie 24h + prévue),
-# faisait largement dépasser ce quota (voir rain-grid.yml pour le détail de
-# l'incident : tous les runs du dépôt bloqués pendant un moment). Perte
-# acceptée : jusqu'à 10 jours d'historique station se remplissent un peu
-# plus lentement (2 points/jour au lieu de 24), ce qui reste largement
-# suffisant pour l'usage visé (2 utilisateurs occasionnels).
+# Toutes les heures, obligatoirement : `rr1` est la pluie de l'heure
+# précédente SEULEMENT, donc échantillonner moins souvent fait passer à côté
+# de la plupart des averses (constaté le 03/10/2026 : ~2.8 mm tombés à La
+# Mongie dans la journée, 0.8 mm affichés avec un run toutes les 12h).
+# Le passage à 12h (incident de facturation, dépôt alors privé) n'a plus
+# lieu d'être depuis que le dépôt est public (Actions gratuit illimité).
+# Minute 20 : évite la minute 5 de rain-grid.yml et la minute 35 de
+# rain-forecast-grid.yml (crons simultanés qui se sautent mutuellement).
 on:
   schedule:
-    - cron: '5 */12 * * *'
+    - cron: '20 * * * *'
   workflow_dispatch: {}
 
 permissions:

@@ -1,72 +1,64 @@
 #!/usr/bin/env node
-// Backfill ponctuel (à lancer une fois à la main, pas par CI) : remplit
-// public/station-history.json avec les dernières 24h de chaque station,
-// plutôt que d'attendre 24 runs du job horaire (fetch-station-history.mjs)
-// pour obtenir la même profondeur.
+// Rattrapage ponctuel de public/station-history.json : l'API Météo-France
+// (DPObs v2, /station/horaire) accepte un paramètre `date` et garde environ
+// 4 jours d'observations horaires (vérifié le 03/10/2026 : réponse vide avant
+// le 29/09 00:00 UTC). Sert à combler les heures manquées quand le job
+// horaire tournait seulement toutes les 12h (voir station-history.yml : `rr1`
+// ne couvre que l'heure précédente, donc les heures non échantillonnées
+// étaient des averses perdues).
 //
-// Limite dure de l'API Météo-France (DonneesPubliquesObservation) : l'
-// endpoint /station/horaire ne conserve que 24h d'historique par station
-// (une date plus ancienne renvoie la donnée la plus ancienne disponible,
-// pas une erreur) — impossible de remonter plus loin d'un coup. Au-delà de
-// ces 24h, le cumul 10 jours ne peut que continuer à s'accumuler heure par
-// heure via le job planifié (voir station-history.yml).
-//
-// Écrit le fichier après CHAQUE station (pas seulement à la fin) : ce script
-// tourne ~2h30 (239 stations × 24h × pacing anti rate-limit), un
-// Ctrl-C ou crash au milieu ne doit pas perdre la progression déjà faite.
+// Deux modes, pour pouvoir committer même si le run est interrompu et pour
+// ne pas écraser les points écrits entre-temps par le job horaire :
+//   collect : tire les heures manquantes de la tranche de stations
+//             BACKFILL_SLICE / BACKFILL_SLICE_COUNT dans un fichier temporaire
+//             (BACKFILL_TMP), sauvegardé après chaque station.
+//   merge   : fusionne ce fichier temporaire dans le fichier d'historique
+//             FRAIS (relu juste avant d'écrire), sans toucher aux autres points.
 import { readFile, writeFile } from 'node:fs/promises'
 
 const DPOBS_BASE_URL = 'https://public-api.meteofrance.fr/public/DPObs/v2'
-const HISTORY_WINDOW_HOURS = 240 // 10 jours (voir fetch-station-history.mjs)
+const HISTORY_WINDOW_HOURS = 240
+const RETENTION_DAYS = 4 // l'API garde ~J-4 00:00 UTC
 const OUTPUT_PATH = new URL('../public/station-history.json', import.meta.url)
 const STATIONS_PATH = new URL('../src/data/stations-midi-pyrenees.json', import.meta.url)
+const TMP_PATH = process.env.BACKFILL_TMP ?? 'backfill-points.json'
 
-// 50 req/min max côté API — on vise ~45/min pour garder de la marge.
-const REQUEST_DELAY_MS = 1300
+// ~40 req/min (limite API : 50/min). Le job horaire tourne en parallèle
+// ~7 min par heure : les 429 sont attendus pendant ce chevauchement et
+// réessayés (voir fetchHour).
+const REQUEST_DELAY_MS = 1500
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function apiKey() {
   const key = process.env.METEOFRANCE_API_TOKEN
-  if (!key) throw new Error('METEOFRANCE_API_TOKEN manquant dans l\'environnement.')
+  if (!key) throw new Error('METEOFRANCE_API_TOKEN manquant (secret GitHub Actions).')
   return key
 }
 
-// Une heure ronde UTC, `hoursAgo` heures avant maintenant — même logique que
-// l'ancienne version (navigateur) de stations.ts, avant son passage au
-// fichier statique.
-function hourTimestamp(hoursAgo) {
-  const date = new Date()
-  date.setUTCMinutes(0, 0, 0)
-  date.setUTCHours(date.getUTCHours() - hoursAgo)
-  return date.toISOString().replace(/\.\d{3}Z$/, 'Z')
-}
-
-async function fetchStationHour(stationId, hoursAgo, key, attempt = 0) {
+// `null` = pas de donnée pour cette heure (hors rétention, station muette) ;
+// ne fait jamais échouer le run.
+async function fetchHour(stationId, hourIso, key, attempt = 0) {
   const url = new URL(`${DPOBS_BASE_URL}/station/horaire`)
   url.searchParams.set('id_station', stationId)
+  url.searchParams.set('date', hourIso)
   url.searchParams.set('format', 'json')
-  if (hoursAgo > 0) url.searchParams.set('date', hourTimestamp(hoursAgo))
 
   let res
   try {
     res = await fetch(url, { headers: { apikey: key }, signal: AbortSignal.timeout(15000) })
-  } catch (err) {
-    if (attempt >= 2) return null // trou de mesure : erreur réseau ponctuelle ignorée
+  } catch {
+    if (attempt >= 3) return null
     await wait(3000 * (attempt + 1))
-    return fetchStationHour(stationId, hoursAgo, key, attempt + 1)
+    return fetchHour(stationId, hourIso, key, attempt + 1)
   }
-
-  if (res.status === 429 && attempt < 2) {
-    await wait(5000 * (attempt + 1))
-    return fetchStationHour(stationId, hoursAgo, key, attempt + 1)
+  if (res.status === 429 && attempt < 5) {
+    await wait(15000 * (attempt + 1))
+    return fetchHour(stationId, hourIso, key, attempt + 1)
   }
   if (!res.ok) return null
 
-  const data = await res.json()
-  const obs = data[0]
+  const obs = (await res.json())[0]
   if (!obs || !obs.validity_time) return null
   return {
     time: obs.validity_time,
@@ -75,55 +67,83 @@ async function fetchStationHour(stationId, hoursAgo, key, attempt = 0) {
   }
 }
 
-async function loadExistingHistory() {
+async function readJson(path, fallback) {
   try {
-    const raw = await readFile(OUTPUT_PATH, 'utf-8')
-    return JSON.parse(raw).stations ?? {}
+    return JSON.parse(await readFile(path, 'utf-8'))
   } catch {
-    return {}
+    return fallback
   }
 }
 
-async function writeHistory(history) {
-  const output = { fetchedAt: new Date().toISOString(), stations: history }
-  await writeFile(OUTPUT_PATH, JSON.stringify(output))
+// Heures pleines UTC, de J-RETENTION_DAYS 00:00 jusqu'à l'heure pleine courante.
+function candidateHours() {
+  const now = new Date()
+  const start = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - RETENTION_DAYS)
+  const end = Math.floor(now.getTime() / 3600000) * 3600000
+  const hours = []
+  for (let t = start; t <= end; t += 3600000) hours.push(new Date(t).toISOString().replace('.000Z', 'Z'))
+  return hours
 }
 
-async function main() {
+async function collect() {
   const key = apiKey()
-  const stations = JSON.parse(await readFile(STATIONS_PATH, 'utf-8'))
-  const history = await loadExistingHistory()
-  const cutoff = Date.now() - HISTORY_WINDOW_HOURS * 60 * 60 * 1000
-  const hours = Array.from({ length: 24 }, (_, i) => 23 - i) // du plus ancien au plus récent
+  const sliceIndex = Number(process.env.BACKFILL_SLICE ?? 0)
+  const sliceCount = Number(process.env.BACKFILL_SLICE_COUNT ?? 1)
+  const all = JSON.parse(await readFile(STATIONS_PATH, 'utf-8'))
+  const stations = all.filter((_, i) => i % sliceCount === sliceIndex)
+  const history = (await readJson(OUTPUT_PATH, {})).stations ?? {}
+  const hours = candidateHours()
+  const collected = await readJson(TMP_PATH, {})
 
-  console.log(`Backfill : ${stations.length} stations × 24h, espacement ${REQUEST_DELAY_MS}ms (~${Math.round((stations.length * 24 * REQUEST_DELAY_MS) / 60000)} min estimées).`)
+  console.log(`Tranche ${sliceIndex + 1}/${sliceCount} : ${stations.length} stations, ${hours.length} heures candidates.`)
 
-  let requestCount = 0
-  for (const [si, station] of stations.entries()) {
-    const points = []
-    for (const h of hours) {
-      if (requestCount > 0) await wait(REQUEST_DELAY_MS)
-      requestCount++
-      const point = await fetchStationHour(station.id, h, key)
-      if (point) points.push(point)
+  let calls = 0
+  for (const [n, station] of stations.entries()) {
+    const have = new Set((history[station.id] ?? []).map((p) => p.time))
+    const points = collected[station.id] ?? []
+    for (const p of points) have.add(p.time)
+
+    for (const hourIso of hours) {
+      if (have.has(hourIso)) continue
+      await wait(REQUEST_DELAY_MS)
+      calls++
+      const point = await fetchHour(station.id, hourIso, key)
+      if (point && !have.has(point.time)) {
+        points.push(point)
+        have.add(point.time)
+      }
     }
+    collected[station.id] = points
+    await writeFile(TMP_PATH, JSON.stringify(collected))
+    console.log(`  ${n + 1}/${stations.length} ${station.id} : ${points.length} points, ${calls} appels.`)
+  }
+}
 
-    const existing = history[station.id] ?? []
-    const byTime = new Map(existing.map((p) => [p.time, p]))
-    for (const p of points) byTime.set(p.time, p) // le backfill écrase un éventuel doublon du job horaire
-    history[station.id] = [...byTime.values()]
+async function merge() {
+  const collected = await readJson(TMP_PATH, {})
+  const current = await readJson(OUTPUT_PATH, { fetchedAt: new Date().toISOString(), stations: {} })
+  const cutoff = Date.now() - HISTORY_WINDOW_HOURS * 3600000
+  let added = 0
+  for (const [id, points] of Object.entries(collected)) {
+    const existing = current.stations[id] ?? []
+    const known = new Set(existing.map((p) => p.time))
+    const fresh = points.filter((p) => !known.has(p.time))
+    added += fresh.length
+    current.stations[id] = [...existing, ...fresh]
       .filter((p) => new Date(p.time).getTime() >= cutoff)
       .sort((a, b) => a.time.localeCompare(b.time))
-
-    await writeHistory(history) // checkpoint après chaque station
-
-    console.log(`${si + 1}/${stations.length} ${station.id} (${station.name}) : ${points.length}/24 points.`)
   }
-
-  console.log('Backfill terminé.')
+  await writeFile(OUTPUT_PATH, JSON.stringify(current))
+  console.log(`${added} points ajoutés à public/station-history.json`)
 }
 
-main().catch((err) => {
+const mode = process.argv[2]
+const run = mode === 'collect' ? collect : mode === 'merge' ? merge : null
+if (!run) {
+  console.error('Usage : node backfill-station-history.mjs collect|merge')
+  process.exit(1)
+}
+run().catch((err) => {
   console.error(err)
   process.exit(1)
 })
