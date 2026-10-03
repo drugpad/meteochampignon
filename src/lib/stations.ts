@@ -30,6 +30,14 @@ export const STATIC_STATIONS: Station[] = (
   stationsData as { id: string; name: string; lat: number; lon: number; altitude: number }[]
 ).map((s) => ({ ...s, network: 'synop' as const }))
 
+// Page d'observations Météociel d'une station. Météociel accepte l'identifiant
+// Météo-France numérique (sans le zéro initial, ex. "09024004" -> 9024004) dans
+// `code2`, y compris pour les stations qui ont aussi un code OMM (ex.
+// 31069001 Toulouse-Blagnac redirige bien vers la même page que code2=7630).
+export function meteocielStationUrl(stationId: string): string {
+  return `https://www.meteociel.fr/temps-reel/obs_villes.php?code2=${Number(stationId)}`
+}
+
 const HISTORY_URL = '/station-history.json'
 
 type HistoryPoint = { time: string; rr1: number | null; temp: number | null }

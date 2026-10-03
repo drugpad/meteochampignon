@@ -4,6 +4,7 @@
 // prenait trop de place), et mini prévision 5 jours elle aussi en graphique.
 import { Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import './StationPopup.css'
+import { meteocielStationUrl } from '../lib/stations'
 import { weatherCodeInfo } from '../lib/weatherCode'
 import type { StationDetailState } from '../types'
 
@@ -79,6 +80,15 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
           {station.altitude !== undefined && <div className="station-popup__altitude">{station.altitude} m d'altitude</div>}
         </>
       )}
+
+      <a
+        className="station-popup__link"
+        href={meteocielStationUrl(station.id)}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Voir la station sur Météociel ↗
+      </a>
 
       <div className="station-popup__section-title">
         Pluie ({totalRain} mm cumulés) et température — 24 dernières heures
