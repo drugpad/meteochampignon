@@ -14,6 +14,14 @@ export function SearchBar({ onSelect }: SearchBarProps) {
   const [error, setError] = useState<string | null>(null)
   const debounceRef = useRef<number | undefined>(undefined)
   const containerRef = useRef<HTMLDivElement>(null)
+  // Libellé du résultat qu'on vient de choisir : le champ est rempli avec,
+  // ce qui relançait une recherche dont la réponse rouvrait la liste juste
+  // après la sélection. Une requête égale à ce libellé n'est donc pas cherchée.
+  const selectedLabelRef = useRef<string | null>(null)
+  // Numéro de la dernière recherche lancée : une réponse plus lente d'une
+  // recherche précédente ne doit pas écraser les résultats de la saisie
+  // actuelle.
+  const searchSeqRef = useRef(0)
 
   // Filet de sécurité en plus du onBlur de l'input : un clic sur la carte ne
   // fait pas toujours perdre le focus de l'input de façon fiable (selon le
@@ -34,20 +42,22 @@ export function SearchBar({ onSelect }: SearchBarProps) {
 
   useEffect(() => {
     window.clearTimeout(debounceRef.current)
+    // Toute saisie invalide les recherches déjà parties.
+    const seq = ++searchSeqRef.current
 
-    if (query.trim().length < 3) {
-      setResults([])
-      setError(null)
-      return
-    }
+    // Pas de setState ici pour les saisies trop courtes ou déjà choisies :
+    // l'affichage est dérivé de `query` plus bas (visibleResults).
+    if (query.trim().length < 3 || query === selectedLabelRef.current) return
 
     debounceRef.current = window.setTimeout(async () => {
       try {
         const found = await searchAddress(query)
+        if (seq !== searchSeqRef.current) return
         setResults(found)
         setError(null)
         setIsOpen(true)
       } catch {
+        if (seq !== searchSeqRef.current) return
         setError('Recherche indisponible, réessaie dans un instant.')
         setResults([])
       }
@@ -56,7 +66,12 @@ export function SearchBar({ onSelect }: SearchBarProps) {
     return () => window.clearTimeout(debounceRef.current)
   }, [query])
 
+  const searchable = query.trim().length >= 3
+  const visibleResults = searchable ? results : []
+  const visibleError = searchable ? error : null
+
   const handleSelect = (result: GeocodeResult) => {
+    selectedLabelRef.current = result.label
     setQuery(result.label)
     setIsOpen(false)
     onSelect(result)
@@ -69,13 +84,13 @@ export function SearchBar({ onSelect }: SearchBarProps) {
         placeholder="Rechercher une ville ou une adresse…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        onFocus={() => results.length > 0 && setIsOpen(true)}
+        onFocus={() => visibleResults.length > 0 && query !== selectedLabelRef.current && setIsOpen(true)}
         onBlur={() => setTimeout(() => setIsOpen(false), 150)}
       />
-      {error && <div className="search-bar__error">{error}</div>}
-      {isOpen && results.length > 0 && (
+      {visibleError && <div className="search-bar__error">{visibleError}</div>}
+      {isOpen && visibleResults.length > 0 && (
         <ul className="search-bar__results">
-          {results.map((result, i) => (
+          {visibleResults.map((result, i) => (
             <li key={i}>
               <button type="button" onMouseDown={() => handleSelect(result)}>
                 {result.label}

@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import './ForecastRainControls.css'
 import { RAIN_LEGEND_STOPS } from '../lib/color'
 import { formatRelativeAge } from '../lib/formatRelativeAge'
+import { todayParisKey, tomorrowParisKey } from '../lib/rainForecastGrid'
 import type { RainForecastGridState } from '../types'
 
 const TIME_FORMATTER = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -26,6 +27,8 @@ type Props = {
 
 export function ForecastRainControls({ state, selectedDay, onSelectDay, onForceRefresh }: Props) {
   const [collapsed, setCollapsed] = useState(false)
+  const today = todayParisKey()
+  const tomorrow = tomorrowParisKey()
   // Même logique que RainControls : repliable, mais ne se replie tout seul
   // qu'une fois (pas à chaque nouveau "ready" sinon impossible à rouvrir).
   const autoCollapsedRef = useRef(false)
@@ -66,20 +69,25 @@ export function ForecastRainControls({ state, selectedDay, onSelectDay, onForceR
               </div>
 
               <div className="forecast-rain-controls__days">
-                {state.dates.map((date, i) => (
-                  <button
-                    key={date}
-                    type="button"
-                    className={
-                      i === selectedDay
-                        ? 'forecast-rain-controls__day forecast-rain-controls__day--active'
-                        : 'forecast-rain-controls__day'
-                    }
-                    onClick={() => onSelectDay(i)}
-                  >
-                    {i === 0 ? "Auj." : i === 1 ? 'Dem.' : DAY_FORMATTER.format(new Date(date))}
-                  </button>
-                ))}
+                {state.dates.map((date, i) =>
+                  // Jours déjà écoulés (grille en cache vieille de plusieurs
+                  // heures) : masqués, mais l'index `i` reste celui du
+                  // tableau `rain` de chaque point.
+                  date < today ? null : (
+                    <button
+                      key={date}
+                      type="button"
+                      className={
+                        i === selectedDay
+                          ? 'forecast-rain-controls__day forecast-rain-controls__day--active'
+                          : 'forecast-rain-controls__day'
+                      }
+                      onClick={() => onSelectDay(i)}
+                    >
+                      {date === today ? 'Auj.' : date === tomorrow ? 'Dem.' : DAY_FORMATTER.format(new Date(date))}
+                    </button>
+                  ),
+                )}
               </div>
 
               <button type="button" className="forecast-rain-controls__refresh-btn" onClick={onForceRefresh}>

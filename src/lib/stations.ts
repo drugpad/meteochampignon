@@ -43,14 +43,21 @@ const HISTORY_URL = '/station-history.json'
 type HistoryPoint = { time: string; rr1: number | null; temp: number | null }
 type HistoryByStation = Record<string, HistoryPoint[]>
 
-// Un seul fetch du fichier statique par session (pas un par clic sur une
-// station) : promesse mémoïsée, remise à zéro en cas d'échec pour permettre
-// un nouvel essai au clic suivant plutôt que de rester bloqué sur une
-// erreur transitoire (ex. déploiement en cours).
+// Le fichier statique est lu une fois puis gardé en mémoire (promesse
+// mémoïsée : pas un fetch par clic sur une station), mais seulement
+// HISTORY_MAX_AGE_MS — un onglet resté ouvert pendant des heures doit voir
+// les nouvelles heures (et la disparition des avertissements « incomplet »)
+// sans rechargement de la page. Remise à zéro aussi en cas d'échec, pour
+// permettre un nouvel essai au clic suivant plutôt que de rester bloqué sur
+// une erreur transitoire (ex. déploiement en cours).
+const HISTORY_MAX_AGE_MS = 10 * 60 * 1000
 let historyPromise: Promise<HistoryByStation> | null = null
+let historyLoadedAt = 0
 
 function loadHistory(): Promise<HistoryByStation> {
+  if (historyPromise && Date.now() - historyLoadedAt > HISTORY_MAX_AGE_MS) historyPromise = null
   if (!historyPromise) {
+    historyLoadedAt = Date.now()
     historyPromise = fetch(HISTORY_URL, { cache: 'no-store' })
       .then((res) => {
         if (!res.ok) throw new Error("Historique des stations indisponible (fichier absent).")
@@ -67,19 +74,35 @@ function loadHistory(): Promise<HistoryByStation> {
 
 const HOUR_MS = 3600000
 const HISTORY_WINDOW_MS = 240 * HOUR_MS // même fenêtre que fetch-station-history.mjs
+// Latence de publication d'une observation horaire côté Météo-France : on
+// n'attend pas encore la dernière heure ronde juste après qu'elle a sonné.
+const PUBLICATION_LAG_MS = 30 * 60 * 1000
 export const COMPLETE_RATIO = 0.8
 
-// Nombre d'heures de ce jour (UTC) qui peuvent exister dans l'historique :
-// borné par le début de la fenêtre glissante et par maintenant.
-function observableHours(date: string, now: number): number {
-  const dayStart = new Date(`${date}T00:00:00Z`).getTime()
-  const from = Math.max(dayStart, now - HISTORY_WINDOW_MS)
-  const to = Math.min(dayStart + 24 * HOUR_MS, now)
-  return Math.max(1, Math.floor((to - from) / HOUR_MS))
+// Jours calendaires à l'heure de PARIS (pas UTC) : c'est la journée que
+// l'utilisateur a vécue et celle que Météociel affiche — en UTC, la pluie
+// tombée entre minuit et 2h (été) était comptée sur la veille. Une
+// observation horaire (`rr1`) est la pluie de l'heure qui PRÉCÈDE son horodatage :
+// l'observation de 00:00 locale appartient donc à la veille (d'où le décalage
+// d'une heure).
+const PARIS_DAY_FORMATTER = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }) // yyyy-mm-dd
+
+function dayKeyOfObservation(timeMs: number): string {
+  return PARIS_DAY_FORMATTER.format(new Date(timeMs - HOUR_MS))
 }
 
-function dayKey(isoTime: string): string {
-  return isoTime.slice(0, 10) // yyyy-mm-dd (validity_time est en UTC, comme pour la grille de pluie)
+// Nombre d'observations attendues par jour dans la fenêtre glissante, de la
+// plus ancienne heure encore conservée jusqu'à maintenant : un jour partiel
+// (début de fenêtre, jour courant) est comparé à ce qui pouvait exister.
+function expectedObservationsPerDay(now: number): Map<string, number> {
+  const expected = new Map<string, number>()
+  const first = Math.ceil((now - HISTORY_WINDOW_MS) / HOUR_MS) * HOUR_MS
+  const last = Math.floor((now - PUBLICATION_LAG_MS) / HOUR_MS) * HOUR_MS
+  for (let t = first; t <= last; t += HOUR_MS) {
+    const key = dayKeyOfObservation(t)
+    expected.set(key, (expected.get(key) ?? 0) + 1)
+  }
+  return expected
 }
 
 export async function fetchStationDetail(station: Station): Promise<StationDetail> {
@@ -101,29 +124,29 @@ export async function fetchStationDetail(station: Station): Promise<StationDetai
     .filter((p) => p.temp !== null)
     .map((p) => ({ time: p.time, temp: p.temp as number }))
 
-  // Cumul par jour calendaire (UTC) sur toute la fenêtre disponible (jusqu'à
-  // 10 jours) — un jour partiel (premier jour de la fenêtre glissante, ou
-  // jour courant pas terminé) reste inclus tel quel plutôt qu'exclu.
+  // Cumul par jour calendaire (Paris) sur toute la fenêtre disponible
+  // (jusqu'à 10 jours) — un jour partiel (premier jour de la fenêtre
+  // glissante, ou jour courant pas terminé) reste inclus tel quel plutôt
+  // qu'exclu.
   const dailyTotals = new Map<string, number>()
-  for (const p of points) {
-    if (p.rr1 === null) continue
-    const key = dayKey(p.time)
-    dailyTotals.set(key, (dailyTotals.get(key) ?? 0) + p.rr1)
-  }
-  // Un jour est "complet" s'il a au moins 80% des heures observables dans la
-  // fenêtre (jour courant et premier jour de la fenêtre = partiels par
-  // nature, on compare à ce qui pouvait exister). Calculé sur la couverture
-  // réelle, pas sur un drapeau posé à la main : le message disparaît tout
-  // seul quand le job horaire / le rattrapage a comblé les trous (ou quand
-  // le jour sort de la fenêtre de 10 jours).
   const pointsPerDay = new Map<string, number>()
-  for (const p of points) pointsPerDay.set(dayKey(p.time), (pointsPerDay.get(dayKey(p.time)) ?? 0) + 1)
+  for (const p of points) {
+    const key = dayKeyOfObservation(new Date(p.time).getTime())
+    pointsPerDay.set(key, (pointsPerDay.get(key) ?? 0) + 1)
+    if (p.rr1 !== null) dailyTotals.set(key, (dailyTotals.get(key) ?? 0) + p.rr1)
+  }
+  // Un jour est "complet" s'il a au moins 80% des observations attendues
+  // (voir expectedObservationsPerDay). Calculé sur la couverture réelle, pas
+  // sur un drapeau posé à la main : le message disparaît tout seul quand le
+  // job horaire / le rattrapage a comblé les trous (ou quand le jour sort de
+  // la fenêtre de 10 jours).
+  const expectedPerDay = expectedObservationsPerDay(now)
   const dailyRain = [...dailyTotals.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, rain]) => ({
       date,
       rain: Math.round(rain * 10) / 10,
-      complete: (pointsPerDay.get(date) ?? 0) >= COMPLETE_RATIO * observableHours(date, now),
+      complete: (pointsPerDay.get(date) ?? 0) >= COMPLETE_RATIO * (expectedPerDay.get(date) ?? 1),
     }))
 
   return { station, rainHistory, tempHistory, dailyRain, miniForecast, last24hCoverage: last24h.length }

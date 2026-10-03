@@ -2,7 +2,14 @@
 // Voir spec : maille ~5-10km sur Midi-Pyrénées, cumul 24h par point, puis
 // interpolation en dégradé (le rendu du dégradé est fait par RainOverlay.tsx
 // avec un canvas ; ce module ne fait que construire la grille de valeurs).
-import { MIDI_PYRENEES_BOUNDS, RAIN_GRID_BATCH_DELAY_MS, RAIN_GRID_BATCH_SIZE, RAIN_GRID_STEP_DEG } from './config'
+import {
+  MIDI_PYRENEES_BOUNDS,
+  RAIN_GRID_BATCH_DELAY_MS,
+  RAIN_GRID_BATCH_SIZE,
+  RAIN_GRID_COLS,
+  RAIN_GRID_ROWS,
+  RAIN_GRID_STEP_DEG,
+} from './config'
 import { getHourlyPrecipitationBatch } from './openMeteo'
 import type { RainGridPoint } from '../types'
 
@@ -46,11 +53,14 @@ export async function fetchCachedRainGrid(): Promise<CachedRainGrid | null> {
 }
 
 export function buildGridPoints(): { lat: number; lon: number }[] {
-  const { latMin, latMax, lonMin, lonMax } = MIDI_PYRENEES_BOUNDS
+  const { latMin, lonMin } = MIDI_PYRENEES_BOUNDS
   const points: { lat: number; lon: number }[] = []
-  for (let lat = latMin; lat <= latMax; lat += RAIN_GRID_STEP_DEG) {
-    for (let lon = lonMin; lon <= lonMax; lon += RAIN_GRID_STEP_DEG) {
-      points.push({ lat: Math.round(lat * 1000) / 1000, lon: Math.round(lon * 1000) / 1000 })
+  for (let row = 0; row < RAIN_GRID_ROWS; row++) {
+    for (let col = 0; col < RAIN_GRID_COLS; col++) {
+      points.push({
+        lat: Math.round((latMin + row * RAIN_GRID_STEP_DEG) * 1000) / 1000,
+        lon: Math.round((lonMin + col * RAIN_GRID_STEP_DEG) * 1000) / 1000,
+      })
     }
   }
   return points

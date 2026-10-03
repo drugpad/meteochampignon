@@ -37,23 +37,30 @@ jobs:
       - name: Récupérer l'heure courante pour chaque station
         env:
           METEOFRANCE_API_TOKEN: ${{ secrets.METEOFRANCE_API_TOKEN }}
+          HISTORY_TMP: ${{ runner.temp }}/history-new-points.json
         run: node scripts/fetch-station-history.mjs
 
-      - name: Commit si changement
+      # `always()` : un run interrompu garde ce qu'il a déjà collecté. À chaque
+      # tentative, on repart de la dernière version de master (reset) puis on
+      # refait la fusion — pas de `git rebase` : le fichier d'historique tient
+      # sur une seule ligne, donc toute modification concurrente (rattrapage
+      # manuel, autre run) provoquait un conflit et la perte des points de
+      # l'heure (voir scripts/merge-station-history.mjs).
+      - name: Fusionner et committer
+        if: always()
+        env:
+          HISTORY_TMP: ${{ runner.temp }}/history-new-points.json
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add public/station-history.json
-          git diff --staged --quiet && echo "Rien à commit" && exit 0
-          git commit -m "Accumuler l'historique des stations"
-          # Même précaution que rain-grid.yml : un push peut être rejeté si
-          # master a bougé pendant les ~7 min que prend ce job (autre push,
-          # merge de PR). Un seul fichier de données modifié par ce job :
-          # rebase + retry plutôt qu'abandonner le cycle.
-          for i in 1 2 3; do
-            git push && exit 0
-            echo "Push rejeté, rebase et retry ($i/3)…"
+          for i in 1 2 3 4 5; do
             git fetch origin master
-            git rebase origin/master
+            git reset --hard origin/master
+            node scripts/merge-station-history.mjs
+            git add public/station-history.json
+            git diff --staged --quiet && echo "Rien à commit" && exit 0
+            git commit -m "Accumuler l'historique des stations"
+            git push && exit 0
+            echo "Push rejeté, nouvelle tentative ($i/5)…"
           done
           exit 1

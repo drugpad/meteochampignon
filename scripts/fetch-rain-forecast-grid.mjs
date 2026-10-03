@@ -28,10 +28,16 @@ const SLICE_COUNT = Number(process.env.SLICE_COUNT ?? '1')
 const SLICE_INDEX = Number(process.env.SLICE_INDEX ?? '0')
 
 function buildGridPoints() {
+  // Par INDEX, pas par accumulation `lat += STEP_DEG` : voir fetch-rain-grid.mjs.
+  const rows = Math.floor((BOUNDS.latMax - BOUNDS.latMin) / STEP_DEG + 1e-6) + 1
+  const cols = Math.floor((BOUNDS.lonMax - BOUNDS.lonMin) / STEP_DEG + 1e-6) + 1
   const points = []
-  for (let lat = BOUNDS.latMin; lat <= BOUNDS.latMax; lat += STEP_DEG) {
-    for (let lon = BOUNDS.lonMin; lon <= BOUNDS.lonMax; lon += STEP_DEG) {
-      points.push({ lat: Math.round(lat * 1000) / 1000, lon: Math.round(lon * 1000) / 1000 })
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      points.push({
+        lat: Math.round((BOUNDS.latMin + row * STEP_DEG) * 1000) / 1000,
+        lon: Math.round((BOUNDS.lonMin + col * STEP_DEG) * 1000) / 1000,
+      })
     }
   }
   return points

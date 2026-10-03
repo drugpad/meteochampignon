@@ -13,16 +13,19 @@
 // (comme public/rain-grid.json pour la carte de pluie) — même principe :
 // quasi instantané côté navigateur, plus aucun appel direct au clic.
 //
-// Fenêtre glissante de 10 jours (240h) : les entrées plus anciennes sont
-// purgées à chaque run. Un run manqué (échec du job, redéploiement, etc.)
-// laisse simplement un trou dans la série pour cette heure-là — toléré,
+// Ce script ne fait QUE collecter : il écrit les points de l'heure dans un
+// fichier temporaire (HISTORY_TMP), et le workflow les fusionne ensuite dans
+// public/station-history.json (scripts/merge-station-history.mjs) à partir de
+// la dernière version de master — voir ce fichier pour le pourquoi (conflits
+// de rebase sur un JSON d'une seule ligne). Fenêtre glissante de 10 jours
+// (240h) appliquée à la fusion. Un run manqué (échec du job, redéploiement,
+// etc.) laisse simplement un trou dans la série pour cette heure-là — toléré,
 // pas bloquant (même philosophie que les trous horaires déjà tolérés dans
 // stations.ts).
 import { readFile, writeFile } from 'node:fs/promises'
 
 const DPOBS_BASE_URL = 'https://public-api.meteofrance.fr/public/DPObs/v2'
-const HISTORY_WINDOW_HOURS = 240 // 10 jours
-const OUTPUT_PATH = new URL('../public/station-history.json', import.meta.url)
+const TMP_PATH = process.env.HISTORY_TMP ?? 'history-new-points.json'
 const STATIONS_PATH = new URL('../src/data/stations-midi-pyrenees.json', import.meta.url)
 
 // Espacement entre appels (ms) — l'API Données d'observation est limitée à
@@ -80,45 +83,25 @@ async function fetchStationHour(stationId, key, attempt = 0) {
   }
 }
 
-async function loadExistingHistory() {
-  try {
-    const raw = await readFile(OUTPUT_PATH, 'utf-8')
-    return JSON.parse(raw).stations ?? {}
-  } catch {
-    return {} // premier run, ou fichier absent/corrompu
-  }
-}
-
 async function main() {
   const key = apiKey()
   const stations = JSON.parse(await readFile(STATIONS_PATH, 'utf-8'))
-  const history = await loadExistingHistory()
-  const cutoff = Date.now() - HISTORY_WINDOW_HOURS * 60 * 60 * 1000
+  const collected = {}
 
   console.log(`Stations : ${stations.length}, espacement ${REQUEST_DELAY_MS}ms.`)
 
-  let updated = 0
-  for (const [i, station] of stations.entries()) {
-    if (i > 0) await wait(REQUEST_DELAY_MS)
-    const point = await fetchStationHour(station.id, key)
-    if (!point) continue
-
-    const existing = history[station.id] ?? []
-    // Le run tourne pile à l'heure, mais évite un doublon si relancé à la
-    // main (workflow_dispatch) sur la même heure que le dernier run auto.
-    const withoutDuplicate = existing.filter((p) => p.time !== point.time)
-    const merged = [...withoutDuplicate, point]
-      .filter((p) => new Date(p.time).getTime() >= cutoff)
-      .sort((a, b) => a.time.localeCompare(b.time))
-    history[station.id] = merged
-    updated++
+  try {
+    for (const [i, station] of stations.entries()) {
+      if (i > 0) await wait(REQUEST_DELAY_MS)
+      const point = await fetchStationHour(station.id, key)
+      if (point) collected[station.id] = [point]
+    }
+  } finally {
+    // Même si le run est interrompu en cours de route, on garde ce qui a
+    // déjà été collecté (le workflow fusionne avec `if: always()`).
+    await writeFile(TMP_PATH, JSON.stringify(collected))
+    console.log(`${Object.keys(collected).length}/${stations.length} stations collectées -> ${TMP_PATH}`)
   }
-
-  console.log(`${updated}/${stations.length} stations mises à jour.`)
-
-  const output = { fetchedAt: new Date().toISOString(), stations: history }
-  await writeFile(OUTPUT_PATH, JSON.stringify(output))
-  console.log('Écrit dans public/station-history.json')
 }
 
 main().catch((err) => {

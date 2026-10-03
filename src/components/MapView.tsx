@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, LayersControl, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
-import { fetchCachedRainForecastGrid, fetchRainForecastGrid } from '../lib/rainForecastGrid'
+import { fetchCachedRainForecastGrid, fetchRainForecastGrid, firstCurrentDayIndex } from '../lib/rainForecastGrid'
 import { fetchCachedRainGrid, fetchRainGrid } from '../lib/rainGrid'
 import { REGION_BOUNDS } from '../lib/regionOutline'
 import { useIsMobile } from '../lib/useIsMobile'
@@ -102,12 +102,21 @@ export function MapView() {
   const [selectedForecastDay, setSelectedForecastDay] = useState(0)
   const [searchTarget, setSearchTarget] = useState<GeocodeResult | null>(null)
 
+  // Numéro du dernier clic : deux clics rapprochés lancent deux requêtes, et
+  // la plus lente (donc souvent la première) ne doit pas écraser la réponse
+  // du dernier point cliqué.
+  const forecastRequestRef = useRef(0)
   const handleMapClick = useCallback((lat: number, lon: number) => {
     const point = { lat, lon }
+    const requestId = ++forecastRequestRef.current
     setForecastState({ status: 'loading', point })
     getDailyForecast(point)
-      .then((days) => setForecastState({ status: 'ready', point, days }))
-      .catch((err: Error) => setForecastState({ status: 'error', point, message: err.message }))
+      .then((days) => {
+        if (requestId === forecastRequestRef.current) setForecastState({ status: 'ready', point, days })
+      })
+      .catch((err: Error) => {
+        if (requestId === forecastRequestRef.current) setForecastState({ status: 'error', point, message: err.message })
+      })
   }, [])
 
   // Au passage en mode Historique, on tente une seule fois le cache
@@ -144,6 +153,7 @@ export function MapView() {
     autoLoadForecastRainTriedRef.current = true
     setForecastRainState({ status: 'loading', loaded: 0, total: 1 })
     fetchCachedRainForecastGrid().then((cached) => {
+      if (cached) setSelectedForecastDay(firstCurrentDayIndex(cached.dates))
       setForecastRainState(
         cached ? { status: 'ready', points: cached.points, dates: cached.dates, fetchedAt: cached.fetchedAt } : { status: 'idle' },
       )
@@ -153,7 +163,10 @@ export function MapView() {
   const handleForecastRainForceRefresh = useCallback(() => {
     setForecastRainState({ status: 'loading', loaded: 0, total: 1 })
     fetchRainForecastGrid((loaded, total) => setForecastRainState({ status: 'loading', loaded, total }))
-      .then(({ points, dates }) => setForecastRainState({ status: 'ready', points, dates, fetchedAt: Date.now() }))
+      .then(({ points, dates }) => {
+        setSelectedForecastDay(firstCurrentDayIndex(dates))
+        setForecastRainState({ status: 'ready', points, dates, fetchedAt: Date.now() })
+      })
       .catch((err: Error) => setForecastRainState({ status: 'error', message: err.message }))
   }, [])
 

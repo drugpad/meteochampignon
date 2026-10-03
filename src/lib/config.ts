@@ -28,6 +28,17 @@ export const MIDI_PYRENEES_BOUNDS = {
 // longue), pas de facturation GitHub.
 export const RAIN_GRID_STEP_DEG = 0.03
 
+// Dimensions de la grille, calculées par INDEX (lat = latMin + i * pas) et non
+// par accumulation `lat += pas` : l'accumulation de flottants faisait sauter
+// la dernière ligne (45.15 devenait 45.150000000000006 > latMax) et laissait
+// la grille plus petite que ce que RainOverlay attendait. L'epsilon absorbe
+// l'imprécision du rapport (ex. (45.15 - 42.6) / 0.03 = 84.99999…). Les
+// scripts de CI (scripts/fetch-rain*.mjs) refont le même calcul à la main.
+export const RAIN_GRID_ROWS =
+  Math.floor((MIDI_PYRENEES_BOUNDS.latMax - MIDI_PYRENEES_BOUNDS.latMin) / RAIN_GRID_STEP_DEG + 1e-6) + 1
+export const RAIN_GRID_COLS =
+  Math.floor((MIDI_PYRENEES_BOUNDS.lonMax - MIDI_PYRENEES_BOUNDS.lonMin) / RAIN_GRID_STEP_DEG + 1e-6) + 1
+
 // Nombre de points groupés par appel à Open-Meteo (voir rainGrid.ts) — testé
 // jusqu'à 150 points en un seul appel HTTP sans erreur (ça, ce n'est pas le
 // problème). Le problème observé en usage réel : la limite de débit

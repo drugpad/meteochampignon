@@ -19,6 +19,29 @@ const CACHED_GRID_URL = '/rain-forecast-grid.json'
 // ça — seulement si le job est vraiment resté en panne plus d'un jour.
 const CACHED_GRID_MAX_AGE_MS = 36 * 60 * 60 * 1000
 
+const PARIS_DAY_FORMATTER = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }) // yyyy-mm-dd
+
+// Date du jour (yyyy-mm-dd) à Paris — même référentiel que `dates` de la
+// grille (requêtes en timezone=Europe/Paris), quel que soit le fuseau du
+// navigateur.
+export function todayParisKey(now = new Date()): string {
+  return PARIS_DAY_FORMATTER.format(now)
+}
+
+export function tomorrowParisKey(now = new Date()): string {
+  return PARIS_DAY_FORMATTER.format(new Date(now.getTime() + 24 * 3600 * 1000))
+}
+
+// Index du premier jour de la grille qui n'est pas déjà passé. La grille en
+// cache peut dater de plusieurs heures (jusqu'à 36h), donc `dates[0]` n'est
+// pas forcément aujourd'hui : l'index 0 serait alors une journée écoulée,
+// affichée à tort comme « Auj. ».
+export function firstCurrentDayIndex(dates: string[], now = new Date()): number {
+  const today = todayParisKey(now)
+  const index = dates.findIndex((d) => d >= today)
+  return index === -1 ? 0 : index
+}
+
 export type CachedRainForecastGrid = { points: RainForecastGridPoint[]; dates: string[]; fetchedAt: number }
 
 export async function fetchCachedRainForecastGrid(): Promise<CachedRainForecastGrid | null> {

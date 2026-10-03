@@ -15,9 +15,9 @@
 //   merge   : fusionne ce fichier temporaire dans le fichier d'historique
 //             FRAIS (relu juste avant d'écrire), sans toucher aux autres points.
 import { readFile, writeFile } from 'node:fs/promises'
+import { mergeStationHistory } from './merge-station-history.mjs'
 
 const DPOBS_BASE_URL = 'https://public-api.meteofrance.fr/public/DPObs/v2'
-const HISTORY_WINDOW_HOURS = 240
 const RETENTION_DAYS = 4 // l'API garde ~J-4 00:00 UTC
 const OUTPUT_PATH = new URL('../public/station-history.json', import.meta.url)
 const STATIONS_PATH = new URL('../src/data/stations-midi-pyrenees.json', import.meta.url)
@@ -119,21 +119,11 @@ async function collect() {
   }
 }
 
+// Conservé pour les workflows déjà lancés (ils l'appellent après leur
+// `git reset --hard origin/master`) — la logique vit dans
+// merge-station-history.mjs, partagée avec le job horaire.
 async function merge() {
-  const collected = await readJson(TMP_PATH, {})
-  const current = await readJson(OUTPUT_PATH, { fetchedAt: new Date().toISOString(), stations: {} })
-  const cutoff = Date.now() - HISTORY_WINDOW_HOURS * 3600000
-  let added = 0
-  for (const [id, points] of Object.entries(collected)) {
-    const existing = current.stations[id] ?? []
-    const known = new Set(existing.map((p) => p.time))
-    const fresh = points.filter((p) => !known.has(p.time))
-    added += fresh.length
-    current.stations[id] = [...existing, ...fresh]
-      .filter((p) => new Date(p.time).getTime() >= cutoff)
-      .sort((a, b) => a.time.localeCompare(b.time))
-  }
-  await writeFile(OUTPUT_PATH, JSON.stringify(current))
+  const added = await mergeStationHistory(TMP_PATH)
   console.log(`${added} points ajoutés à public/station-history.json`)
 }
 

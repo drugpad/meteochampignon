@@ -58,7 +58,10 @@ export async function getDailyForecast(point: Point, forecastDays = 7): Promise<
 }
 
 export type HourlyPrecipTemp = {
-  time: string[]
+  // Secondes Unix (timeformat=unixtime) : les heures par défaut sont en heure
+  // murale de Paris sans fuseau, mal lues par `new Date()` hors de France
+  // (et sur les runners UTC de la CI) — décalage de 1 à 2h sur la fenêtre 24h.
+  time: number[]
   precipitation: number[]
   temperature: number[]
 }
@@ -75,6 +78,7 @@ export async function getHourlyHistory(point: Point): Promise<HourlyPrecipTemp> 
   url.searchParams.set('past_days', '1')
   url.searchParams.set('forecast_days', '1')
   url.searchParams.set('timezone', 'Europe/Paris')
+  url.searchParams.set('timeformat', 'unixtime')
   url.searchParams.set('models', 'best_match')
 
   const res = await fetch(url)
@@ -93,7 +97,7 @@ export async function getHourlyHistory(point: Point): Promise<HourlyPrecipTemp> 
 // sert à la fois à la carte de pluie Option A (rainGrid.ts) et à l'historique
 // station.
 export function rolling24hSum(hourly: HourlyPrecipTemp, now = new Date()): number | null {
-  const nowIndex = hourly.time.findIndex((t) => new Date(t).getTime() > now.getTime())
+  const nowIndex = hourly.time.findIndex((t) => t * 1000 > now.getTime())
   // Le point juste avant le premier horaire "futur" est l'heure courante.
   const endIndex = (nowIndex === -1 ? hourly.time.length : nowIndex) - 1
   const startIndex = endIndex - 23
@@ -118,6 +122,7 @@ export async function getHourlyPrecipitationBatch(points: Point[]): Promise<(num
   url.searchParams.set('past_days', '1')
   url.searchParams.set('forecast_days', '1')
   url.searchParams.set('timezone', 'Europe/Paris')
+  url.searchParams.set('timeformat', 'unixtime')
   url.searchParams.set('models', 'best_match')
 
   const res = await fetch(url, { signal: AbortSignal.timeout(20000) })

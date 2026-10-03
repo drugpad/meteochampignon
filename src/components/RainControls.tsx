@@ -10,7 +10,13 @@ import { RAIN_LEGEND_STOPS } from '../lib/color'
 import { formatRelativeAge } from '../lib/formatRelativeAge'
 import type { RainGridState, RainMapSource } from '../types'
 
-const HAS_RADAR_TOKEN = Boolean(import.meta.env.VITE_METEOFRANCE_API_TOKEN)
+// Le toggle Option A / Option B n'apparaît que quand l'option B est réellement
+// utilisable : tant que le décodage BUFR n'est pas branché (voir CLAUDE.md,
+// section 3.4), l'afficher en production — où le token est défini — ne
+// proposait qu'un bouton qui ne montre rien. À passer à true une fois le
+// radar branché sur la carte.
+const RADAR_DECODING_READY = false
+const HAS_RADAR_TOKEN = RADAR_DECODING_READY && Boolean(import.meta.env.VITE_METEOFRANCE_API_TOKEN)
 const TIME_FORMATTER = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
 type Props = {

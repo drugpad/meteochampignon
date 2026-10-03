@@ -5,7 +5,7 @@
 // plein-écran séparé (StationFullscreen.tsx) — une popup ancrée sur un
 // petit point de carte est peu ergonomique au doigt (retour utilisateur).
 import L from 'leaflet'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Marker, Popup } from 'react-leaflet'
 import { fetchStationDetail, STATIC_STATIONS } from '../lib/stations'
 import { useIsMobile } from '../lib/useIsMobile'
@@ -20,6 +20,10 @@ const STATION_ICON = L.divIcon({
   iconAnchor: [13, 13],
 })
 
+// Âge au-delà duquel rouvrir une popup recharge le détail (même seuil que le
+// cache de l'historique, voir HISTORY_MAX_AGE_MS dans lib/stations.ts).
+const DETAIL_MAX_AGE_MS = 10 * 60 * 1000
+
 function loadDetail(station: Station, setState: (s: StationDetailState) => void) {
   setState({ status: 'loading', station })
   fetchStationDetail(station)
@@ -31,9 +35,23 @@ function loadDetail(station: Station, setState: (s: StationDetailState) => void)
 // inchangé).
 function StationMarkerDesktop({ station }: { station: Station }) {
   const [state, setState] = useState<StationDetailState>({ status: 'idle' })
+  const loadedAtRef = useRef(0)
 
   const handleOpen = () => {
-    if (state.status === 'ready' || state.status === 'loading') return
+    if (state.status === 'loading') return
+    if (state.status === 'ready') {
+      // Détail déjà affiché : le rafraîchir EN SILENCE s'il date (un onglet
+      // resté ouvert des heures montrait sinon toujours les données du
+      // premier clic). Pas de passage par "Chargement…" : ça ferait
+      // clignoter la popup à chaque réouverture.
+      if (Date.now() - loadedAtRef.current < DETAIL_MAX_AGE_MS) return
+      loadedAtRef.current = Date.now()
+      fetchStationDetail(station)
+        .then((detail) => setState({ status: 'ready', detail }))
+        .catch(() => undefined) // on garde l'ancien détail plutôt que de l'effacer
+      return
+    }
+    loadedAtRef.current = Date.now()
     loadDetail(station, setState)
   }
 

@@ -123,7 +123,7 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
       </ResponsiveContainer>
 
       <div className="station-popup__section-title">
-        Cumul de pluie — {dailyRain.length} derniers jours ({totalRain10d} mm)
+        Cumul de pluie par jour ({totalRain10d} mm sur {dailyRain.length} jours)
       </div>
       {dailyRainData.length > 0 ? (
         <>

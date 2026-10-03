@@ -4,7 +4,7 @@
 import L from 'leaflet'
 import { useEffect, useRef } from 'react'
 import { useMap } from 'react-leaflet'
-import { MIDI_PYRENEES_BOUNDS, RAIN_GRID_STEP_DEG } from '../lib/config'
+import { MIDI_PYRENEES_BOUNDS, RAIN_GRID_COLS, RAIN_GRID_ROWS, RAIN_GRID_STEP_DEG } from '../lib/config'
 import { rainColor } from '../lib/color'
 import type { RainGridPoint } from '../types'
 
@@ -19,9 +19,15 @@ export function RainOverlay({ points }: Props) {
   useEffect(() => {
     if (points.length === 0) return
 
-    const { latMin, latMax, lonMin, lonMax } = MIDI_PYRENEES_BOUNDS
-    const cols = Math.round((lonMax - lonMin) / RAIN_GRID_STEP_DEG) + 1
-    const rows = Math.round((latMax - latMin) / RAIN_GRID_STEP_DEG) + 1
+    const { latMin, lonMin } = MIDI_PYRENEES_BOUNDS
+    const rows = RAIN_GRID_ROWS
+    const cols = RAIN_GRID_COLS
+    // Étendue RÉELLE de la grille (dernier point), pas MIDI_PYRENEES_BOUNDS :
+    // le pas ne tombe pas pile sur latMax/lonMax (3.38 vs 3.4 à l'est), et
+    // caler l'image sur les bornes théoriques extrapolait au-delà du dernier
+    // point de grille.
+    const latMax = latMin + (rows - 1) * RAIN_GRID_STEP_DEG
+    const lonMax = lonMin + (cols - 1) * RAIN_GRID_STEP_DEG
 
     // Index rapide grille régulière [row][col] -> rain24h.
     const grid: (number | null)[][] = Array.from({ length: rows }, () => Array(cols).fill(null))
@@ -50,15 +56,25 @@ export function RainOverlay({ points }: Props) {
         const col0 = Math.max(0, Math.min(cols - 2, Math.floor(colF)))
         const tx = colF - col0
 
-        // Interpolation bilinéaire des 4 points de grille encadrants (null
-        // traité comme 0 — un point sans donnée ne doit pas trouer la carte).
-        const v00 = grid[row0][col0] ?? 0
-        const v01 = grid[row0][col0 + 1] ?? 0
-        const v10 = grid[row0 + 1][col0] ?? 0
-        const v11 = grid[row0 + 1][col0 + 1] ?? 0
-        const top = v00 + (v01 - v00) * tx
-        const bottom = v10 + (v11 - v10) * tx
-        const value = top + (bottom - top) * ty
+        // Interpolation bilinéaire des 4 points de grille encadrants. Un point
+        // sans donnée (null) est écarté du calcul, ses poids reportés sur les
+        // voisins qui en ont — plutôt que compté comme 0 mm, ce qui tirait la
+        // pluie vers 0 autour de chaque trou (et laissait croire à une zone
+        // sèche). Les 4 coins null → 0 (rien à afficher).
+        let weighted = 0
+        let totalWeight = 0
+        const corners: [number | null, number][] = [
+          [grid[row0][col0], (1 - tx) * (1 - ty)],
+          [grid[row0][col0 + 1], tx * (1 - ty)],
+          [grid[row0 + 1][col0], (1 - tx) * ty],
+          [grid[row0 + 1][col0 + 1], tx * ty],
+        ]
+        for (const [v, w] of corners) {
+          if (v === null) continue
+          weighted += v * w
+          totalWeight += w
+        }
+        const value = totalWeight > 0 ? weighted / totalWeight : 0
 
         const [r, g, b, a] = parseRgba(rainColor(value))
         const idx = (py * CANVAS_SIZE + px) * 4

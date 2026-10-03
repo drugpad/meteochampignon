@@ -53,7 +53,7 @@ jobs:
           for i in 1 2 3 4 5; do
             git fetch origin master
             git reset --hard origin/master
-            node scripts/backfill-station-history.mjs merge
+            node scripts/merge-station-history.mjs "$BACKFILL_TMP"
             git add public/station-history.json
             git diff --staged --quiet && echo "Rien à commit" && exit 0
             git commit -m "Rattraper l'historique des stations (tranche ${{ matrix.slice }})"
