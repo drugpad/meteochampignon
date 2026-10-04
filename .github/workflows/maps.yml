@@ -1,0 +1,65 @@
+name: Cartes de pluie
+
+# Génère les cartes de pluie (24h passées + prévisions par jour) avec
+# scripts/build-rain-maps.py et les publie sur la branche orpheline `data`
+# (écrasée à chaque run : AUCUN historique, donc aucune croissance du dépôt
+# malgré des PNG qui changent à chaque fois, et aucun déploiement Vercel
+# déclenché — voir vercel.json). L'appli les lit sur raw.githubusercontent.com.
+#
+# Remplace rain-grid.yml et rain-forecast-grid.yml : ceux-ci interrogeaient
+# l'API Open-Meteo point par point (10 922 appels par grille, soit 12 000 à
+# 18 000 appels/jour pour une limite gratuite de 10 000, voir CLAUDE.md).
+# Ici, les données brutes des modèles sont lues sur le stockage public
+# d'Open-Meteo : aucun appel d'API, et 1,5 km de résolution au lieu de 3,3 km.
+#
+# Tout est recalculé à chaque run (pas de fusion entre tranches) : un run raté
+# ou un cron sauté (GitHub n'en déclenche qu'environ un tiers) retarde juste
+# la mise à jour, il ne laisse jamais de carte incohérente. Deux créneaux par
+# heure (:05 et :35) pour multiplier les chances d'un déclenchement effectif ;
+# minutes distinctes de celles du job des stations (:20 et :50).
+on:
+  schedule:
+    - cron: '5,35 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: maps
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # ~3 min en local, marge large pour le réseau S3.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-maps.txt
+
+      - run: pip install -r scripts/requirements-maps.txt
+
+      - name: Générer les cartes
+        env:
+          OUT_DIR: ${{ runner.temp }}/maps-out
+        run: python scripts/build-rain-maps.py
+
+      - name: Publier sur la branche data (écrasée)
+        env:
+          OUT_DIR: ${{ runner.temp }}/maps-out
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$OUT_DIR"
+          git init -q -b data
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Cartes de pluie $(date -u +%Y-%m-%dT%H:%MZ)"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -f origin data
