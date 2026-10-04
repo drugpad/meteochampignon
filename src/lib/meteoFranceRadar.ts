@@ -6,9 +6,15 @@
 // réflectivité — voir la doc en ligne :
 // https://portail-api.meteofrance.fr/web/fr/api/DonneesPubliquesRadar
 //
-// Auth : un token "API Key" généré depuis le portail (valide 1 an), à
-// mettre dans VITE_METEOFRANCE_API_TOKEN (voir .env.example) et envoyé tel
-// quel dans le header `apikey`.
+// Auth : un token "API Key" généré depuis le portail (valide 1 an), envoyé
+// tel quel dans le header `apikey`.
+//
+// ATTENTION : ce module n'est importé nulle part dans l'appli (Option B en
+// pause). La clé est donc un PARAMÈTRE explicite des fonctions ci-dessous, et
+// non plus lue dans import.meta.env.VITE_… : toute variable préfixée VITE_
+// utilisée dans du code navigateur est embarquée en clair dans le bundle
+// public. Si l'Option B est reprise, faire le téléchargement/décodage dans un
+// job GitHub Actions (secret METEOFRANCE_API_TOKEN), pas dans le navigateur.
 //
 // État d'avancement (vérifié le 09/09/2026 avec un vrai token) :
 // - Zone "METROPOLE" confirmée sur /mosaiques.
@@ -27,19 +33,10 @@
 
 const BASE_URL = 'https://public-api.meteofrance.fr/public/DPRadar/v1'
 
-function apiKey(): string {
-  const key = import.meta.env.VITE_METEOFRANCE_API_TOKEN
-  if (!key) {
-    throw new Error(
-      "VITE_METEOFRANCE_API_TOKEN manquant — voir .env.example (Option B carte de pluie radar).",
-    )
-  }
-  return key
-}
-
-async function radarFetch(path: string): Promise<Response> {
+async function radarFetch(apiKey: string, path: string): Promise<Response> {
+  if (!apiKey) throw new Error('Clé API Météo-France manquante (secret METEOFRANCE_API_TOKEN).')
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { apikey: apiKey() },
+    headers: { apikey: apiKey },
   })
   if (!res.ok) throw new Error(`Météo-France radar: ${res.status} sur ${path}`)
   return res
@@ -57,15 +54,15 @@ export const RADAR_OBSERVATION_LAME_EAU = 'LAME_D_EAU'
 type LinkList = { links: { href: string; type: string; title: string; validity_time?: string }[] }
 
 // Liste les zones de mosaïque disponibles.
-export async function listRadarZones(): Promise<LinkList> {
-  const res = await radarFetch('/mosaiques')
+export async function listRadarZones(apiKey: string): Promise<LinkList> {
+  const res = await radarFetch(apiKey, '/mosaiques')
   return res.json()
 }
 
 // Liste les observations disponibles pour une zone (réflectivité, lame
 // d'eau).
-export async function listRadarObservations(zone: string): Promise<LinkList> {
-  const res = await radarFetch(`/mosaiques/${encodeURIComponent(zone)}/observations`)
+export async function listRadarObservations(apiKey: string, zone: string): Promise<LinkList> {
+  const res = await radarFetch(apiKey, `/mosaiques/${encodeURIComponent(zone)}/observations`)
   return res.json()
 }
 
@@ -75,11 +72,13 @@ export async function listRadarObservations(zone: string): Promise<LinkList> {
 // brute (pas de .json(), ce n'est pas du JSON) : à consommer en
 // arrayBuffer()/blob() côté appelant une fois le décodage branché.
 export async function fetchLatestMosaicProduct(
+  apiKey: string,
   zone: string,
   observation: string,
   maille: 500 | 1000 = 500,
 ): Promise<Response> {
   return radarFetch(
+    apiKey,
     `/mosaiques/${encodeURIComponent(zone)}/observations/${encodeURIComponent(observation)}/produit?maille=${maille}`,
   )
 }

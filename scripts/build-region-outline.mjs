@@ -2,7 +2,7 @@
 // Régénère src/data/midi-pyrenees-outline.json — le contour fusionné (une
 // seule zone, sans les frontières internes entre départements) des 8
 // départements de l'ex-région Midi-Pyrénées. Pas exécuté automatiquement
-// (contrairement à fetch-rain-grid.mjs) : ce contour ne change jamais, ce
+// (contrairement aux jobs de .github/workflows) : ce contour ne change jamais, ce
 // script sert juste de trace de comment il a été produit, à relancer à la
 // main si jamais la source change.
 //

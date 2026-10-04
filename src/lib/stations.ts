@@ -12,7 +12,8 @@
 // tiré en direct depuis le navigateur au clic : un job GitHub Actions
 // (voir scripts/fetch-station-history.mjs) accumule un point par station et
 // par heure dans public/station-history.json, lu ici une seule fois par
-// session (même principe que public/rain-grid.json pour la carte de pluie).
+// session (les cartes de pluie suivent le même principe : fichiers statiques
+// générés par un job planifié, voir rainMaps.ts).
 // Deux raisons : 24 appels en parallèle par station tirés depuis le
 // navigateur déclenchaient par moments des erreurs réseau pures ("Failed to
 // fetch") en rafale, et l'API ne renvoie qu'une heure à la fois — remonter

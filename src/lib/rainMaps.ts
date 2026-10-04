@@ -10,11 +10,23 @@ import type { RainImage, RainMapsMeta } from '../types'
 export const MAPS_BASE_URL: string =
   import.meta.env.VITE_MAPS_BASE_URL ?? 'https://raw.githubusercontent.com/drugpad/meteochampignon/data'
 
+// Message affiché dans le panneau de la carte : toujours en français et lisible,
+// jamais l'erreur brute du navigateur (« Failed to fetch », « Unexpected token
+// '<' … is not valid JSON » quand un serveur répond une page HTML).
+const UNAVAILABLE = 'Cartes de pluie indisponibles pour le moment. Réessaie dans un instant.'
+
 export async function fetchRainMapsMeta(): Promise<RainMapsMeta> {
-  const res = await fetch(`${MAPS_BASE_URL}/maps.json`, { cache: 'no-store' })
-  if (!res.ok) throw new Error(`Cartes de pluie indisponibles (HTTP ${res.status}).`)
-  const meta = (await res.json()) as RainMapsMeta
-  if (!meta.rain24h || !Array.isArray(meta.forecast)) throw new Error('Cartes de pluie : format inattendu.')
+  let meta: RainMapsMeta
+  try {
+    const res = await fetch(`${MAPS_BASE_URL}/maps.json`, { cache: 'no-store' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    meta = (await res.json()) as RainMapsMeta
+  } catch {
+    throw new Error(UNAVAILABLE)
+  }
+  if (!meta.rain24h || !Array.isArray(meta.forecast) || meta.forecast.length === 0) {
+    throw new Error('Cartes de pluie : format inattendu. Réessaie plus tard.')
+  }
   return meta
 }
 
@@ -24,9 +36,14 @@ export async function fetchRainMapsMeta(): Promise<RainMapsMeta> {
 export async function fetchRainImage(meta: RainMapsMeta, file: string): Promise<RainImage> {
   // `v` (instant de génération) : une nouvelle génération = une nouvelle URL,
   // donc pas de PNG périmé servi par le cache à côté d'un maps.json récent.
-  const res = await fetch(`${MAPS_BASE_URL}/${file}?v=${encodeURIComponent(meta.fetchedAt)}`)
-  if (!res.ok) throw new Error(`Carte indisponible (HTTP ${res.status}).`)
-  const bitmap = await createImageBitmap(await res.blob(), { colorSpaceConversion: 'none' })
+  let bitmap: ImageBitmap
+  try {
+    const res = await fetch(`${MAPS_BASE_URL}/${file}?v=${encodeURIComponent(meta.fetchedAt)}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    bitmap = await createImageBitmap(await res.blob(), { colorSpaceConversion: 'none' })
+  } catch {
+    throw new Error(UNAVAILABLE)
+  }
   const canvas = document.createElement('canvas')
   canvas.width = bitmap.width
   canvas.height = bitmap.height
