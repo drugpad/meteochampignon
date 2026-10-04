@@ -5,12 +5,11 @@ import 'leaflet/dist/leaflet.css'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MapContainer, LayersControl, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
-import { fetchCachedRainForecastGrid, fetchRainForecastGrid, firstCurrentDayIndex } from '../lib/rainForecastGrid'
-import { fetchCachedRainGrid, fetchRainGrid } from '../lib/rainGrid'
+import { fetchRainImage, fetchRainMapsMeta, firstCurrentDayIndex } from '../lib/rainMaps'
 import { REGION_BOUNDS } from '../lib/regionOutline'
 import { useIsMobile } from '../lib/useIsMobile'
 import { ForecastFullscreen } from './ForecastFullscreen'
@@ -23,7 +22,7 @@ import { RainOverlay } from './RainOverlay'
 import { RegionOutline } from './RegionOutline'
 import { SearchBar } from './SearchBar'
 import { StationsLayer } from './StationsLayer'
-import type { AppMode, ForecastState, RainForecastGridState, RainGridPoint, RainGridState, RainMapSource } from '../types'
+import type { AppMode, ForecastState, RainImageState, RainMapsState } from '../types'
 
 // Bug constaté sur Unmask (même fond Plan/Satellite) et reproduit ici : de
 // grands carrés gris/blancs apparaissent sur la carte — des tuiles qui
@@ -51,6 +50,22 @@ function handleTileError(event: L.TileErrorEvent) {
   window.setTimeout(() => {
     tile.src = `${baseSrc}&_retry=${Date.now()}`
   }, TILE_RETRY_DELAYS_MS[retryIndex] + jitterMs)
+}
+
+// Mentions obligatoires des données météo affichées : Open-Meteo (CC BY 4.0
+// impose l'attribution) et Météo-France (modèles AROME/ARPEGE, observations).
+const DATA_ATTRIBUTION =
+  'Météo : <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0), <a href="https://meteofrance.fr/">Météo-France</a>'
+
+function DataAttribution() {
+  const map = useMap()
+  useEffect(() => {
+    map.attributionControl.addAttribution(DATA_ATTRIBUTION)
+    return () => {
+      map.attributionControl.removeAttribution(DATA_ATTRIBUTION)
+    }
+  }, [map])
+  return null
 }
 
 function ClickHandler({ enabled, onClick }: { enabled: boolean; onClick: (lat: number, lon: number) => void }) {
@@ -96,10 +111,10 @@ export function MapView() {
   const isMobile = useIsMobile()
   const [mode, setMode] = useState<AppMode>('previsions')
   const [forecastState, setForecastState] = useState<ForecastState>({ status: 'idle' })
-  const [rainState, setRainState] = useState<RainGridState>({ status: 'idle' })
-  const [rainSource, setRainSource] = useState<RainMapSource>('open-meteo')
-  const [forecastRainState, setForecastRainState] = useState<RainForecastGridState>({ status: 'idle' })
+  const [mapsState, setMapsState] = useState<RainMapsState>({ status: 'loading' })
+  const [images, setImages] = useState<Record<string, RainImageState>>({})
   const [selectedForecastDay, setSelectedForecastDay] = useState(0)
+  const [reloadKey, setReloadKey] = useState(0)
   const [searchTarget, setSearchTarget] = useState<GeocodeResult | null>(null)
 
   // Numéro du dernier clic : deux clics rapprochés lancent deux requêtes, et
@@ -119,65 +134,72 @@ export function MapView() {
       })
   }, [])
 
-  // Au passage en mode Historique, on tente une seule fois le cache
-  // pré-calculé par le job GitHub Actions (quasi instantané) — voir
-  // lib/rainGrid.ts. Le calcul en direct (lent, handleForceRefresh
-  // ci-dessous) reste disponible en secours (bouton) si ce cache est absent
-  // ou trop vieux. Un ref (pas un state) pour "déjà tenté" : ça ne doit
-  // jamais redéclencher cet effet lui-même (sinon boucle avec le
-  // setRainState ci-dessous, vu que rainState.status fait partie des deps).
-  const autoLoadTriedRef = useRef(false)
+  // Cartes de pluie (générées par le job maps.yml, voir lib/rainMaps.ts) :
+  // maps.json d'abord (dates, modèles, emprise), puis UNE image à la fois,
+  // celle qu'on affiche (cumul 24h en Historique, le jour choisi en
+  // Prévisions) — pas les 8 PNG d'un coup.
+  const requestedRef = useRef(new Set<string>())
   useEffect(() => {
-    if (mode !== 'historique' || rainSource !== 'open-meteo' || autoLoadTriedRef.current) return
-    autoLoadTriedRef.current = true
-    setRainState({ status: 'loading', loaded: 0, total: 1 })
-    fetchCachedRainGrid().then((cached) => {
-      setRainState(
-        cached ? { status: 'ready', points: cached.points, fetchedAt: cached.fetchedAt } : { status: 'idle' },
-      )
-    })
-  }, [mode, rainSource])
-
-  const handleForceRefresh = useCallback(() => {
-    setRainState({ status: 'loading', loaded: 0, total: 1 })
-    fetchRainGrid((loaded, total) => setRainState({ status: 'loading', loaded, total }))
-      .then((points) => setRainState({ status: 'ready', points, fetchedAt: Date.now() }))
-      .catch((err: Error) => setRainState({ status: 'error', message: err.message }))
-  }, [])
-
-  // Même principe que le cache de la carte 24h ci-dessus, mais au passage
-  // en mode Prévisions (voir lib/rainForecastGrid.ts).
-  const autoLoadForecastRainTriedRef = useRef(false)
-  useEffect(() => {
-    if (mode !== 'previsions' || autoLoadForecastRainTriedRef.current) return
-    autoLoadForecastRainTriedRef.current = true
-    setForecastRainState({ status: 'loading', loaded: 0, total: 1 })
-    fetchCachedRainForecastGrid().then((cached) => {
-      if (cached) setSelectedForecastDay(firstCurrentDayIndex(cached.dates))
-      setForecastRainState(
-        cached ? { status: 'ready', points: cached.points, dates: cached.dates, fetchedAt: cached.fetchedAt } : { status: 'idle' },
-      )
-    })
-  }, [mode])
-
-  const handleForecastRainForceRefresh = useCallback(() => {
-    setForecastRainState({ status: 'loading', loaded: 0, total: 1 })
-    fetchRainForecastGrid((loaded, total) => setForecastRainState({ status: 'loading', loaded, total }))
-      .then(({ points, dates }) => {
-        setSelectedForecastDay(firstCurrentDayIndex(dates))
-        setForecastRainState({ status: 'ready', points, dates, fetchedAt: Date.now() })
+    let cancelled = false
+    fetchRainMapsMeta()
+      .then((meta) => {
+        if (cancelled) return
+        setSelectedForecastDay(firstCurrentDayIndex(meta.forecast))
+        setMapsState({ status: 'ready', meta })
       })
-      .catch((err: Error) => setForecastRainState({ status: 'error', message: err.message }))
+      .catch((err: Error) => {
+        if (!cancelled) setMapsState({ status: 'error', message: err.message })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [reloadKey])
+
+  // Recharge tout (maps.json puis image affichée). Les remises à zéro d'état
+  // sont faites ici, dans le gestionnaire, et non dans l'effet qui charge.
+  const reloadMaps = useCallback(() => {
+    requestedRef.current.clear()
+    setImages({})
+    setMapsState({ status: 'loading' })
+    setReloadKey((k) => k + 1)
   }, [])
 
-  // RainOverlay attend une seule valeur par point (voir RainGridPoint) —
-  // projette le jour sélectionné du tableau `rain` de chaque point de la
-  // grille prévue dans cette forme, plutôt que de généraliser RainOverlay
-  // pour un gain qui ne concernerait que cet appelant.
-  const selectedForecastRainPoints = useMemo((): RainGridPoint[] => {
-    if (forecastRainState.status !== 'ready') return []
-    return forecastRainState.points.map((p) => ({ lat: p.lat, lon: p.lon, rain24h: p.rain[selectedForecastDay] ?? null }))
-  }, [forecastRainState, selectedForecastDay])
+  // Un onglet laissé ouvert pendant des heures ne doit pas rester sur des
+  // cartes périmées : au retour sur l'onglet, on recharge si elles ont plus
+  // de 20 min.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || mapsState.status !== 'ready') return
+      if (Date.now() - new Date(mapsState.meta.fetchedAt).getTime() > 20 * 60 * 1000) reloadMaps()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [mapsState, reloadMaps])
+
+  const neededFile =
+    mapsState.status === 'ready'
+      ? mode === 'historique'
+        ? mapsState.meta.rain24h.file
+        : mapsState.meta.forecast[selectedForecastDay]?.file
+      : undefined
+
+  useEffect(() => {
+    if (mapsState.status !== 'ready' || !neededFile) return
+    const meta = mapsState.meta
+    const key = meta.fetchedAt + neededFile
+    if (requestedRef.current.has(key)) return
+    requestedRef.current.add(key)
+    setImages((prev) => ({ ...prev, [neededFile]: { status: 'loading' } }))
+    fetchRainImage(meta, neededFile)
+      .then((image) => setImages((prev) => ({ ...prev, [neededFile]: { status: 'ready', image } })))
+      .catch((err: Error) => {
+        requestedRef.current.delete(key) // permet un nouvel essai
+        setImages((prev) => ({ ...prev, [neededFile]: { status: 'error', message: err.message } }))
+      })
+  }, [mapsState, neededFile])
+
+  const currentImage: RainImageState = (neededFile && images[neededFile]) || { status: 'idle' }
+  const handleRetry = reloadMaps
 
   return (
     <div className="map-view">
@@ -188,14 +210,15 @@ export function MapView() {
         </div>
 
         {mode === 'historique' && (
-          <RainControls state={rainState} source={rainSource} onSourceChange={setRainSource} onForceRefresh={handleForceRefresh} />
+          <RainControls maps={mapsState} image={currentImage} onRetry={handleRetry} />
         )}
         {mode === 'previsions' && (
           <ForecastRainControls
-            state={forecastRainState}
+            maps={mapsState}
+            image={currentImage}
             selectedDay={selectedForecastDay}
             onSelectDay={setSelectedForecastDay}
-            onForceRefresh={handleForecastRainForceRefresh}
+            onRetry={handleRetry}
           />
         )}
       </div>
@@ -210,12 +233,13 @@ export function MapView() {
         <ClickHandler enabled={mode === 'previsions'} onClick={handleMapClick} />
         <RecenterOnSelect target={searchTarget} />
         <InvalidateSizeOnResize />
+        <DataAttribution />
 
         <LayersControl position="bottomleft">
           <LayersControl.BaseLayer checked name="Plan">
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
               eventHandlers={{ tileerror: handleTileError }}
             />
           </LayersControl.BaseLayer>
@@ -232,14 +256,11 @@ export function MapView() {
 
         <RegionOutline />
 
-        {mode === 'historique' && (
-          <>
-            <StationsLayer />
-            {rainSource === 'open-meteo' && rainState.status === 'ready' && <RainOverlay points={rainState.points} />}
-          </>
-        )}
+        {mode === 'historique' && <StationsLayer />}
 
-        {mode === 'previsions' && forecastRainState.status === 'ready' && <RainOverlay points={selectedForecastRainPoints} />}
+        {mapsState.status === 'ready' && currentImage.status === 'ready' && (
+          <RainOverlay image={currentImage.image} bounds={mapsState.meta.bounds} />
+        )}
       </MapContainer>
 
       {mode === 'previsions' && isMobile && forecastState.status !== 'idle' && (

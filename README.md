@@ -8,18 +8,16 @@ Quasi entièrement frontend, comme [Unmask](../unmask) dont le socle carte (Leaf
 
 - **Carte** : fond plan (OpenStreetMap) ou satellite (orthophotos IGN), sélecteur de mode Prévisions / Historique.
 - **Prévisions 7 jours** (mode Prévisions) : clic n'importe où sur la carte → prévisions Open-Meteo `best_match` (blend multi-modèles AROME/ARPEGE + relais moyen terme) au point cliqué.
-- **Stations** (mode Historique) : ~240 stations Météo-France (RADOME) réparties sur les 8 départements de Midi-Pyrénées. Clic sur une station → historique pluie 24h, historique température, mini prévision 5 jours.
-- **Carte de pluie 24h** (mode Historique) : deux options en cours de comparaison (voir [CLAUDE.md](./CLAUDE.md)) —
-  - **Option A** (active) : grille Open-Meteo interpolée (~8km de maille), rendu en dégradé sur la carte.
-  - **Option B** (en cours) : radar Météo-France (lame d'eau, résolution 500m-1km) — client API prêt, décodage du fichier pas encore branché.
+- **Stations** (mode Historique) : ~240 stations Météo-France (RADOME) réparties sur les 8 départements de Midi-Pyrénées. Clic sur une station → historique pluie 24h et 10 jours, historique température, mini prévision 5 jours, lien vers Météociel.
+- **Cartes de pluie** : cumul des 24 dernières heures (mode Historique) et pluie prévue par jour (mode Prévisions), à **1,5 km** de résolution (modèle AROME HD de Météo-France ; ARPEGE puis ECMWF IFS pour les jours plus lointains). Générées toutes les heures par un job GitHub Actions à partir des données publiques d'Open-Meteo (voir [CLAUDE.md](./CLAUDE.md)).
 
 ## Stack technique
 
 - [Vite](https://vite.dev/) + [React](https://react.dev/) + TypeScript
 - [Leaflet](https://leafletjs.com/) / [react-leaflet](https://react-leaflet.js.org/) pour la carte
 - [Recharts](https://recharts.org/) pour les graphiques de station
-- [Open-Meteo](https://open-meteo.com/) (prévisions, carte de pluie Option A) — sans clé API
-- [API Météo-France](https://portail-api.meteofrance.fr/) (données d'observation par station, radar) — nécessite un token gratuit, voir `.env.example`
+- [Open-Meteo](https://open-meteo.com/) (prévisions ponctuelles ; données brutes des modèles pour les cartes de pluie, CC BY 4.0) — sans clé API
+- [API Météo-France](https://portail-api.meteofrance.fr/) (observations des stations via l'API Paquet Observations) — nécessite un token gratuit, voir `.env.example`
 
 ## Démarrage
 

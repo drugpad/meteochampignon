@@ -34,33 +34,34 @@ export type Station = {
   altitude?: number
 }
 
-// Un point de la grille de pluie (Option A, cumul 24h interpolé).
-export type RainGridPoint = {
-  lat: number
-  lon: number
-  rain24h: number | null // mm, null si la requête a échoué pour ce point
+// Cartes de pluie (24h passées + prévisions par jour), générées par
+// scripts/build-rain-maps.py et publiées sur la branche `data` : des PNG en
+// niveaux de gris (valeur = mm x 10) accompagnés d'un maps.json.
+export type RainMapsMeta = {
+  fetchedAt: string // ISO, instant de génération
+  bounds: { latMin: number; latMax: number; lonMin: number; lonMax: number }
+  rows: number
+  cols: number
+  encoding: { mmPerLevel: number; maxMm: number }
+  rain24h: { file: string; from: string; to: string; hours: number; model: string; run: string }
+  forecast: { date: string; file: string; model: string; resolutionKm: number; run: string }[]
+  attribution: string
 }
 
-export type RainGridState =
-  | { status: 'idle' }
-  | { status: 'loading'; loaded: number; total: number }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; points: RainGridPoint[]; fetchedAt: number }
+// Image décodée : un niveau (0-255) par cellule, ligne 0 = nord.
+export type RainImage = { width: number; height: number; levels: Uint8ClampedArray; mmPerLevel: number }
 
-// Un point de la grille de pluie PRÉVUE (mode Prévisions, recouvrement carte)
-// — même grille géographique que RainGridPoint, mais un cumul par jour
-// (jusqu'à 7) au lieu d'une seule valeur 24h glissante.
-export type RainForecastGridPoint = {
-  lat: number
-  lon: number
-  rain: (number | null)[] // mm/jour, un par entrée de RainForecastGridState.dates
-}
-
-export type RainForecastGridState =
-  | { status: 'idle' }
-  | { status: 'loading'; loaded: number; total: number }
+export type RainMapsState =
+  | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; points: RainForecastGridPoint[]; dates: string[]; fetchedAt: number }
+  | { status: 'ready'; meta: RainMapsMeta }
+
+// État d'une image de carte (cumul 24h ou un jour de prévision).
+export type RainImageState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; image: RainImage }
 
 // Historique 24h + cumul quotidien 10j + mini-prévision 5 jours pour une
 // station cliquée.
@@ -81,7 +82,3 @@ export type StationDetailState =
   | { status: 'error'; station: Station; message: string }
   | { status: 'ready'; detail: StationDetail }
 
-// Source de la carte de pluie 24h : Option A (Open-Meteo interpolé, toujours
-// disponible) ou Option B (radar Météo-France, nécessite un token — voir
-// meteoFranceRadar.ts). Toggle de comparaison, voir CLAUDE.md.
-export type RainMapSource = 'open-meteo' | 'radar'

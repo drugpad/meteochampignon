@@ -1,8 +1,8 @@
-// Âge relatif d'une donnée mise en cache (grilles de pluie, voir
-// RainControls.tsx / ForecastRainControls.tsx) — depuis qu'on ne masque plus
-// la carte juste parce qu'elle a quelques heures (voir rainGrid.ts), l'heure
-// absolue seule ("Actualisé à 10:39") ne dit pas d'un coup d'œil si c'est
-// frais ou vieux de plusieurs heures ; l'âge relatif comble ça.
+// Âge relatif d'une donnée mise en cache (cartes de pluie, voir
+// RainControls.tsx / ForecastRainControls.tsx) — le cron GitHub saute
+// souvent des créneaux, donc l'heure absolue seule ("Actualisé à 10:39") ne
+// dit pas d'un coup d'œil si c'est frais ou vieux de plusieurs heures ;
+// l'âge relatif comble ça.
 export function formatRelativeAge(fetchedAt: number, now = Date.now()): string {
   const minutes = Math.max(0, Math.round((now - fetchedAt) / 60000))
   if (minutes < 1) return "à l'instant"

@@ -1,46 +1,38 @@
-// Panneau de contrôle de la carte de pluie 24h (mode Historique) : état de
-// la grille (Option A, normalement pré-calculée par le job GitHub Actions —
-// voir CLAUDE.md), légende, et toggle Option A / Option B si un token radar
-// Météo-France est configuré. Repliable (retour utilisateur : reste "en
-// grand" et gêne la carte sinon) — replié une fois la grille chargée, pour
-// ne pas s'imposer une fois qu'il n'y a plus rien à faire dessus.
+// Panneau de contrôle de la carte de pluie 24h (mode Historique) : état des
+// cartes (générées par le job GitHub Actions maps.yml, voir CLAUDE.md),
+// période couverte, légende. Repliable (retour utilisateur : reste "en
+// grand" et gêne la carte sinon) — replié une fois la carte chargée, pour ne
+// pas s'imposer une fois qu'il n'y a plus rien à faire dessus.
 import { useEffect, useRef, useState } from 'react'
 import './RainControls.css'
 import { RAIN_LEGEND_STOPS } from '../lib/color'
 import { formatRelativeAge } from '../lib/formatRelativeAge'
-import type { RainGridState, RainMapSource } from '../types'
+import type { RainImageState, RainMapsState } from '../types'
 
-// Le toggle Option A / Option B n'apparaît que quand l'option B est réellement
-// utilisable : tant que le décodage BUFR n'est pas branché (voir CLAUDE.md,
-// section 3.4), l'afficher en production — où le token est défini — ne
-// proposait qu'un bouton qui ne montre rien. À passer à true une fois le
-// radar branché sur la carte.
-const RADAR_DECODING_READY = false
-const HAS_RADAR_TOKEN = RADAR_DECODING_READY && Boolean(import.meta.env.VITE_METEOFRANCE_API_TOKEN)
 const TIME_FORMATTER = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' })
+const PERIOD_FORMATTER = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })
 
 type Props = {
-  state: RainGridState
-  source: RainMapSource
-  onSourceChange: (source: RainMapSource) => void
-  // Recalcule la grille en direct dans le navigateur (lent, ~plusieurs
-  // minutes) — secours manuel si le cache pré-calculé est absent/trop vieux,
-  // voir lib/rainGrid.ts.
-  onForceRefresh: () => void
+  maps: RainMapsState
+  image: RainImageState
+  onRetry: () => void
 }
 
-export function RainControls({ state, source, onSourceChange, onForceRefresh }: Props) {
+export function RainControls({ maps, image, onRetry }: Props) {
   const [collapsed, setCollapsed] = useState(false)
-  // Se replie tout seul dès que la grille est prête, une seule fois (pas à
-  // chaque nouveau "ready", sinon impossible de le rouvrir : il se
-  // reprendrait de force à chaque rafraîchissement).
+  // Se replie tout seul dès que la carte est prête, une seule fois (pas à
+  // chaque nouveau "ready", sinon impossible de le rouvrir).
   const autoCollapsedRef = useRef(false)
+  const ready = maps.status === 'ready' && image.status === 'ready'
   useEffect(() => {
-    if (state.status === 'ready' && !autoCollapsedRef.current) {
+    if (ready && !autoCollapsedRef.current) {
       autoCollapsedRef.current = true
       setCollapsed(true)
     }
-  }, [state.status])
+  }, [ready])
+
+  const error = maps.status === 'error' ? maps.message : image.status === 'error' ? image.message : null
+  const loading = maps.status === 'loading' || image.status === 'loading'
 
   return (
     <div className={collapsed ? 'rain-controls rain-controls--collapsed' : 'rain-controls'}>
@@ -51,65 +43,35 @@ export function RainControls({ state, source, onSourceChange, onForceRefresh }: 
 
       {!collapsed && (
         <div className="rain-controls__body">
-          {HAS_RADAR_TOKEN && (
-            <div className="rain-controls__toggle">
-              <button
-                type="button"
-                className={source === 'open-meteo' ? 'rain-controls__toggle-btn rain-controls__toggle-btn--active' : 'rain-controls__toggle-btn'}
-                onClick={() => onSourceChange('open-meteo')}
-              >
-                Option A (rapide)
-              </button>
-              <button
-                type="button"
-                className={source === 'radar' ? 'rain-controls__toggle-btn rain-controls__toggle-btn--active' : 'rain-controls__toggle-btn'}
-                onClick={() => onSourceChange('radar')}
-              >
-                Option B (radar)
-              </button>
-            </div>
-          )}
+          {loading && <div className="rain-controls__status">Chargement…</div>}
 
-          {source === 'open-meteo' && state.status === 'loading' && (
-            <div className="rain-controls__status">
-              Chargement{state.total > 1 ? ` (${state.loaded}/${state.total})` : '…'}
-            </div>
-          )}
-
-          {source === 'open-meteo' && (state.status === 'idle' || state.status === 'error') && (
-            <button type="button" className="rain-controls__load-btn" onClick={onForceRefresh}>
-              Charger la carte de pluie 24h
-            </button>
-          )}
-
-          {source === 'open-meteo' && state.status === 'ready' && (
+          {error && (
             <>
-              <div className="rain-controls__status">
-                Actualisé à {TIME_FORMATTER.format(state.fetchedAt)} ({formatRelativeAge(state.fetchedAt)})
-              </div>
-              <button type="button" className="rain-controls__refresh-btn" onClick={onForceRefresh}>
-                Recalculer maintenant (très lent, ~30 min)
+              <div className="rain-controls__error">{error}</div>
+              <button type="button" className="rain-controls__load-btn" onClick={onRetry}>
+                Réessayer
               </button>
             </>
           )}
 
-          {state.status === 'error' && <div className="rain-controls__error">{state.message}</div>}
-
-          {source === 'open-meteo' && state.status === 'ready' && (
-            <div className="rain-controls__legend">
-              {RAIN_LEGEND_STOPS.map((stop) => (
-                <div key={stop.label} className="rain-controls__legend-item">
-                  <span className="rain-controls__legend-swatch" style={{ background: stop.color }} />
-                  {stop.label}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {source === 'radar' && (
-            <div className="rain-controls__error" style={{ color: '#888' }}>
-              Décodage des données radar pas encore branché sur la carte (voir CLAUDE.md).
-            </div>
+          {maps.status === 'ready' && image.status === 'ready' && (
+            <>
+              <div className="rain-controls__status">
+                Du {PERIOD_FORMATTER.format(new Date(maps.meta.rain24h.from))} au{' '}
+                {PERIOD_FORMATTER.format(new Date(maps.meta.rain24h.to))}
+                <br />
+                Actualisé à {TIME_FORMATTER.format(new Date(maps.meta.fetchedAt))} (
+                {formatRelativeAge(new Date(maps.meta.fetchedAt).getTime())}) · AROME HD 1,5 km
+              </div>
+              <div className="rain-controls__legend">
+                {RAIN_LEGEND_STOPS.map((stop) => (
+                  <div key={stop.label} className="rain-controls__legend-item">
+                    <span className="rain-controls__legend-swatch" style={{ background: stop.color }} />
+                    {stop.label}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}
