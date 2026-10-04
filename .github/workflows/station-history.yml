@@ -1,32 +1,38 @@
 name: Accumuler l'historique des stations
 
-# Récupère l'heure courante pour chaque station (public/station-history.json,
-# voir scripts/fetch-station-history.mjs) et commit le résultat s'il a
-# changé — même principe que rain-grid.yml pour la carte de pluie : l'appli
-# lit ce fichier statique au lieu d'appeler l'API Météo-France depuis le
-# navigateur au clic sur une station.
+# Collecte l'historique horaire des stations (public/station-history.json,
+# voir scripts/fetch-station-history.mjs) et commit le résultat s'il a changé.
 #
-# Toutes les heures, obligatoirement : `rr1` est la pluie de l'heure
-# précédente SEULEMENT, donc échantillonner moins souvent fait passer à côté
-# de la plupart des averses (constaté le 03/10/2026 : ~2.8 mm tombés à La
-# Mongie dans la journée, 0.8 mm affichés avec un run toutes les 12h).
-# Le passage à 12h (incident de facturation, dépôt alors privé) n'a plus
-# lieu d'être depuis que le dépôt est public (Actions gratuit illimité).
-# Minute 20 : évite la minute 5 de rain-grid.yml et la minute 35 de
-# rain-forecast-grid.yml (crons simultanés qui se sautent mutuellement).
+# AUTO-RÉPARANT, ne dépend plus de la régularité du cron : GitHub n'en
+# déclenche qu'environ un tiers (mesuré : 24 sur 72 attendus en 6 jours ; la
+# doc dit que les déclenchements peuvent être retardés ou abandonnés). Chaque
+# run rattrape donc toutes les heures manquées des 23 dernières heures (limite
+# de l'API Paquet), à 1 appel par heure. `rr1` est la pluie de l'heure
+# précédente seulement : sans rattrapage, chaque run raté perdait une pluie.
+#
+# Deux créneaux par heure (:20 et :50) pour multiplier les chances d'un
+# déclenchement effectif ; le second ne commit rien s'il n'y a rien de neuf.
+# Minutes distinctes de celles des jobs de cartes (voir maps.yml) : des crons
+# simultanés se sautent mutuellement sous charge.
 on:
   schedule:
-    - cron: '20 * * * *'
+    - cron: '20,50 * * * *'
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
+# Un seul run à la fois : deux runs simultanés fusionneraient en parallèle dans
+# le même fichier. Un run en attente est conservé (cancel-in-progress: false).
+concurrency:
+  group: station-history
+  cancel-in-progress: false
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    # 239 stations à ~1.7s d'écart ≈ 7 min — marge large pour ne pas timeout.
-    timeout-minutes: 15
+    # 24 appels au plus (~30 s). Marge large pour les retries réseau.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +40,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Récupérer l'heure courante pour chaque station
+      - name: Collecter les heures manquantes (API Paquet)
         env:
           METEOFRANCE_API_TOKEN: ${{ secrets.METEOFRANCE_API_TOKEN }}
           HISTORY_TMP: ${{ runner.temp }}/history-new-points.json

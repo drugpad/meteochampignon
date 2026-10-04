@@ -15,6 +15,11 @@ on:
 permissions:
   contents: write
 
+# Même groupe que station-history.yml : pas de fusion simultanée dans le même fichier.
+concurrency:
+  group: station-history
+  cancel-in-progress: false
+
 jobs:
   backfill:
     runs-on: ubuntu-latest

@@ -1,41 +1,53 @@
 #!/usr/bin/env node
-// Accumule l'historique horaire (pluie + température) des stations Météo-
-// France Midi-Pyrénées dans public/station-history.json — lancé toutes les
-// heures par GitHub Actions (voir .github/workflows/station-history.yml).
+// Collecte l'historique horaire (pluie + température) des stations Météo-
+// France Midi-Pyrénées — lancé par GitHub Actions (voir
+// .github/workflows/station-history.yml). Ce script ne fait QUE collecter :
+// il écrit les points dans un fichier temporaire (HISTORY_TMP), et le workflow
+// les fusionne ensuite dans public/station-history.json
+// (scripts/merge-station-history.mjs) à partir de la dernière version de
+// master — voir ce fichier pour le pourquoi (conflits de rebase sur un JSON
+// d'une seule ligne).
 //
-// Remplace les 24 appels en parallèle que faisait le navigateur au clic sur
-// une station (src/lib/stations.ts) : en rafale, ces 24 appels simultanés
-// vers l'API Météo-France déclenchaient par moments des erreurs réseau pures
-// ("Failed to fetch", pas un statut HTTP) — un souci de fiabilité en plus
-// d'empêcher tout historique au-delà de 24h. Ici, un seul point par station
-// est tiré à chaque run (239 appels espacés, pas 24 en rafale), accumulé
-// heure après heure dans un fichier statique que l'appli lit directement
-// (comme public/rain-grid.json pour la carte de pluie) — même principe :
-// quasi instantané côté navigateur, plus aucun appel direct au clic.
+// Source : API « Paquet Observations » (DPPaquetObs v2), endpoint
+// /paquet/stations/horaire : UN appel renvoie toutes les stations de France
+// pour UNE heure donnée (~1 Mo, ~2000 stations) — contre 239 appels avec
+// l'API par station utilisée avant. Les valeurs sont identiques (54
+// comparaisons pluie + température, 54 identiques).
 //
-// Ce script ne fait QUE collecter : il écrit les points de l'heure dans un
-// fichier temporaire (HISTORY_TMP), et le workflow les fusionne ensuite dans
-// public/station-history.json (scripts/merge-station-history.mjs) à partir de
-// la dernière version de master — voir ce fichier pour le pourquoi (conflits
-// de rebase sur un JSON d'une seule ligne). Fenêtre glissante de 10 jours
-// (240h) appliquée à la fusion. Un run manqué (échec du job, redéploiement,
-// etc.) laisse simplement un trou dans la série pour cette heure-là — toléré,
-// pas bloquant (même philosophie que les trous horaires déjà tolérés dans
-// stations.ts).
+// AUTO-RÉPARANT : le cron natif de GitHub n'en déclenche qu'environ un tiers
+// (mesuré : 24 déclenchements sur 72 attendus sur 6 jours). Plutôt que de
+// compter sur une exécution par heure, chaque run rattrape TOUTES les heures
+// manquantes de la fenêtre de l'API (23h, limite stricte côté serveur : « date
+// inférieure à date du jour moins 24h » -> HTTP 400). Un cron sauté ne perd
+// donc plus rien tant qu'un run passe au moins une fois toutes les 23h (plus
+// long trou observé : 15h). Au-delà, rattrapage manuel par station :
+// backfill-station-history.yml (l'API par station remonte ~4 jours, non
+// documenté — la doc officielle annonce 24h).
+//
+// Une heure H est publiée vers H+10 min. L'API Paquet est limitée à 100
+// requêtes/minute (palier de la clé) ; on en fait 24 au plus, espacées.
 import { readFile, writeFile } from 'node:fs/promises'
 
-const DPOBS_BASE_URL = 'https://public-api.meteofrance.fr/public/DPObs/v2'
+const PAQUET_URL = 'https://public-api.meteofrance.fr/public/DPPaquetObs/v2/paquet/stations/horaire'
+const STATION_URL = 'https://public-api.meteofrance.fr/public/DPObs/v2/station/horaire'
 const TMP_PATH = process.env.HISTORY_TMP ?? 'history-new-points.json'
+// HISTORY_FILE : surcharge pour les tests (historique de substitution).
+const HISTORY_PATH = process.env.HISTORY_FILE ?? new URL('../public/station-history.json', import.meta.url)
 const STATIONS_PATH = new URL('../src/data/stations-midi-pyrenees.json', import.meta.url)
 
-// Espacement entre appels (ms) — l'API Données d'observation est limitée à
-// 50 req/min ; on vise ~35/min pour garder de la marge (le run entier tient
-// alors dans le timeout du job, voir station-history.yml).
-const REQUEST_DELAY_MS = 1700
+const HOUR_MS = 3600000
+const WINDOW_HOURS = 23 // limite stricte de l'API Paquet (< 24h)
+const PUBLICATION_LAG_MS = 15 * 60 * 1000 // observation de l'heure H publiée vers H+10 min
+// Une heure est considérée comme déjà complète si au moins ce ratio des
+// stations y a un point. Pas 100% : quelques stations ne transmettent pas
+// toutes leurs heures (~3 sur 239 par heure), elles ne se rempliront jamais.
+const COMPLETE_RATIO = 0.95
+// Les dernières heures sont toujours re-demandées : les stations en retard
+// de transmission complètent une heure après sa première publication.
+const ALWAYS_REFETCH_LAST_HOURS = 3
+const REQUEST_DELAY_MS = 700
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function apiKey() {
   const key = process.env.METEOFRANCE_API_TOKEN
@@ -43,39 +55,9 @@ function apiKey() {
   return key
 }
 
-// Un échec réseau ponctuel (timeout, DNS, reset) ou un statut HTTP en erreur
-// pour UNE station ne doit pas faire échouer tout le run — voir même logique
-// dans fetch-rain-grid.mjs (retry avec pause croissante) et le commentaire
-// en tête de fichier.
-async function fetchStationHour(stationId, key, attempt = 0) {
-  const url = new URL(`${DPOBS_BASE_URL}/station/horaire`)
-  url.searchParams.set('id_station', stationId)
-  url.searchParams.set('format', 'json')
+const isoHour = (ms) => new Date(ms).toISOString().replace('.000Z', 'Z')
 
-  let res
-  try {
-    res = await fetch(url, { headers: { apikey: key }, signal: AbortSignal.timeout(15000) })
-  } catch (err) {
-    if (attempt >= 2) {
-      console.log(`  ${stationId} : erreur réseau (${err.message}), abandon pour ce run.`)
-      return null
-    }
-    await wait(3000 * (attempt + 1))
-    return fetchStationHour(stationId, key, attempt + 1)
-  }
-
-  // Plus patient que le strict nécessaire : ce job peut chevaucher le
-  // rattrapage ponctuel (backfill-station-history.yml), qui partage la
-  // limite de débit de l'API.
-  if (res.status === 429 && attempt < 4) {
-    await wait(5000 * (attempt + 1))
-    return fetchStationHour(stationId, key, attempt + 1)
-  }
-  if (!res.ok) return null // trou de mesure pour cette station à cette heure : ignoré
-
-  const data = await res.json()
-  const obs = data[0]
-  if (!obs || !obs.validity_time) return null
+function toPoint(obs) {
   return {
     time: obs.validity_time,
     rr1: typeof obs.rr1 === 'number' ? Math.max(0, obs.rr1) : null,
@@ -83,24 +65,116 @@ async function fetchStationHour(stationId, key, attempt = 0) {
   }
 }
 
+// GET avec retries ; renvoie { status, body } (body = JSON ou null). Un échec
+// réseau ou 5xx ponctuel ne doit pas faire échouer tout le run ; le journal
+// garde la CAUSE réelle de l'erreur réseau (err.cause), pas seulement
+// « fetch failed ».
+async function getJson(url, key, attempt = 0) {
+  let res
+  try {
+    res = await fetch(url, { headers: { apikey: key }, signal: AbortSignal.timeout(30000) })
+  } catch (err) {
+    const cause = err.cause?.code ?? err.cause?.message ?? err.message
+    if (attempt >= 3) {
+      console.log(`  erreur réseau (${cause}), abandon.`)
+      return { status: 0, body: null }
+    }
+    console.log(`  erreur réseau (${cause}), nouvel essai…`)
+    await wait(3000 * (attempt + 1))
+    return getJson(url, key, attempt + 1)
+  }
+  if ((res.status === 429 || res.status >= 500) && attempt < 3) {
+    await wait(5000 * (attempt + 1))
+    return getJson(url, key, attempt + 1)
+  }
+  if (!res.ok) return { status: res.status, body: null }
+  return { status: res.status, body: await res.json() }
+}
+
+async function loadHistory() {
+  try {
+    return JSON.parse(await readFile(HISTORY_PATH, 'utf-8')).stations ?? {}
+  } catch {
+    return {} // premier run, ou fichier absent/corrompu
+  }
+}
+
+// Heures de la fenêtre à (re)demander : celles où trop peu de stations ont un
+// point dans l'historique déjà en place, plus les dernières heures.
+function hoursToFetch(history, stationIds, now) {
+  const first = Math.ceil((now - WINDOW_HOURS * HOUR_MS) / HOUR_MS) * HOUR_MS
+  const last = Math.floor((now - PUBLICATION_LAG_MS) / HOUR_MS) * HOUR_MS
+  const have = new Map() // heure ISO -> nombre de stations ayant un point
+  for (const id of stationIds) {
+    for (const p of history[id] ?? []) have.set(p.time, (have.get(p.time) ?? 0) + 1)
+  }
+  const hours = []
+  for (let t = first; t <= last; t += HOUR_MS) {
+    const iso = isoHour(t)
+    const recent = last - t < ALWAYS_REFETCH_LAST_HOURS * HOUR_MS
+    if (recent || (have.get(iso) ?? 0) < COMPLETE_RATIO * stationIds.length) hours.push(iso)
+  }
+  return { hours, last }
+}
+
 async function main() {
   const key = apiKey()
   const stations = JSON.parse(await readFile(STATIONS_PATH, 'utf-8'))
+  const ids = stations.map((s) => s.id)
+  const mine = new Set(ids)
+  const history = await loadHistory()
+  const now = Date.now()
+  const { hours, last } = hoursToFetch(history, ids, now)
+
+  console.log(`Fenêtre ${WINDOW_HOURS}h : ${hours.length} heure(s) à récupérer (1 appel chacune).`)
+
   const collected = {}
-
-  console.log(`Stations : ${stations.length}, espacement ${REQUEST_DELAY_MS}ms.`)
-
+  let received = 0
   try {
-    for (const [i, station] of stations.entries()) {
+    for (const [i, hour] of hours.entries()) {
       if (i > 0) await wait(REQUEST_DELAY_MS)
-      const point = await fetchStationHour(station.id, key)
-      if (point) collected[station.id] = [point]
+      const url = `${PAQUET_URL}?date=${encodeURIComponent(hour)}&format=json`
+      const { status, body } = await getJson(url, key)
+      if (!body) {
+        console.log(`  ${hour} : HTTP ${status}, ignorée.`)
+        continue
+      }
+      let n = 0
+      for (const obs of body) {
+        if (!mine.has(obs.geo_id_insee) || !obs.validity_time) continue
+        ;(collected[obs.geo_id_insee] ??= []).push(toPoint(obs))
+        n++
+      }
+      received++
+      console.log(`  ${hour} : ${n}/${ids.length} stations.`)
+    }
+
+    // Filet de sécurité : si le paquet est totalement indisponible (abonnement
+    // perdu, panne), on retombe sur l'API par station pour l'heure courante
+    // seulement — de quoi ne pas laisser un trou systématique pendant la panne.
+    if (hours.length > 0 && received === 0) {
+      console.log('API Paquet indisponible : repli sur l\'API par station (heure courante).')
+      const lastIso = isoHour(last)
+      for (const [i, id] of ids.entries()) {
+        if (i > 0) await wait(1700)
+        const url = `${STATION_URL}?id_station=${id}&date=${encodeURIComponent(lastIso)}&format=json`
+        const { body } = await getJson(url, key)
+        const obs = body?.[0]
+        if (obs?.validity_time) (collected[id] ??= []).push(toPoint(obs))
+      }
+      received = Object.keys(collected).length > 0 ? 1 : 0
     }
   } finally {
     // Même si le run est interrompu en cours de route, on garde ce qui a
     // déjà été collecté (le workflow fusionne avec `if: always()`).
     await writeFile(TMP_PATH, JSON.stringify(collected))
-    console.log(`${Object.keys(collected).length}/${stations.length} stations collectées -> ${TMP_PATH}`)
+    const points = Object.values(collected).reduce((s, a) => s + a.length, 0)
+    console.log(`${points} point(s) collecté(s) -> ${TMP_PATH}`)
+  }
+
+  if (hours.length > 0 && received === 0) {
+    console.error('Aucune donnée récupérée (ni Paquet, ni API par station).')
+    process.exit(1)
   }
 }
 
