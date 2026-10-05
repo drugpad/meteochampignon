@@ -81,13 +81,33 @@ def launch():
     return 0
 
 
+def lock_holder_alive():
+    """Le processus qui a posé le verrou tourne-t-il encore ? None si on ne peut pas le savoir.
+
+    Un redémarrage de Home Assistant tue le calcul en cours et laisse le verrou : sans cette
+    vérification, il bloquerait les tentatives suivantes pendant 25 min.
+    """
+    try:
+        with open(LOCK) as f:
+            pid = int(f.read().strip())
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            cmd = f.read()
+    except FileNotFoundError:
+        return False  # processus disparu (ou pid inexistant)
+    except (OSError, ValueError):
+        return None
+    return b"maps.py" in cmd
+
+
 def take_lock():
     try:
         fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
-        if time.time() - os.path.getmtime(LOCK) < LOCK_STALE_SECONDS:
+        alive = lock_holder_alive()
+        age = time.time() - os.path.getmtime(LOCK)
+        if alive or (alive is None and age < LOCK_STALE_SECONDS):
             return False
-        log("verrou orphelin (> 25 min) : supprimé")
+        log("verrou orphelin (calcul interrompu, probablement par un redémarrage) : supprimé")
         os.remove(LOCK)
         fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     os.write(fd, str(os.getpid()).encode())
