@@ -178,6 +178,26 @@ rest:
 # 3) Voyants de problème
 # ----------------------------------------------------------------------------
 template:
+  # Âge des données en minutes (mis à jour chaque minute) : sert aux graphiques et
+  # à l'affichage « il y a X min » du tableau de bord.
+  - sensor:
+      - name: "Meteochampignon cartes age"
+        unique_id: meteochampignon_cartes_age
+        unit_of_measurement: "min"
+        state_class: measurement
+        icon: mdi:weather-pouring
+        state: >
+          {% set s = states('sensor.meteochampignon_cartes_generation') %}
+          {% if s not in ['unknown', 'unavailable', ''] %}{{ ((now() - (s | as_datetime)).total_seconds() / 60) | round(0) }}{% endif %}
+      - name: "Meteochampignon stations age"
+        unique_id: meteochampignon_stations_age
+        unit_of_measurement: "min"
+        state_class: measurement
+        icon: mdi:thermometer
+        state: >
+          {% set s = states('sensor.meteochampignon_stations_donnees') %}
+          {% if s not in ['unknown', 'unavailable', ''] %}{{ ((now() - (s | as_datetime)).total_seconds() / 60) | round(0) }}{% endif %}
+
   - binary_sensor:
       # Cartes pas régénérées depuis plus de 3 h (ou source injoignable).
       - name: "Meteochampignon cartes en retard"

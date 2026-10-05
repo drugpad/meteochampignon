@@ -1,153 +1,342 @@
 # Tableau de bord « Météochampignon » — suivi des traitements.
 # Installé par install.ps1 dans <config>/dashboards/meteochampignon.yaml et
 # déclaré dans packages/meteochampignon.yaml (section lovelace).
+#
+# Cartes utilisées (déjà installées via HACS chez vous) : Mushroom, ApexCharts.
+# Mise en page « sections » (Home Assistant 2024.10+).
+#
+# Codes couleur : vert = à jour, orange = un peu en retard (> 90 min), rouge =
+# en retard (> 3 h) ou en échec.
 title: Météochampignon
 views:
+  # ===================================================================
+  # Page 1 : suivi
+  # ===================================================================
   - title: Suivi
     path: suivi
     icon: mdi:mushroom
-    cards:
-      # ---------- Synthèse ----------
-      - type: markdown
-        title: État général
-        content: >
-          {% if is_state('binary_sensor.meteochampignon_probleme', 'on') %}
-          ## 🔴 Un traitement est en retard ou en échec
-          {% if is_state('binary_sensor.meteochampignon_cartes_en_retard', 'on') %}- **Cartes** : pas régénérées depuis plus de 3 h (ou source injoignable)
-          {% endif %}{% if is_state('binary_sensor.meteochampignon_stations_en_retard', 'on') %}- **Stations** : aucune nouvelle donnée depuis plus de 3 h
-          {% endif %}{% if is_state('binary_sensor.meteochampignon_traitement_en_echec', 'on') %}- **Échec** au dernier passage d'un traitement GitHub
-          {% endif %}
-          {% else %}
-          ## 🟢 Tout est à jour
-          {% endif %}
-
-          Cartes : **{{ states('sensor.meteochampignon_cartes_jours') }} jours** de prévision,
-          pluie mesurée sur **{{ states('sensor.meteochampignon_cartes_heures_24h') }} h**.
-
-      # ---------- Bouton ----------
-      - type: button
-        name: Lancer les traitements maintenant
-        icon: mdi:play-circle
-        show_state: false
-        tap_action:
-          action: perform-action
-          perform_action: script.meteochampignon_lancer_maintenant
-          confirmation:
-            text: "Lancer les deux traitements GitHub tout de suite ?"
-
-      - type: button
-        name: Tester la collecte des stations (sans rien écrire)
-        icon: mdi:check-network
-        show_state: false
-        tap_action:
-          action: perform-action
-          perform_action: script.meteochampignon_tester_collecte
-
-      - type: button
-        name: Diagnostic Python (cartes sur Home Assistant ?)
-        icon: mdi:stethoscope
-        show_state: false
-        tap_action:
-          action: perform-action
-          perform_action: script.meteochampignon_diagnostic
-
-      # ---------- Cartes sur Home Assistant ----------
-      - type: entities
-        title: 🖥️ Cartes calculées par Home Assistant
-        show_header_toggle: false
-        entities:
-          - entity: sensor.meteochampignon_cartes_source
-            name: Cartes générées par (home-assistant ou github-actions)
-          - type: button
-            name: 1. Installer les dépendances (une seule fois)
-            icon: mdi:package-down
-            action_name: Installer
+    type: sections
+    max_columns: 3
+    sections:
+      # ------------------------------ État général ------------------------------
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Météochampignon
+            heading_style: title
+            icon: mdi:mushroom
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% if is_state('binary_sensor.meteochampignon_probleme', 'off') %}Tout est à jour{% else %}Un traitement est en retard ou en échec{% endif %}
+            secondary: >-
+              {% if is_state('binary_sensor.meteochampignon_probleme', 'on') %}
+              {% if is_state('binary_sensor.meteochampignon_cartes_en_retard', 'on') %}Cartes en retard · {% endif %}
+              {% if is_state('binary_sensor.meteochampignon_stations_en_retard', 'on') %}Stations en retard · {% endif %}
+              {% if is_state('binary_sensor.meteochampignon_traitement_en_echec', 'on') %}Un traitement GitHub a échoué{% endif %}
+              {% else %}Cartes de pluie et mesures des stations se mettent à jour normalement{% endif %}
+            icon: >-
+              {{ 'mdi:check-circle' if is_state('binary_sensor.meteochampignon_probleme', 'off') else 'mdi:alert-circle' }}
+            icon_color: >-
+              {{ 'green' if is_state('binary_sensor.meteochampignon_probleme', 'off') else 'red' }}
+            multiline_secondary: true
+            fill_container: true
             tap_action:
-              action: perform-action
-              perform_action: script.meteochampignon_installer_dependances
-              confirmation:
-                text: "Installer s3fs, omfiles… dans /config/meteochampignon/pydeps (à part de Home Assistant) ?"
-          - type: button
-            name: 2. Vérifier les dépendances
-            icon: mdi:package-check
-            action_name: Vérifier
-            tap_action:
-              action: perform-action
-              perform_action: script.meteochampignon_verifier_dependances
-          - type: button
-            name: 3. Générer les cartes maintenant
+              action: none
+          - type: custom:mushroom-chips-card
+            alignment: center
+            chips:
+              - type: template
+                icon: mdi:weather-pouring
+                icon_color: >-
+                  {% set m = states('sensor.meteochampignon_cartes_age') | int(-1) %}{{ 'red' if m < 0 or m > 180 else ('orange' if m > 90 else 'green') }}
+                content: >-
+                  Cartes {% set m = states('sensor.meteochampignon_cartes_age') | int(-1) %}{% if m < 0 %}?{% elif m < 60 %}{{ m }} min{% else %}{{ m // 60 }} h {{ '%02d' | format(m % 60) }}{% endif %}
+                tap_action:
+                  action: none
+              - type: template
+                icon: mdi:thermometer
+                icon_color: >-
+                  {% set m = states('sensor.meteochampignon_stations_age') | int(-1) %}{{ 'red' if m < 0 or m > 180 else ('orange' if m > 90 else 'green') }}
+                content: >-
+                  Stations {% set m = states('sensor.meteochampignon_stations_age') | int(-1) %}{% if m < 0 %}?{% elif m < 60 %}{{ m }} min{% else %}{{ m // 60 }} h {{ '%02d' | format(m % 60) }}{% endif %}
+                tap_action:
+                  action: none
+              - type: template
+                icon: mdi:calendar-range
+                icon_color: blue
+                content: "{{ states('sensor.meteochampignon_cartes_jours') }} jours de prévision"
+                tap_action:
+                  action: none
+              - type: template
+                icon: "{{ 'mdi:home-assistant' if is_state('sensor.meteochampignon_cartes_source', 'home-assistant') else 'mdi:github' }}"
+                icon_color: "{{ 'green' if is_state('sensor.meteochampignon_cartes_source', 'home-assistant') else 'grey' }}"
+                content: "Cartes calculées par {{ 'Home Assistant' if is_state('sensor.meteochampignon_cartes_source', 'home-assistant') else 'GitHub' }}"
+                tap_action:
+                  action: none
+
+      # ------------------------------ Cartes de pluie ------------------------------
+      - type: grid
+        cards:
+          - type: heading
+            heading: Cartes de pluie
             icon: mdi:weather-pouring
-            action_name: Générer
+          - type: custom:mushroom-template-card
+            primary: Dernière génération
+            secondary: >-
+              {% set m = states('sensor.meteochampignon_cartes_age') | int(-1) %}{% if m < 0 %}inconnue{% elif m < 60 %}il y a {{ m }} min{% else %}il y a {{ m // 60 }} h {{ '%02d' | format(m % 60) }}{% endif %}
+              · {{ states('sensor.meteochampignon_cartes_jours') }} jours · pluie mesurée sur {{ states('sensor.meteochampignon_cartes_heures_24h') }} h
+            icon: mdi:weather-pouring
+            icon_color: >-
+              {% set m = states('sensor.meteochampignon_cartes_age') | int(-1) %}{{ 'red' if m < 0 or m > 180 else ('orange' if m > 90 else 'green') }}
+            badge_icon: >-
+              {{ 'mdi:alert' if is_state('binary_sensor.meteochampignon_cartes_en_retard', 'on') else '' }}
+            badge_color: red
+            multiline_secondary: true
             tap_action:
-              action: perform-action
-              perform_action: script.meteochampignon_cartes_maintenant
-              confirmation:
-                text: "Lancer le calcul des cartes sur Home Assistant (3 à 5 min, priorité basse) ?"
+              action: none
+          - type: custom:mushroom-template-card
+            primary: Dernier traitement GitHub
+            secondary: >-
+              {% set r = states('sensor.meteochampignon_cartes_traitement') %}
+              {{ 'réussi' if r == 'success' else ('échec' if r == 'failure' else r) }}
+              · lancé par {{ state_attr('sensor.meteochampignon_cartes_traitement', 'event') or '?' }}
+            icon: mdi:github
+            icon_color: >-
+              {% set r = states('sensor.meteochampignon_cartes_traitement') %}{{ 'green' if r == 'success' else ('red' if r in ['failure', 'cancelled'] else 'orange') }}
+            tap_action:
+              action: url
+              url_path: "{{ state_attr('sensor.meteochampignon_cartes_traitement', 'html_url') }}"
+          - type: custom:apexcharts-card
+            graph_span: 24h
+            header:
+              show: true
+              title: Âge des cartes (minutes)
+              show_states: true
+              colorize_states: true
+            series:
+              - entity: sensor.meteochampignon_cartes_age
+                name: Âge
+                type: area
+                stroke_width: 2
+                color: "#16a34a"
+                group_by:
+                  func: max
+                  duration: 15min
+            apex_config:
+              chart:
+                height: 150
+              legend:
+                show: false
+              annotations:
+                yaxis:
+                  - y: 180
+                    borderColor: "#dc2626"
+                    label:
+                      text: seuil d'alerte (3 h)
+                      style:
+                        color: "#ffffff"
+                        background: "#dc2626"
+            yaxis:
+              - min: 0
+                decimals: 0
 
-      # ---------- Cartes de pluie ----------
-      - type: entities
-        title: 🌧️ Cartes de pluie
-        show_header_toggle: false
-        entities:
-          - entity: binary_sensor.meteochampignon_cartes_en_retard
-            name: Cartes en retard (> 3 h) ?
-          - entity: sensor.meteochampignon_cartes_generation
-            name: Dernière génération des cartes
-          - entity: sensor.meteochampignon_cartes_traitement
-            name: Dernier traitement GitHub
-            secondary_info: last-updated
-          - entity: sensor.meteochampignon_cartes_traitement_date
-            name: Date du dernier traitement
-          - type: attribute
-            entity: sensor.meteochampignon_cartes_traitement
-            attribute: event
-            name: Lancé par (schedule = cron, workflow_dispatch = HA / manuel)
-          - type: attribute
-            entity: sensor.meteochampignon_cartes_traitement
-            attribute: html_url
-            name: Lien du dernier traitement
+      # ------------------------------ Stations ------------------------------
+      - type: grid
+        cards:
+          - type: heading
+            heading: Stations
+            icon: mdi:thermometer
+          - type: custom:mushroom-template-card
+            primary: Dernière mesure enregistrée
+            secondary: >-
+              {% set m = states('sensor.meteochampignon_stations_age') | int(-1) %}{% if m < 0 %}inconnue{% elif m < 60 %}il y a {{ m }} min{% else %}il y a {{ m // 60 }} h {{ '%02d' | format(m % 60) }}{% endif %}
+              · 239 stations Midi-Pyrénées
+            icon: mdi:thermometer
+            icon_color: >-
+              {% set m = states('sensor.meteochampignon_stations_age') | int(-1) %}{{ 'red' if m < 0 or m > 180 else ('orange' if m > 90 else 'green') }}
+            badge_icon: >-
+              {{ 'mdi:alert' if is_state('binary_sensor.meteochampignon_stations_en_retard', 'on') else '' }}
+            badge_color: red
+            multiline_secondary: true
+            tap_action:
+              action: none
+          - type: custom:mushroom-template-card
+            primary: Dernier traitement GitHub (secours)
+            secondary: >-
+              {% set r = states('sensor.meteochampignon_stations_traitement') %}
+              {{ 'réussi' if r == 'success' else ('échec' if r == 'failure' else r) }}
+              · lancé par {{ state_attr('sensor.meteochampignon_stations_traitement', 'event') or '?' }}
+            icon: mdi:github
+            icon_color: >-
+              {% set r = states('sensor.meteochampignon_stations_traitement') %}{{ 'green' if r == 'success' else ('red' if r in ['failure', 'cancelled'] else 'orange') }}
+            tap_action:
+              action: url
+              url_path: "{{ state_attr('sensor.meteochampignon_stations_traitement', 'html_url') }}"
+          - type: custom:apexcharts-card
+            graph_span: 24h
+            header:
+              show: true
+              title: Âge des mesures (minutes)
+              show_states: true
+              colorize_states: true
+            series:
+              - entity: sensor.meteochampignon_stations_age
+                name: Âge
+                type: area
+                stroke_width: 2
+                color: "#2563eb"
+                group_by:
+                  func: max
+                  duration: 15min
+            apex_config:
+              chart:
+                height: 150
+              legend:
+                show: false
+              annotations:
+                yaxis:
+                  - y: 180
+                    borderColor: "#dc2626"
+                    label:
+                      text: seuil d'alerte (3 h)
+                      style:
+                        color: "#ffffff"
+                        background: "#dc2626"
+            yaxis:
+              - min: 0
+                decimals: 0
 
-      # ---------- Stations ----------
-      - type: entities
-        title: 🌡️ Historique des stations
-        show_header_toggle: false
-        entities:
-          - entity: binary_sensor.meteochampignon_stations_en_retard
-            name: Stations en retard (> 3 h) ?
-          - entity: sensor.meteochampignon_stations_donnees
-            name: Dernière donnée enregistrée
-          - entity: sensor.meteochampignon_stations_traitement
-            name: Dernier traitement GitHub
-            secondary_info: last-updated
-          - entity: sensor.meteochampignon_stations_traitement_date
-            name: Date du dernier traitement
-          - type: attribute
-            entity: sensor.meteochampignon_stations_traitement
-            attribute: event
-            name: Lancé par
+      # ------------------------------ Home Assistant ------------------------------
+      - type: grid
+        cards:
+          - type: heading
+            heading: Automatisations
+            icon: mdi:robot
+          # Les automatisations sont retrouvées par leur identifiant (attribut « id »),
+          # pas par leur nom d'entité : indépendant de la façon dont HA les a nommées.
+          - type: custom:mushroom-template-card
+            primary: Collecte des stations
+            secondary: >-
+              {% set a = states.automation | selectattr('attributes.id', 'eq', 'meteochampignon_collecter_stations') | first | default(none) %}
+              {% if a is none %}automatisation introuvable{% else %}toutes les 30 min (:15 et :45) · dernier passage {{ ('il y a ' ~ relative_time(a.attributes.last_triggered)) if a.attributes.last_triggered else 'pas encore' }}{% endif %}
+            icon: mdi:download-network
+            icon_color: green
+            multiline_secondary: true
+            tap_action:
+              action: none
+          - type: custom:mushroom-template-card
+            primary: Génération des cartes
+            secondary: >-
+              {% set a = states.automation | selectattr('attributes.id', 'eq', 'meteochampignon_generer_cartes') | first | default(none) %}
+              {% if a is none %}automatisation introuvable{% else %}toutes les 30 min (:05 et :35) · dernier passage {{ ('il y a ' ~ relative_time(a.attributes.last_triggered)) if a.attributes.last_triggered else 'pas encore' }}{% endif %}
+            icon: mdi:image-multiple
+            icon_color: green
+            multiline_secondary: true
+            tap_action:
+              action: none
+          - type: custom:mushroom-template-card
+            primary: Secours GitHub
+            secondary: >-
+              {% set a = states.automation | selectattr('attributes.id', 'eq', 'meteochampignon_declencher_jobs') | first | default(none) %}
+              {% if a is none %}automatisation introuvable{% else %}vérifie toutes les 15 min, ne lance GitHub que si les données ont plus de 90 min · dernier passage {{ ('il y a ' ~ relative_time(a.attributes.last_triggered)) if a.attributes.last_triggered else 'pas encore' }}{% endif %}
+            icon: mdi:shield-check
+            icon_color: blue
+            multiline_secondary: true
+            tap_action:
+              action: none
 
-      # ---------- Déclencheur Home Assistant ----------
-      - type: entities
-        title: ⏱️ Déclencheur Home Assistant
-        show_header_toggle: false
-        entities:
-          - entity: automation.meteochampignon_declencher_les_traitements_github
-            name: Appel de GitHub toutes les 15 min
-          - type: attribute
-            entity: automation.meteochampignon_declencher_les_traitements_github
-            attribute: last_triggered
-            name: Dernier appel
-          - entity: binary_sensor.meteochampignon_traitement_en_echec
-            name: Un traitement a échoué ?
+      # ------------------------------ Actions ------------------------------
+      - type: grid
+        column_span: 2
+        cards:
+          - type: heading
+            heading: Actions
+            icon: mdi:gesture-tap
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: custom:mushroom-template-card
+                primary: Tout lancer maintenant
+                secondary: Stations + cartes sur GitHub
+                icon: mdi:play-circle
+                icon_color: green
+                tap_action:
+                  action: perform-action
+                  perform_action: script.meteochampignon_lancer_maintenant
+                  confirmation:
+                    text: "Lancer les deux traitements GitHub tout de suite ?"
+              - type: custom:mushroom-template-card
+                primary: Générer les cartes ici
+                secondary: Calcul sur Home Assistant (3 à 5 min)
+                icon: mdi:weather-pouring
+                icon_color: blue
+                tap_action:
+                  action: perform-action
+                  perform_action: script.meteochampignon_cartes_maintenant
+                  confirmation:
+                    text: "Lancer le calcul des cartes sur Home Assistant (3 à 5 min, priorité basse) ?"
+              - type: custom:mushroom-template-card
+                primary: Tester la collecte
+                secondary: Sans rien écrire
+                icon: mdi:check-network
+                icon_color: teal
+                tap_action:
+                  action: perform-action
+                  perform_action: script.meteochampignon_tester_collecte
+              - type: custom:mushroom-template-card
+                primary: Diagnostic Python
+                secondary: Home Assistant peut-il calculer les cartes ?
+                icon: mdi:stethoscope
+                icon_color: purple
+                tap_action:
+                  action: perform-action
+                  perform_action: script.meteochampignon_diagnostic
+              - type: custom:mushroom-template-card
+                primary: 1. Installer les dépendances
+                secondary: Une seule fois, à part de Home Assistant
+                icon: mdi:package-down
+                icon_color: orange
+                tap_action:
+                  action: perform-action
+                  perform_action: script.meteochampignon_installer_dependances
+                  confirmation:
+                    text: "Installer s3fs, omfiles… dans /config/meteochampignon/pydeps (à part de Home Assistant) ?"
+              - type: custom:mushroom-template-card
+                primary: 2. Vérifier les dépendances
+                secondary: Résultat dans les notifications
+                icon: mdi:package-check
+                icon_color: orange
+                tap_action:
+                  action: perform-action
+                  perform_action: script.meteochampignon_verifier_dependances
+          - type: custom:mushroom-chips-card
+            alignment: center
+            chips:
+              - type: template
+                icon: mdi:open-in-new
+                icon_color: blue
+                content: Ouvrir le site
+                tap_action:
+                  action: url
+                  url_path: https://meteochampignon.vercel.app/
+              - type: template
+                icon: mdi:github
+                icon_color: grey
+                content: Traitements GitHub
+                tap_action:
+                  action: url
+                  url_path: https://github.com/drugpad/meteochampignon/actions
 
-      # ---------- Historique visuel ----------
-      - type: history-graph
-        title: Retards sur 3 jours
-        hours_to_show: 72
-        entities:
-          - entity: binary_sensor.meteochampignon_cartes_en_retard
-            name: Cartes
-          - entity: binary_sensor.meteochampignon_stations_en_retard
-            name: Stations
-          - entity: binary_sensor.meteochampignon_traitement_en_echec
-            name: Échecs
+  # ===================================================================
+  # Page 2 : la carte (le vrai site, en plein écran)
+  # ===================================================================
+  - title: Carte
+    path: carte
+    icon: mdi:map
+    panel: true
+    cards:
+      - type: iframe
+        url: https://meteochampignon.vercel.app/
+        aspect_ratio: 100%
