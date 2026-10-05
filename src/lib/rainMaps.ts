@@ -2,13 +2,24 @@
 // scripts/build-rain-maps.py (voir .github/workflows/maps.yml).
 //
 // Les fichiers sont publiés sur la branche orpheline `data` (écrasée à chaque
-// run : aucun historique, aucun déploiement Vercel) et servis par
-// raw.githubusercontent.com (CORS ouvert, cache ~5 min). VITE_MAPS_BASE_URL
-// permet de pointer ailleurs en développement (ex. /dev-maps).
+// run : aucun historique, aucun déploiement Vercel). Source principale :
+// raw.githubusercontent.com (CORS ouvert, cache ~5 min). Source de secours :
+// jsDelivr, qui sert la même branche (cache plus long, parfois de plusieurs
+// heures : acceptable en secours, l'âge réel reste affiché). VITE_MAPS_BASE_URL
+// force une source unique (ex. /dev-maps en développement).
 import type { RainImage, RainMapsMeta } from '../types'
 
-export const MAPS_BASE_URL: string =
-  import.meta.env.VITE_MAPS_BASE_URL ?? 'https://raw.githubusercontent.com/drugpad/meteochampignon/data'
+const FORCED_BASE: string | undefined = import.meta.env.VITE_MAPS_BASE_URL
+const BASES: string[] = FORCED_BASE
+  ? [FORCED_BASE]
+  : [
+      'https://raw.githubusercontent.com/drugpad/meteochampignon/data',
+      'https://cdn.jsdelivr.net/gh/drugpad/meteochampignon@data',
+    ]
+
+// Source qui a répondu pour maps.json : les PNG sont lus au même endroit, pour
+// rester cohérents avec ce maps.json.
+let activeBase = BASES[0]
 
 // Message affiché dans le panneau de la carte : toujours en français et lisible,
 // jamais l'erreur brute du navigateur (« Failed to fetch », « Unexpected token
@@ -16,17 +27,23 @@ export const MAPS_BASE_URL: string =
 const UNAVAILABLE = 'Cartes de pluie indisponibles pour le moment. Réessaie dans un instant.'
 
 export async function fetchRainMapsMeta(): Promise<RainMapsMeta> {
-  let meta: RainMapsMeta
-  try {
-    const res = await fetch(`${MAPS_BASE_URL}/maps.json`, { cache: 'no-store' })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    meta = (await res.json()) as RainMapsMeta
-  } catch {
-    throw new Error(UNAVAILABLE)
+  let meta: RainMapsMeta | null = null
+  for (const base of BASES) {
+    try {
+      const res = await fetch(`${base}/maps.json`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const candidate = (await res.json()) as RainMapsMeta
+      if (!candidate.rain24h || !Array.isArray(candidate.forecast) || candidate.forecast.length === 0) {
+        throw new Error('format inattendu')
+      }
+      meta = candidate
+      activeBase = base
+      break
+    } catch {
+      // source suivante
+    }
   }
-  if (!meta.rain24h || !Array.isArray(meta.forecast) || meta.forecast.length === 0) {
-    throw new Error('Cartes de pluie : format inattendu. Réessaie plus tard.')
-  }
+  if (!meta) throw new Error(UNAVAILABLE)
   return meta
 }
 
@@ -38,7 +55,7 @@ export async function fetchRainImage(meta: RainMapsMeta, file: string): Promise<
   // donc pas de PNG périmé servi par le cache à côté d'un maps.json récent.
   let bitmap: ImageBitmap
   try {
-    const res = await fetch(`${MAPS_BASE_URL}/${file}?v=${encodeURIComponent(meta.fetchedAt)}`)
+    const res = await fetch(`${activeBase}/${file}?v=${encodeURIComponent(meta.fetchedAt)}`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     bitmap = await createImageBitmap(await res.blob(), { colorSpaceConversion: 'none' })
   } catch {
@@ -77,8 +94,13 @@ export function firstCurrentDayIndex(days: { date: string }[], now = new Date())
   return index === -1 ? 0 : index
 }
 
+// Au-delà de cet âge, les cartes sont signalées comme en retard dans le
+// panneau (le cron GitHub saute parfois plusieurs heures de suite).
+export const STALE_MAPS_HOURS = 6
+
 export const MODEL_LABELS: Record<string, string> = {
   meteofrance_arome_france_hd: 'AROME HD',
   meteofrance_arpege_europe: 'ARPEGE',
   ecmwf_ifs025: 'ECMWF IFS',
+  ecmwf_aifs025_single: 'ECMWF AIFS',
 }

@@ -150,5 +150,13 @@ export async function fetchStationDetail(station: Station): Promise<StationDetai
       complete: (pointsPerDay.get(date) ?? 0) >= COMPLETE_RATIO * (expectedPerDay.get(date) ?? 1),
     }))
 
-  return { station, rainHistory, tempHistory, dailyRain, miniForecast, last24hCoverage: last24h.length }
+  return {
+    station,
+    rainHistory,
+    tempHistory,
+    dailyRain,
+    miniForecast,
+    last24hCoverage: last24h.length,
+    lastObservation: points.length > 0 ? points[points.length - 1].time : null,
+  }
 }

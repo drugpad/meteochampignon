@@ -4,6 +4,7 @@
 // prenait trop de place), et mini prévision 5 jours elle aussi en graphique.
 import { Bar, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import './StationPopup.css'
+import { formatRelativeAge, isOlderThanHours } from '../lib/formatRelativeAge'
 import { COMPLETE_RATIO, meteocielStationUrl } from '../lib/stations'
 import { weatherCodeInfo } from '../lib/weatherCode'
 import type { StationDetailState } from '../types'
@@ -47,7 +48,8 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
     return <div className={`${rootClassName} station-popup--message station-popup--error`}>{state.message}</div>
   }
 
-  const { station, rainHistory, tempHistory, dailyRain, miniForecast, last24hCoverage } = state.detail
+  const { station, rainHistory, tempHistory, dailyRain, miniForecast, last24hCoverage, lastObservation } = state.detail
+  const observationLate = lastObservation !== null && isOlderThanHours(lastObservation, 6)
   // Avertissements calculés sur la couverture réelle des données (voir
   // fetchStationDetail) : ils disparaissent seuls quand les trous sont comblés.
   const incomplete24h = last24hCoverage < COMPLETE_RATIO * 24
@@ -83,6 +85,13 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
           <div className="station-popup__title">{station.name}</div>
           {station.altitude !== undefined && <div className="station-popup__altitude">{station.altitude} m d'altitude</div>}
         </>
+      )}
+
+      {lastObservation !== null && (
+        <div className={observationLate ? 'station-popup__notice' : 'station-popup__altitude'}>
+          Dernière mesure reçue : {formatRelativeAge(new Date(lastObservation as string).getTime())}
+          {observationLate && ' — mise à jour en retard (les mesures arrivent par lots)'}
+        </div>
       )}
 
       <a

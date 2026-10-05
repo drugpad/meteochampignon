@@ -6,7 +6,8 @@
 import { useEffect, useRef, useState } from 'react'
 import './RainControls.css'
 import { RAIN_LEGEND_STOPS } from '../lib/color'
-import { formatRelativeAge } from '../lib/formatRelativeAge'
+import { formatRelativeAge, isOlderThanHours } from '../lib/formatRelativeAge'
+import { STALE_MAPS_HOURS } from '../lib/rainMaps'
 import type { RainImageState, RainMapsState } from '../types'
 
 const TIME_FORMATTER = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -63,6 +64,11 @@ export function RainControls({ maps, image, onRetry }: Props) {
                 Actualisé à {TIME_FORMATTER.format(new Date(maps.meta.fetchedAt))} (
                 {formatRelativeAge(new Date(maps.meta.fetchedAt).getTime())}) · AROME HD 1,5 km
               </div>
+              {isOlderThanHours(maps.meta.fetchedAt, STALE_MAPS_HOURS) && (
+                <div className="rain-controls__error">
+                  ⚠ Cartes en retard de mise à jour : la pluie récente peut manquer.
+                </div>
+              )}
               <div className="rain-controls__legend">
                 {RAIN_LEGEND_STOPS.map((stop) => (
                   <div key={stop.label} className="rain-controls__legend-item">

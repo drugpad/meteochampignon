@@ -1,7 +1,7 @@
 name: Cartes de pluie
 
 # Génère les cartes de pluie (24h passées + prévisions par jour) avec
-# scripts/build-rain-maps.py et les publie sur la branche orpheline `data`
+# scripts/build-rain-maps.py et les publie sur la branche orpheline "data"
 # (écrasée à chaque run : AUCUN historique, donc aucune croissance du dépôt
 # malgré des PNG qui changent à chaque fois, et aucun déploiement Vercel
 # déclenché — voir vercel.json). L'appli les lit sur raw.githubusercontent.com.
@@ -12,15 +12,26 @@ name: Cartes de pluie
 # Ici, les données brutes des modèles sont lues sur le stockage public
 # d'Open-Meteo : aucun appel d'API, et 1,5 km de résolution au lieu de 3,3 km.
 #
-# Tout est recalculé à chaque run (pas de fusion entre tranches) : un run raté
-# ou un cron sauté (GitHub n'en déclenche qu'environ un tiers) retarde juste
-# la mise à jour, il ne laisse jamais de carte incohérente. Deux créneaux par
-# heure (:05 et :35) pour multiplier les chances d'un déclenchement effectif ;
-# minutes distinctes de celles du job des stations (:20 et :50).
+# DÉCLENCHEURS — le cron natif de GitHub n'en déclenche qu'une fraction (9 à
+# 33 % mesurés : la doc dit que "schedule" peut être retardé ou abandonné),
+# donc trois sources, toutes protégées par le même garde-fou d'âge :
+#   1. cron, 6 créneaux par heure (chacun a sa propre chance de partir) ;
+#   2. workflow_dispatch appelé de l'extérieur toutes les 15 min (Home
+#      Assistant, voir docs/home-assistant.md) — non soumis aux pertes du cron ;
+#   3. lancement manuel (input "force" pour ignorer le garde-fou).
+# Le garde-fou (moins de 50 min depuis la dernière génération = on ne fait
+# rien) borne le travail à ~1 génération par heure quel que soit le nombre de
+# déclencheurs. Minutes distinctes de celles du job des stations
+# (station-history.yml) : des crons simultanés se sautent mutuellement.
 on:
   schedule:
-    - cron: '5,35 * * * *'
-  workflow_dispatch: {}
+    - cron: '3,13,23,33,43,53 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Ignorer le garde-fou d'âge (régénérer même si les cartes sont récentes)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -38,22 +49,41 @@ jobs:
     # ~3 min en local, marge large pour le réseau S3.
     timeout-minutes: 15
     steps:
+      - name: Garde-fou d'âge
+        id: guard
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          fetched=$(curl -fsS "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/data/maps.json" 2>/dev/null | grep -o '"fetchedAt":"[^"]*"' | cut -d'"' -f4 || true)
+          skip=false
+          if [ -n "$fetched" ] && [ "$FORCE" != "true" ]; then
+            age=$(( $(date -u +%s) - $(date -u -d "$fetched" +%s) ))
+            echo "Dernière génération : $fetched (il y a ${age}s)"
+            if [ "$age" -lt 3000 ]; then skip=true; echo "Cartes récentes : rien à faire."; fi
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v6
+        if: steps.guard.outputs.skip != 'true'
 
       - uses: actions/setup-python@v6
+        if: steps.guard.outputs.skip != 'true'
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: scripts/requirements-maps.txt
 
       - run: pip install -r scripts/requirements-maps.txt
+        if: steps.guard.outputs.skip != 'true'
 
       - name: Générer les cartes
+        if: steps.guard.outputs.skip != 'true'
         env:
           OUT_DIR: ${{ runner.temp }}/maps-out
         run: python scripts/build-rain-maps.py
 
       - name: Publier sur la branche data (écrasée)
+        if: steps.guard.outputs.skip != 'true'
         env:
           OUT_DIR: ${{ runner.temp }}/maps-out
           GH_TOKEN: ${{ github.token }}

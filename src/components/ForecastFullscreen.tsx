@@ -5,10 +5,8 @@
 // prend tout l'écran et glisse depuis la droite comme une vraie page.
 import { createPortal } from 'react-dom'
 import './ForecastFullscreen.css'
-import { weatherCodeInfo } from '../lib/weatherCode'
+import { ForecastDayCard } from './ForecastDayCard'
 import type { ForecastState } from '../types'
-
-const WEEKDAY_FORMATTER = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })
 
 type Props = { state: Exclude<ForecastState, { status: 'idle' }>; onClose: () => void }
 
@@ -33,25 +31,9 @@ export function ForecastFullscreen({ state, onClose }: Props) {
 
         {state.status === 'ready' && (
           <div className="forecast-panel__days">
-            {state.days.map((day) => {
-              const { emoji, label } = weatherCodeInfo(day.weatherCode)
-              return (
-                <div key={day.date} className="forecast-day">
-                  <div className="forecast-day__date">{WEEKDAY_FORMATTER.format(new Date(day.date))}</div>
-                  <div className="forecast-day__emoji" title={label}>
-                    {emoji}
-                  </div>
-                  <div className="forecast-day__temps">
-                    <span className="forecast-day__max">{Math.round(day.tempMax)}°</span>
-                    <span className="forecast-day__min">{Math.round(day.tempMin)}°</span>
-                  </div>
-                  <div className="forecast-day__precip">
-                    💧 {day.precipitationSum.toFixed(1)}mm
-                    {day.precipitationProbabilityMax !== null && ` (${day.precipitationProbabilityMax}%)`}
-                  </div>
-                </div>
-              )
-            })}
+            {state.days.map((day) => (
+              <ForecastDayCard key={day.date} day={day} />
+            ))}
           </div>
         )}
       </div>

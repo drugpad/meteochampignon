@@ -47,6 +47,17 @@ const COMPLETE_RATIO = 0.95
 const ALWAYS_REFETCH_LAST_HOURS = 3
 const REQUEST_DELAY_MS = 700
 
+// RATTRAPAGE PROFOND : au-delà de 23h le paquet ne répond plus (HTTP 400), mais
+// l'API par station remonte ~4 jours en pratique (non documenté : la doc
+// annonce 24h). Si un trou dépasse 23h (cron GitHub en panne plusieurs
+// heures de suite), on comble station par station les heures encore
+// récupérables, les plus anciennes d'abord (ce sont elles qui vont expirer).
+// Budget d'appels par run pour rester sous la limite de 50 req/min de cette
+// API et sous le timeout du job ; le reste est repris au run suivant.
+const DEEP_MAX_HOURS = 95
+const DEEP_CALL_BUDGET = Number(process.env.DEEP_BUDGET ?? 700)
+const DEEP_DELAY_MS = 1450
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function apiKey() {
@@ -117,6 +128,28 @@ function hoursToFetch(history, stationIds, now) {
   return { hours, last }
 }
 
+// Heures de la zone profonde (de DEEP_MAX_HOURS à WINDOW_HOURS en arrière) où
+// trop peu de stations ont un point, avec les stations manquantes de chacune.
+function deepGaps(history, stationIds, now) {
+  const first = Math.ceil((now - DEEP_MAX_HOURS * HOUR_MS) / HOUR_MS) * HOUR_MS
+  const end = Math.ceil((now - WINDOW_HOURS * HOUR_MS) / HOUR_MS) * HOUR_MS // exclu : couvert par le paquet
+  const present = new Map() // heure ISO -> Set des stations ayant un point
+  for (const id of stationIds) {
+    for (const p of history[id] ?? []) {
+      if (!present.has(p.time)) present.set(p.time, new Set())
+      present.get(p.time).add(id)
+    }
+  }
+  const gaps = []
+  for (let t = first; t < end; t += HOUR_MS) {
+    const iso = isoHour(t)
+    const have = present.get(iso) ?? new Set()
+    if (have.size >= COMPLETE_RATIO * stationIds.length) continue
+    gaps.push({ iso, missing: stationIds.filter((id) => !have.has(id)) })
+  }
+  return gaps
+}
+
 async function main() {
   const key = apiKey()
   const stations = JSON.parse(await readFile(STATIONS_PATH, 'utf-8'))
@@ -163,6 +196,33 @@ async function main() {
         if (obs?.validity_time) (collected[id] ??= []).push(toPoint(obs))
       }
       received = Object.keys(collected).length > 0 ? 1 : 0
+    }
+
+    // Rattrapage profond (voir DEEP_*), seulement si le paquet fonctionne :
+    // sinon la clé ou le service est en cause et on ne martèle pas l'API.
+    if (received > 0) {
+      let budget = DEEP_CALL_BUDGET
+      const gaps = deepGaps(history, ids, now)
+      if (gaps.length > 0) {
+        console.log(`Rattrapage profond : ${gaps.length} heure(s) hors fenêtre du paquet à compléter (budget ${budget} appels).`)
+      }
+      for (const gap of gaps) {
+        if (budget <= 0) break
+        let got = 0
+        for (const id of gap.missing) {
+          if (budget <= 0) break
+          budget--
+          await wait(DEEP_DELAY_MS)
+          const url = `${STATION_URL}?id_station=${id}&date=${encodeURIComponent(gap.iso)}&format=json`
+          const { body } = await getJson(url, key)
+          const obs = body?.[0]
+          if (obs?.validity_time === gap.iso) {
+            ;(collected[id] ??= []).push(toPoint(obs))
+            got++
+          }
+        }
+        console.log(`  ${gap.iso} : +${got} point(s) (${gap.missing.length} stations manquantes).`)
+      }
     }
   } finally {
     // Même si le run est interrompu en cours de route, on garde ce qui a

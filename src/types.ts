@@ -13,6 +13,10 @@ export type ForecastDay = {
   precipitationSum: number // mm
   precipitationProbabilityMax: number | null // %
   windSpeedMax: number // km/h
+  // Modèle dont vient le cumul de pluie (même politique que les cartes) et
+  // cumuls des autres modèles disponibles ce jour-là, pour signaler un désaccord.
+  precipitationModel: string | null
+  otherModels: { model: string; mm: number }[]
 }
 
 export type ForecastState =
@@ -73,6 +77,7 @@ export type StationDetail = {
   // observées ce jour-là, le cumul est un minimum.
   dailyRain: { date: string; rain: number; complete: boolean }[]
   last24hCoverage: number // nombre d'heures observées sur les 24 dernières (sur 24)
+  lastObservation: string | null // ISO UTC de la dernière mesure connue de cette station
   miniForecast: ForecastDay[] // 5 jours, source Open-Meteo pour ce point
 }
 

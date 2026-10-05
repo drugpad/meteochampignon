@@ -24,7 +24,7 @@ Chaque PNG est en niveaux de gris 8 bits : valeur = mm * 10 (plafonné à
 
 Modèle par jour de prévision : le plus fin qui couvre TOUTE la journée —
 AROME HD (51h), puis ARPEGE Europe (0,1°, ~4 jours), puis IFS ECMWF (0,25°,
-10 jours). Au-delà de 2 jours aucun modèle ne descend plus bas que ces
+6 jours), puis AIFS ECMWF (0,25°, 15 jours) pour atteindre 7 jours. Au-delà de 2 jours aucun modèle ne descend plus bas que ces
 résolutions : on ne perd rien par rapport à la réalité.
 
 Dépendances : numpy scipy s3fs omfiles pillow.
@@ -211,6 +211,40 @@ def save_png(mm, path):
     Image.fromarray(np.ascontiguousarray(levels[::-1])).save(path, optimize=True, compress_level=9)  # ligne 0 = nord
 
 
+# Modèles à pas irréguliers, du plus fin au plus lointain.
+STEPPED_MODELS = [("ecmwf_ifs025", 25), ("ecmwf_aifs025_single", 25)]
+
+
+def load_model(name):
+    """Modèle, ou None si son dernier run est indisponible/incomplet (on passe
+    alors au modèle suivant plutôt que de faire échouer tout le job)."""
+    try:
+        return Model(name)
+    except Exception as err:
+        log(f"modèle {name} indisponible: {err}")
+        return None
+
+
+def stepped_field(model, start, end, rows, cols):
+    """Cumul (mm) sur [start, end] d'un modèle à pas variables, ramené à la
+    grille de sortie ; None si le run ne couvre pas toute la journée."""
+    steps = [(model.valid[i - 1], model.valid[i]) for i in range(1, len(model.valid))]
+    inter = [(p, q) for p, q in steps if q > start and p < end]
+    if not inter or inter[0][0] > start or inter[-1][1] < end:
+        return None
+    with ThreadPoolExecutor(THREADS) as ex:
+        parts = list(ex.map(lambda pq: model.read(pq[1]), inter))
+    if sum(p is None for p in parts) > 1:
+        return None
+    total = 0
+    for (p, q), arr in zip(inter, parts):
+        if arr is None:
+            continue
+        overlap = (min(q, end) - max(p, start)).total_seconds() / (q - p).total_seconds()
+        total = total + arr * overlap
+    return to_target_grid(total, model, rows, cols)
+
+
 def paris_day_bounds(today, offset):
     d = today + timedelta(days=offset)
     start = datetime(d.year, d.month, d.day, tzinfo=PARIS).astimezone(UTC)
@@ -252,7 +286,8 @@ def main():
     log(f"rain24h: moyenne {acc.mean():.2f} mm, max {acc.max():.1f} mm")
 
     # --- 2) prévisions par jour calendaire (Paris) ------------------------
-    arpege = ifs = None
+    arpege = None
+    stepped_models = {}
     forecast = []
     for k, (d, start, end) in enumerate(days):
         hours = []
@@ -270,33 +305,32 @@ def main():
             run = arome.m.ref
         else:
             if arpege is None:
-                arpege = Model("meteofrance_arpege_europe")
-            if hours[-1] <= arpege.valid[-1] and start >= arpege.ref:
+                arpege = load_model("meteofrance_arpege_europe") or False
+            if arpege and hours[-1] <= arpege.valid[-1] and start >= arpege.ref:
                 with ThreadPoolExecutor(THREADS) as ex:
                     parts = list(ex.map(lambda t: arpege.read(t), hours))
                 if sum(p is None for p in parts) <= 2:
                     field = to_target_grid(sum(p for p in parts if p is not None), arpege, rows, cols)
                     model_name, res_km, run = "meteofrance_arpege_europe", 11, arpege.ref
+            # Modèles à pas de 3h / 6h (IFS 144h, puis AIFS 15 jours) : chaque
+            # fichier est le cumul de l'intervalle (t_prev, t] ; on en répartit la
+            # part qui tombe dans la journée. Le premier qui couvre TOUTE la
+            # journée est retenu (l'IFS s'arrête à 6 jours : sans AIFS, la carte
+            # perdait son 7e jour).
             if field is None:
-                if ifs is None:
-                    ifs = Model("ecmwf_ifs025")
-                # Pas de 3h puis 6h : chaque fichier est le cumul de l'intervalle
-                # (t_prev, t] ; on en répartit la part qui tombe dans la journée.
-                steps = [(ifs.valid[i - 1], ifs.valid[i]) for i in range(1, len(ifs.valid))]
-                inter = [(p, q) for p, q in steps if q > start and p < end]
-                if not inter or inter[-1][1] < end:
-                    log(f"jour {d}: hors de portée de tous les modèles, ignoré")
-                    continue
-                with ThreadPoolExecutor(THREADS) as ex:
-                    parts = list(ex.map(lambda pq: ifs.read(pq[1]), inter))
-                tot = 0
-                for (p, q), arr in zip(inter, parts):
-                    if arr is None:
+                for name, km in STEPPED_MODELS:
+                    if name not in stepped_models:  # chargé une seule fois (setdefault l'évaluerait à chaque jour)
+                        stepped_models[name] = load_model(name)
+                    stepped = stepped_models[name]
+                    if stepped is None:
                         continue
-                    overlap = (min(q, end) - max(p, start)).total_seconds() / (q - p).total_seconds()
-                    tot = tot + arr * overlap
-                field = to_target_grid(tot, ifs, rows, cols)
-                model_name, res_km, run = "ecmwf_ifs025", 25, ifs.ref
+                    field = stepped_field(stepped, start, end, rows, cols)
+                    if field is not None:
+                        model_name, res_km, run = name, km, stepped.ref
+                        break
+            if field is None:
+                log(f"jour {d}: hors de portée de tous les modèles, ignoré")
+                continue
 
         fname = f"forecast-day{k}.png"
         save_png(field, f"{OUT_DIR}/{fname}")
@@ -310,8 +344,6 @@ def main():
         raise RuntimeError("Aucune prévision produite")
 
     # Contrôle de cohérence entre modèles sur le jour de recouvrement (info).
-    if arpege is not None and len(forecast) > 1 and forecast[1]["model"] == "meteofrance_arome_france_hd":
-        log("contrôle: voir moyennes AROME (D1) et ARPEGE (D2) ci-dessus (ordres de grandeur comparables attendus)")
 
     half = AROME_STEP / 2  # les cellules sont centrées sur les coordonnées
     meta = {

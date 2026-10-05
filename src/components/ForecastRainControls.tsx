@@ -7,8 +7,8 @@
 import { useEffect, useRef, useState } from 'react'
 import './ForecastRainControls.css'
 import { RAIN_LEGEND_STOPS } from '../lib/color'
-import { formatRelativeAge } from '../lib/formatRelativeAge'
-import { MODEL_LABELS, todayParisKey, tomorrowParisKey } from '../lib/rainMaps'
+import { formatRelativeAge, isOlderThanHours } from '../lib/formatRelativeAge'
+import { MODEL_LABELS, STALE_MAPS_HOURS, todayParisKey, tomorrowParisKey } from '../lib/rainMaps'
 import type { RainImageState, RainMapsState } from '../types'
 
 const TIME_FORMATTER = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -68,6 +68,10 @@ export function ForecastRainControls({ maps, image, selectedDay, onSelectDay, on
                 Actualisé à {TIME_FORMATTER.format(new Date(maps.meta.fetchedAt))} (
                 {formatRelativeAge(new Date(maps.meta.fetchedAt).getTime())})
               </div>
+
+              {isOlderThanHours(maps.meta.fetchedAt, STALE_MAPS_HOURS) && (
+                <div className="forecast-rain-controls__error">⚠ Cartes en retard de mise à jour.</div>
+              )}
 
               <div className="forecast-rain-controls__days">
                 {maps.meta.forecast.map((d, i) =>

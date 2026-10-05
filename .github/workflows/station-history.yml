@@ -10,13 +10,19 @@ name: Accumuler l'historique des stations
 # de l'API Paquet), à 1 appel par heure. `rr1` est la pluie de l'heure
 # précédente seulement : sans rattrapage, chaque run raté perdait une pluie.
 #
-# Deux créneaux par heure (:20 et :50) pour multiplier les chances d'un
-# déclenchement effectif ; le second ne commit rien s'il n'y a rien de neuf.
-# Minutes distinctes de celles des jobs de cartes (voir maps.yml) : des crons
-# simultanés se sautent mutuellement sous charge.
+# DÉCLENCHEURS : 6 créneaux cron par heure (chacun a sa propre chance de
+# partir) + workflow_dispatch appelé de l'extérieur toutes les 15 min par Home
+# Assistant (docs/home-assistant.md), qui n'est pas soumis aux pertes du cron.
+# Un run sans rien de neuf dure ~15 s et ne commit rien.
+#
+# RATTRAPAGE PROFOND : si un trou dépasse 23h (limite du paquet), le script
+# comble station par station jusqu'à ~4 jours en arrière (voir
+# fetch-station-history.mjs) — d'où le timeout élargi. Minutes distinctes de
+# celles du job des cartes (maps.yml) : des crons simultanés se sautent
+# mutuellement sous charge.
 on:
   schedule:
-    - cron: '20,50 * * * *'
+    - cron: '7,17,27,37,47,57 * * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -31,8 +37,9 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-24.04
-    # 24 appels au plus (~30 s). Marge large pour les retries réseau.
-    timeout-minutes: 10
+    # Normalement ~15-30 s (24 appels au plus). Le rattrapage profond (trou de
+    # plus de 23h) peut monter à ~700 appels, soit ~17 min : marge large.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
 
