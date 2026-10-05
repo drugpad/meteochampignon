@@ -7,7 +7,8 @@
  *
  * Lit les entités du paquet packages/meteochampignon.yaml.
  */
-const MC_VERSION = "1.0.1";
+;(() => {
+const MC_VERSION = "1.0.2";
 
 const E = {
   probleme: "binary_sensor.meteochampignon_probleme",
@@ -351,3 +352,5 @@ class MeteochampignonCard extends HTMLElement {
 if (!customElements.get("meteochampignon-card")) customElements.define("meteochampignon-card", MeteochampignonCard);
 window.customCards = window.customCards || [];
 window.customCards.push({ type: "meteochampignon-card", name: "Météochampignon", description: "Suivi des cartes de pluie et des stations", preview: false });
+console.info("[meteochampignon-card] chargée v"+MC_VERSION);
+})();
