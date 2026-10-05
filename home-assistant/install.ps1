@@ -127,22 +127,9 @@ if ($cfg -match '(?m)^\s*packages\s*:') {
     (si vous avez déjà une section 'homeassistant:', ajoutez seulement la ligne 'packages:' dedans)
 "@ -ForegroundColor Yellow
 }
-# Chargement de la carte : une ligne sous frontend: extra_module_url: (sauvegarde avant modification)
-$cardUrl = '/local/meteochampignon-card.js'
-$extraRx = '(?m)^([ \t]*)extra_module_url[ \t]*:[ \t]*\r?\n'
-if ($cfg.Contains($cardUrl)) {
-  Ok "La carte est déjà chargée par configuration.yaml"
-} elseif ($cfg -match $extraRx) {
-  $cfgPath = Join-Path $Ha 'configuration.yaml'
-  Copy-Item $cfgPath "$cfgPath.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-  $ind = $Matches[1]
-  $m = [regex]::Match($cfg, $extraRx)
-  $new = $cfg.Insert($m.Index + $m.Length, "$ind  - ${cardUrl}?v=1`n")
-  [System.IO.File]::WriteAllText($cfgPath, $new, $utf8NoBom)
-  Ok "carte ajoutée à frontend: extra_module_url (sauvegarde créée)"
-} else {
-  Warn "Ajoutez la carte à la main : Paramètres > Tableaux de bord > ⋮ > Ressources > /local/meteochampignon-card.js (Module JavaScript)."
-}
+# La carte du tableau de bord est une RESSOURCE Lovelace (/local/meteochampignon-card.js?v=N),
+# pas une ligne de configuration.yaml. Si elle manque : Paramètres > Tableaux de bord > ⋮ > Ressources.
+Ok "Carte : ressource Lovelace /local/meteochampignon-card.js (voir docs/home-assistant.md)"
 if ($cfg -match '(?m)^\s*lovelace\s*:') {
   Warn "configuration.yaml contient déjà 'lovelace:' : si HA signale un doublon sur 'dashboards', fusionnez à la main (voir docs/home-assistant.md)."
 }

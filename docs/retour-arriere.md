@@ -115,8 +115,7 @@ git push origin --delete data
 | `dashboards/meteochampignon.yaml` | **ajouté** |
 | `meteochampignon/stations.py`, `maps.py`, `install_deps.py`, `check_env.py`, `build_rain_maps.py` | **ajoutés** |
 | `www/meteochampignon-card.js` | **ajouté** : carte du tableau de bord |
-| `configuration.yaml` : ligne `- /local/meteochampignon-card.js?v=1` sous `frontend:` > `extra_module_url:` | **ajoutée** (sauvegarde `configuration.yaml.bak-20261005-230239`) |
-| Ressource de tableau de bord `/local/meteochampignon-card.js?v=2` (id `379717`, ajoutée le 05/10 par l'API de HA) | **ajoutée** : la voie de chargement fiable. Retrait : *Paramètres* > *Tableaux de bord* > ⋮ > *Ressources* |
+| Ressource de tableau de bord `/local/meteochampignon-card.js?v=3` (id `379717`, ajoutée le 05/10 par l'API de HA) | **ajoutée** : la voie de chargement fiable. Retrait : *Paramètres* > *Tableaux de bord* > ⋮ > *Ressources* |
 | `meteochampignon/sysmon.py` + 3 capteurs `command_line` du paquet (`sensor.meteochampignon_ha_cpu`, `_ram`, `_charge`) | **ajoutés** : mesure CPU/RAM de la machine de HA (lecture de /proc, 1 fois par minute) |
 | `meteochampignon/pydeps/` (créé seulement si vous cliquez « Installer les dépendances ») | **paquets des cartes**, à part du Python de Home Assistant : supprimer le dossier suffit |
 | `meteochampignon/maps-out/`, `*.log`, `*-status.json`, `maps.lock` | fichiers de travail des scripts (supprimables) |
