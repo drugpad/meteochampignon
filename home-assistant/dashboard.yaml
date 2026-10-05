@@ -10,10 +10,20 @@
 title: Météochampignon
 views:
   # ===================================================================
-  # Page 1 : suivi
+  # Page 1 : suivi (carte sur mesure www/meteochampignon-card.js, chargée comme ressource)
   # ===================================================================
   - title: Suivi
     path: suivi
+    icon: mdi:mushroom
+    type: panel
+    cards:
+      - type: custom:meteochampignon-card
+
+  # ===================================================================
+  # Page 2 : détails (cartes Mushroom / ApexCharts, repli si la carte sur mesure ne charge pas)
+  # ===================================================================
+  - title: Détails
+    path: details
     icon: mdi:mushroom
     type: sections
     max_columns: 3

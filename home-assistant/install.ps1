@@ -54,6 +54,12 @@ Ok "meteochampignon\stations.py, maps.py, install_deps.py, check_env.py"
 Copy-Item (Join-Path $PSScriptRoot '..\scripts\build-rain-maps.py') (Join-Path $scriptsDir 'build_rain_maps.py') -Force
 Ok "meteochampignon\build_rain_maps.py (générateur des cartes)"
 
+# Carte du tableau de bord (ressource JavaScript servie par /local/)
+$www = Join-Path $Ha 'www'
+New-Item -ItemType Directory -Force -Path $www | Out-Null
+Copy-Item (Join-Path $src 'www\meteochampignon-card.js') $www -Force
+Ok "www\meteochampignon-card.js (carte du tableau de bord)"
+
 # --- 3) jeton GitHub --------------------------------------------------------
 Step "Jeton GitHub (secrets.yaml)"
 $secretsPath = Join-Path $Ha 'secrets.yaml'
@@ -120,6 +126,22 @@ if ($cfg -match '(?m)^\s*packages\s*:') {
 
     (si vous avez déjà une section 'homeassistant:', ajoutez seulement la ligne 'packages:' dedans)
 "@ -ForegroundColor Yellow
+}
+# Chargement de la carte : une ligne sous frontend: extra_module_url: (sauvegarde avant modification)
+$cardUrl = '/local/meteochampignon-card.js'
+$extraRx = '(?m)^([ \t]*)extra_module_url[ \t]*:[ \t]*\r?\n'
+if ($cfg.Contains($cardUrl)) {
+  Ok "La carte est déjà chargée par configuration.yaml"
+} elseif ($cfg -match $extraRx) {
+  $cfgPath = Join-Path $Ha 'configuration.yaml'
+  Copy-Item $cfgPath "$cfgPath.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+  $ind = $Matches[1]
+  $m = [regex]::Match($cfg, $extraRx)
+  $new = $cfg.Insert($m.Index + $m.Length, "$ind  - ${cardUrl}?v=1`n")
+  [System.IO.File]::WriteAllText($cfgPath, $new, $utf8NoBom)
+  Ok "carte ajoutée à frontend: extra_module_url (sauvegarde créée)"
+} else {
+  Warn "Ajoutez la carte à la main : Paramètres > Tableaux de bord > ⋮ > Ressources > /local/meteochampignon-card.js (Module JavaScript)."
 }
 if ($cfg -match '(?m)^\s*lovelace\s*:') {
   Warn "configuration.yaml contient déjà 'lovelace:' : si HA signale un doublon sur 'dashboards', fusionnez à la main (voir docs/home-assistant.md)."
