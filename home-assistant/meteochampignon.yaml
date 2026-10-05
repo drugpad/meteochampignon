@@ -280,7 +280,9 @@ script:
 # ----------------------------------------------------------------------------
 lovelace:
   dashboards:
-    meteochampignon:
+    # L'identifiant (= l'adresse /meteo-champignon) DOIT contenir un tiret : exigence de
+    # Home Assistant (« Url path needs to contain a hyphen »).
+    meteo-champignon:
       mode: yaml
       title: Météochampignon
       icon: mdi:mushroom

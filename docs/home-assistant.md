@@ -78,7 +78,7 @@ powershell -ExecutionPolicy Bypass -File .\home-assistant\install.ps1
 1. *Outils de développement* > *YAML* > **Vérifier la configuration** : il doit
    afficher « La configuration ne contient pas d'erreur ».
 2. **Redémarrer** Home Assistant. Le tableau de bord **Météochampignon**
-   apparaît dans le menu latéral.
+   apparaît dans le menu latéral (adresse `/meteo-champignon`).
 
 Prérequis : Home Assistant **2024.10 ou plus récent**. Si `configuration.yaml`
 ne contient pas déjà ces lignes, ajoutez-les (l'installeur vous le dit) :
@@ -135,6 +135,7 @@ dans `home-assistant/meteochampignon.yaml`, puis relancez `install.ps1`.
 | Capteurs « indisponible » | réseau de Home Assistant, ou limite de requêtes GitHub (60/h sans jeton) : vérifier que le jeton est bien dans `secrets.yaml` |
 | « Cartes en retard » alors que tout tourne | la source `raw.githubusercontent.com` est injoignable depuis HA, ou la branche `data` n'a pas été publiée |
 | Erreur « dashboards » en double à la vérification | vous avez déjà une section `lovelace:` avec ses `dashboards:` : fusionnez le bloc `lovelace:` du paquet dans la vôtre |
+| « Url path needs to contain a hyphen » à la vérification | l'identifiant du tableau de bord doit contenir un tiret : il s'appelle `meteo-champignon` dans `lovelace: dashboards:` (corrigé le 05/10/2026 ; mettez à jour `packages/meteochampignon.yaml` depuis le dépôt) |
 | Le tableau de bord n'apparaît pas | redémarrage non fait, ou `show_in_sidebar` masqué dans votre profil |
 
 ## Renouvellement
