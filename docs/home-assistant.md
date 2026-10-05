@@ -1,96 +1,151 @@
-# Déclencher les jobs depuis Home Assistant
+# Home Assistant : déclencher et suivre les traitements
 
-## Pourquoi
+## À quoi ça sert
 
-Le cron natif de GitHub Actions est best-effort : la doc dit que `schedule`
-« peut être retardé » et que des déclenchements « peuvent être abandonnés ».
-Mesuré sur ce dépôt : **9 à 33 % des créneaux** partent réellement, avec des
-trous de 8 à 15 h. Les jobs sont conçus pour s'en remettre (ils rattrapent les
-heures manquées), mais les données ne sont alors mises à jour que toutes les
-quelques heures.
+Les données (cartes de pluie, historique des stations) sont calculées par des
+traitements GitHub Actions. Le « cron » de GitHub, qui devait les lancer, ne
+part que dans **10 à 30 % des cas** (mesuré), avec des trous de 8 à 15 h : les
+données restent justes (les traitements rattrapent ce qui manque) mais ne sont
+mises à jour que toutes les quelques heures.
 
-Home Assistant tourne en continu : il appelle l'API GitHub toutes les 15 min
-pour lancer les deux workflows (`workflow_dispatch`), **ce qui n'est pas soumis
-aux pertes du cron**. Les crons GitHub restent en place comme filet de sécurité.
+Home Assistant tourne en continu. Ce paquet :
 
-Les workflows se protègent eux-mêmes d'un excès d'appels :
-- `maps.yml` ne régénère rien si les cartes ont moins de 50 min ;
-- `station-history.yml` ne commit rien s'il n'y a rien de neuf (~15 s) ;
-- les deux ont un groupe `concurrency` : jamais deux exécutions en parallèle.
+1. **appelle GitHub toutes les 15 min** pour lancer les deux traitements (un
+   appel direct n'est pas soumis aux pertes du cron) ;
+2. **surveille** la fraîcheur des cartes et des stations et l'état du dernier
+   traitement, dans un **tableau de bord dédié** ;
+3. **vous alerte** (notification dans Home Assistant) si quelque chose est en
+   retard de plus de 3 h ou en échec pendant plus de 15 min ;
+4. fournit un bouton **« Lancer maintenant »**.
 
-## 1. Créer un jeton GitHub limité à ce dépôt
+Les traitements se protègent d'un excès d'appels : les cartes ne sont
+régénérées que si elles ont plus de 50 min, et les stations ne commitent rien
+quand il n'y a rien de neuf. Appeler toutes les 15 min est sans conséquence.
 
-GitHub > Settings > Developer settings > Personal access tokens >
-**Fine-grained tokens** > Generate new token :
+Si Home Assistant ou le jeton tombe, **rien ne casse** : les crons GitHub
+continuent (avec leurs trous habituels) et les données sont juste moins fraîches.
 
-- **Repository access** : *Only select repositories* > `drugpad/meteochampignon`
-- **Permissions** > Repository permissions > **Actions : Read and write**
-  (rien d'autre : le jeton ne peut ni lire le code ni le modifier)
-- **Expiration** : 1 an (prévoir de le renouveler)
+## Contenu du dossier `home-assistant/`
 
-## 2. `secrets.yaml` de Home Assistant
+| Fichier | Rôle |
+|---|---|
+| `meteochampignon.yaml` | Le paquet : appels GitHub, capteurs, voyants, alertes, script, déclaration du tableau de bord |
+| `dashboard.yaml` | Le tableau de bord « Météochampignon » (carte de suivi) |
+| `install.ps1` | Copie tout sur votre partage Samba et ajoute le jeton à `secrets.yaml` |
 
-La valeur entière, avec le préfixe `Bearer `, car `!secret` doit remplacer toute
-la valeur d'un champ :
+## Installation en 4 étapes
 
-```yaml
-github_dispatch_auth: "Bearer github_pat_XXXXXXXX"
+### 1. Créer le jeton GitHub (2 min, à faire une seule fois)
+
+Voir [docs/github.md](github.md), section « Créer le jeton ». Résumé : jeton
+*fine-grained*, limité au dépôt `meteochampignon`, avec la seule permission
+**Actions : Read and write**. Gardez-le sous la main (il ne s'affiche qu'une fois).
+
+### 2. Lancer l'installeur (depuis votre PC Windows)
+
+Ouvrez PowerShell **dans le dossier du projet**
+(`C:\Users\au\Documents\Meteochampignon`) puis :
+
+```powershell
+.\home-assistant\install.ps1
 ```
 
-## 3. `configuration.yaml`
+Par défaut il cherche le partage `\\homeassistant\config`. Si le nom ne
+fonctionne pas, donnez l'adresse IP de Home Assistant (ou le nom exact de votre
+partage Samba, celui qui contient `configuration.yaml`) :
 
-```yaml
-rest_command:
-  meteochampignon_stations:
-    url: "https://api.github.com/repos/drugpad/meteochampignon/actions/workflows/station-history.yml/dispatches"
-    method: POST
-    headers:
-      Authorization: !secret github_dispatch_auth
-      Accept: "application/vnd.github+json"
-      X-GitHub-Api-Version: "2022-11-28"
-      Content-Type: "application/json"
-    payload: '{"ref":"master"}'
-    timeout: 20
-
-  meteochampignon_cartes:
-    url: "https://api.github.com/repos/drugpad/meteochampignon/actions/workflows/maps.yml/dispatches"
-    method: POST
-    headers:
-      Authorization: !secret github_dispatch_auth
-      Accept: "application/vnd.github+json"
-      X-GitHub-Api-Version: "2022-11-28"
-      Content-Type: "application/json"
-    payload: '{"ref":"master"}'
-    timeout: 20
+```powershell
+.\home-assistant\install.ps1 -Ha '\\192.168.1.50\config'
 ```
 
-## 4. Automatisation
+Le script :
+- vérifie que c'est bien le dossier de configuration de Home Assistant ;
+- copie `packages\meteochampignon.yaml` et `dashboards\meteochampignon.yaml` ;
+- vous demande le jeton (**saisie masquée**) et l'ajoute à `secrets.yaml`
+  (après une sauvegarde datée de ce fichier) ;
+- vérifie `configuration.yaml` et vous dit quoi ajouter si les *packages* n'y
+  sont pas chargés. **Il ne modifie jamais `configuration.yaml`.**
 
-```yaml
-automation:
-  - alias: "Météochampignon - déclencher les jobs GitHub"
-    mode: single
-    trigger:
-      - platform: time_pattern
-        minutes: "/15"
-    action:
-      - service: rest_command.meteochampignon_stations
-      - service: rest_command.meteochampignon_cartes
+Si PowerShell refuse d'exécuter le script (« l'exécution de scripts est
+désactivée »), utilisez :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\home-assistant\install.ps1
 ```
 
-GitHub répond **HTTP 204** quand le déclenchement est accepté. Pour
-vérifier : redémarrer Home Assistant (ou recharger les `rest_command`), lancer
-l'automatisation à la main (Paramètres > Automatisations > Exécuter), puis
-regarder l'onglet Actions du dépôt : un run « workflow_dispatch » doit apparaître.
+### 3. Vérifier puis redémarrer Home Assistant
+
+1. *Outils de développement* > *YAML* > **Vérifier la configuration** : il doit
+   afficher « La configuration ne contient pas d'erreur ».
+2. **Redémarrer** Home Assistant. Le tableau de bord **Météochampignon**
+   apparaît dans le menu latéral.
+
+Prérequis : Home Assistant **2024.10 ou plus récent**. Si `configuration.yaml`
+ne contient pas déjà ces lignes, ajoutez-les (l'installeur vous le dit) :
+
+```yaml
+homeassistant:
+  packages: !include_dir_named packages
+```
+
+### 4. Tester
+
+*Paramètres* > *Automatisations* > **Météochampignon - déclencher les
+traitements GitHub** > menu ⋮ > **Exécuter**. Puis regardez l'onglet **Actions**
+du dépôt GitHub : deux runs « workflow_dispatch » doivent apparaître (stations
+et cartes ; celui des cartes peut se terminer en 3 secondes si les cartes sont
+déjà récentes : c'est le garde-fou, pas une erreur).
+
+## Le tableau de bord
+
+Il montre, en un coup d'œil :
+
+- **État général** : 🟢 tout est à jour, ou 🔴 avec la liste de ce qui ne va pas ;
+- **Cartes de pluie** : voyant de retard (> 3 h), date de la dernière génération,
+  résultat du dernier traitement GitHub, qui l'a lancé (`schedule` = cron GitHub,
+  `workflow_dispatch` = Home Assistant ou vous), lien vers le run ;
+- **Historique des stations** : voyant de retard, date de la dernière donnée
+  réellement enregistrée, dernier traitement ;
+- **Déclencheur Home Assistant** : date du dernier appel, voyant d'échec ;
+- **Retards sur 3 jours** : historique visuel ;
+- le bouton **Lancer les traitements maintenant**.
+
+Les capteurs sont rafraîchis toutes les 5 min.
+
+## Alertes
+
+Notifications dans Home Assistant (cloche) :
+
+| Notification | Quand | Disparaît |
+|---|---|---|
+| *GitHub a refusé le déclenchement* | un appel ne renvoie pas HTTP 204 (jeton expiré, droits…) | au prochain appel réussi |
+| *Traitement en retard ou en échec* | un voyant reste allumé plus de 15 min | au retour à la normale |
+
+Pour recevoir ces alertes sur votre téléphone, remplacez
+`persistent_notification.create` par votre service `notify.mobile_app_<téléphone>`
+dans `home-assistant/meteochampignon.yaml`, puis relancez `install.ps1`.
 
 ## Dépannage
 
-| Réponse | Cause |
+| Symptôme | Cause probable |
 |---|---|
-| 401 | jeton mal copié, expiré, ou `Bearer ` manquant dans `secrets.yaml` |
-| 403 / 404 | le jeton n'a pas *Actions : Read and write* sur ce dépôt |
-| 422 | le workflow n'a pas de `workflow_dispatch`, ou `ref` incorrect (doit être `master`) |
+| Notification « GitHub a refusé… HTTP 401 » | jeton expiré, mal copié, ou `Bearer ` manquant dans `secrets.yaml` |
+| … HTTP 403 ou 404 | le jeton n'a pas **Actions : Read and write** sur ce dépôt |
+| … HTTP 422 | nom de branche incorrect (doit être `master`) ou workflow sans `workflow_dispatch` |
+| Capteurs « indisponible » | réseau de Home Assistant, ou limite de requêtes GitHub (60/h sans jeton) : vérifier que le jeton est bien dans `secrets.yaml` |
+| « Cartes en retard » alors que tout tourne | la source `raw.githubusercontent.com` est injoignable depuis HA, ou la branche `data` n'a pas été publiée |
+| Erreur « dashboards » en double à la vérification | vous avez déjà une section `lovelace:` avec ses `dashboards:` : fusionnez le bloc `lovelace:` du paquet dans la vôtre |
+| Le tableau de bord n'apparaît pas | redémarrage non fait, ou `show_in_sidebar` masqué dans votre profil |
 
-Quand le jeton arrive à expiration, les crons GitHub reprennent seuls (avec
-leurs trous habituels) : rien ne casse, les données sont juste mises à jour
-moins souvent.
+## Renouvellement
+
+Le jeton GitHub expire (1 an au maximum). Quand il expire, les appels
+renvoient 401 et la notification vous prévient. Pour le renouveler : créez un
+nouveau jeton (voir [docs/github.md](github.md)) puis remplacez la valeur de
+`github_dispatch_auth` dans `secrets.yaml` (`Bearer github_pat_…`) et
+redémarrez, ou rechargez les *rest_command*.
+
+## Désinstaller
+
+Supprimez `packages/meteochampignon.yaml`, `dashboards/meteochampignon.yaml` et
+la ligne `github_dispatch_auth` de `secrets.yaml`, puis redémarrez.

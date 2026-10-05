@@ -1,0 +1,104 @@
+# Tableau de bord « Météochampignon » — suivi des traitements.
+# Installé par install.ps1 dans <config>/dashboards/meteochampignon.yaml et
+# déclaré dans packages/meteochampignon.yaml (section lovelace).
+title: Météochampignon
+views:
+  - title: Suivi
+    path: suivi
+    icon: mdi:mushroom
+    cards:
+      # ---------- Synthèse ----------
+      - type: markdown
+        title: État général
+        content: >
+          {% if is_state('binary_sensor.meteochampignon_probleme', 'on') %}
+          ## 🔴 Un traitement est en retard ou en échec
+          {% if is_state('binary_sensor.meteochampignon_cartes_en_retard', 'on') %}- **Cartes** : pas régénérées depuis plus de 3 h (ou source injoignable)
+          {% endif %}{% if is_state('binary_sensor.meteochampignon_stations_en_retard', 'on') %}- **Stations** : aucune nouvelle donnée depuis plus de 3 h
+          {% endif %}{% if is_state('binary_sensor.meteochampignon_traitement_en_echec', 'on') %}- **Échec** au dernier passage d'un traitement GitHub
+          {% endif %}
+          {% else %}
+          ## 🟢 Tout est à jour
+          {% endif %}
+
+          Cartes : **{{ states('sensor.meteochampignon_cartes_jours') }} jours** de prévision,
+          pluie mesurée sur **{{ states('sensor.meteochampignon_cartes_heures_24h') }} h**.
+
+      # ---------- Bouton ----------
+      - type: button
+        name: Lancer les traitements maintenant
+        icon: mdi:play-circle
+        show_state: false
+        tap_action:
+          action: perform-action
+          perform_action: script.meteochampignon_lancer_maintenant
+          confirmation:
+            text: "Lancer les deux traitements GitHub tout de suite ?"
+
+      # ---------- Cartes de pluie ----------
+      - type: entities
+        title: 🌧️ Cartes de pluie
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.meteochampignon_cartes_en_retard
+            name: Cartes en retard (> 3 h) ?
+          - entity: sensor.meteochampignon_cartes_generation
+            name: Dernière génération des cartes
+          - entity: sensor.meteochampignon_cartes_traitement
+            name: Dernier traitement GitHub
+            secondary_info: last-updated
+          - entity: sensor.meteochampignon_cartes_traitement_date
+            name: Date du dernier traitement
+          - type: attribute
+            entity: sensor.meteochampignon_cartes_traitement
+            attribute: event
+            name: Lancé par (schedule = cron, workflow_dispatch = HA / manuel)
+          - type: attribute
+            entity: sensor.meteochampignon_cartes_traitement
+            attribute: html_url
+            name: Lien du dernier traitement
+
+      # ---------- Stations ----------
+      - type: entities
+        title: 🌡️ Historique des stations
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.meteochampignon_stations_en_retard
+            name: Stations en retard (> 3 h) ?
+          - entity: sensor.meteochampignon_stations_donnees
+            name: Dernière donnée enregistrée
+          - entity: sensor.meteochampignon_stations_traitement
+            name: Dernier traitement GitHub
+            secondary_info: last-updated
+          - entity: sensor.meteochampignon_stations_traitement_date
+            name: Date du dernier traitement
+          - type: attribute
+            entity: sensor.meteochampignon_stations_traitement
+            attribute: event
+            name: Lancé par
+
+      # ---------- Déclencheur Home Assistant ----------
+      - type: entities
+        title: ⏱️ Déclencheur Home Assistant
+        show_header_toggle: false
+        entities:
+          - entity: automation.meteochampignon_declencher_les_traitements_github
+            name: Appel de GitHub toutes les 15 min
+          - type: attribute
+            entity: automation.meteochampignon_declencher_les_traitements_github
+            attribute: last_triggered
+            name: Dernier appel
+          - entity: binary_sensor.meteochampignon_traitement_en_echec
+            name: Un traitement a échoué ?
+
+      # ---------- Historique visuel ----------
+      - type: history-graph
+        title: Retards sur 3 jours
+        hours_to_show: 72
+        entities:
+          - entity: binary_sensor.meteochampignon_cartes_en_retard
+            name: Cartes
+          - entity: binary_sensor.meteochampignon_stations_en_retard
+            name: Stations
+          - entity: binary_sensor.meteochampignon_traitement_en_echec
+            name: Échecs
