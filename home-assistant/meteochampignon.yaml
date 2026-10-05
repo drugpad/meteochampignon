@@ -177,6 +177,36 @@ rest:
 # ----------------------------------------------------------------------------
 # 3) Voyants de problème
 # ----------------------------------------------------------------------------
+# Charge de la machine de Home Assistant : pour voir si les traitements pèsent dessus.
+# (scripts/sysmon.py, lecture de /proc, une mesure par minute)
+command_line:
+  - sensor:
+      name: "Meteochampignon HA cpu"
+      unique_id: meteochampignon_ha_cpu
+      command: "python3 /config/meteochampignon/sysmon.py cpu"
+      unit_of_measurement: "%"
+      state_class: measurement
+      icon: mdi:cpu-64-bit
+      scan_interval: 60
+      command_timeout: 20
+  - sensor:
+      name: "Meteochampignon HA ram"
+      unique_id: meteochampignon_ha_ram
+      command: "python3 /config/meteochampignon/sysmon.py ram"
+      unit_of_measurement: "%"
+      state_class: measurement
+      icon: mdi:memory
+      scan_interval: 60
+      command_timeout: 20
+  - sensor:
+      name: "Meteochampignon HA charge"
+      unique_id: meteochampignon_ha_charge
+      command: "python3 /config/meteochampignon/sysmon.py load"
+      state_class: measurement
+      icon: mdi:gauge
+      scan_interval: 60
+      command_timeout: 20
+
 template:
   # Âge des données en minutes (mis à jour chaque minute) : sert aux graphiques et
   # à l'affichage « il y a X min » du tableau de bord.

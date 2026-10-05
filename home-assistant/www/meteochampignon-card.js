@@ -8,7 +8,7 @@
  * Lit les entités du paquet packages/meteochampignon.yaml.
  */
 ;(() => {
-const MC_VERSION = "1.0.2";
+const MC_VERSION = "1.1.0";
 
 const E = {
   probleme: "binary_sensor.meteochampignon_probleme",
@@ -24,6 +24,10 @@ const E = {
   cartesTraitement: "sensor.meteochampignon_cartes_traitement",
   stationsTraitement: "sensor.meteochampignon_stations_traitement",
   stationsDonnees: "sensor.meteochampignon_stations_donnees",
+  cpu: "sensor.meteochampignon_ha_cpu",
+  ram: "sensor.meteochampignon_ha_ram",
+  charge: "sensor.meteochampignon_ha_charge",
+  temp: "sensor.system_monitor_temperature_du_processeur",
 };
 const AUTOMATIONS = [
   ["meteochampignon_collecter_stations", "Collecte des stations", "mdi:thermometer", "à :15 et :45"],
@@ -194,12 +198,12 @@ class MeteochampignonCard extends HTMLElement {
         type: "history/history_during_period",
         start_time: start.toISOString(),
         end_time: end.toISOString(),
-        entity_ids: [E.cartesAge, E.stationsAge],
+        entity_ids: [E.cartesAge, E.stationsAge, E.cpu, E.ram],
         minimal_response: true,
         no_attributes: true,
       });
       const out = {};
-      for (const id of [E.cartesAge, E.stationsAge]) {
+      for (const id of [E.cartesAge, E.stationsAge, E.cpu, E.ram]) {
         out[id] = (res[id] || []).map((p) => {
           const t = p.lu !== undefined ? p.lu * 1000 : p.lc !== undefined ? p.lc * 1000 : Date.parse(p.last_updated);
           return [t, parseFloat(p.s !== undefined ? p.s : p.state)];
@@ -222,14 +226,14 @@ class MeteochampignonCard extends HTMLElement {
     return isNaN(v) ? null : v;
   }
 
-  _spark(id, level) {
+  _spark(id, level, pct = false) {
     const pts = this._hist[id];
     const w = 400, h = 74, pad = 4;
     if (!pts || pts.length < 2) {
       return `<svg class="spark" viewBox="0 0 ${w} ${h}"><text class="none" x="${w / 2}" y="${h / 2}" text-anchor="middle">Historique en cours de collecte…</text></svg>`;
     }
     const t0 = this._hist._start, t1 = this._hist._end;
-    const vmax = Math.max(200, ...pts.map((p) => p[1])) * 1.08;
+    const vmax = pct ? 100 : Math.max(200, ...pts.map((p) => p[1])) * 1.08;
     const X = (t) => pad + ((t - t0) / (t1 - t0)) * (w - 2 * pad);
     const Y = (v) => h - pad - (Math.min(v, vmax) / vmax) * (h - 2 * pad);
     let d = `M${X(Math.max(pts[0][0], t0)).toFixed(1)},${Y(pts[0][1]).toFixed(1)}`;
@@ -239,12 +243,43 @@ class MeteochampignonCard extends HTMLElement {
     d += ` L${X(t1).toFixed(1)},${Y(pts[pts.length - 1][1]).toFixed(1)}`;
     const colour = `var(--${level === "none" ? "info" : level})`;
     const area = `${d} L${X(t1).toFixed(1)},${h - pad} L${X(Math.max(pts[0][0], t0)).toFixed(1)},${h - pad} Z`;
-    const y180 = Y(180).toFixed(1);
+    const y180 = Y(pct ? 85 : 180).toFixed(1);
     return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
       <path d="${area}" fill="${colour}" opacity=".16"/>
       <path d="${d}" fill="none" stroke="${colour}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
       <line x1="${pad}" x2="${w - pad}" y1="${y180}" y2="${y180}" stroke="var(--bad)" stroke-width="1" stroke-dasharray="4 4" opacity=".7" vector-effect="non-scaling-stroke"/>
-    </svg><div class="sub" style="display:flex;justify-content:space-between;margin-top:2px"><span>il y a 24 h</span><span style="color:var(--bad)">seuil d'alerte 3 h</span><span>maintenant</span></div>`;
+    </svg><div class="sub" style="display:flex;justify-content:space-between;margin-top:2px"><span>il y a 24 h</span><span style="color:var(--bad)">${pct ? "alerte 85 %" : "seuil d'alerte 3 h"}</span><span>maintenant</span></div>`;
+  }
+
+  _sysTile(id, label, icon) {
+    const v = this._age(id);
+    const lvl = v === null ? "none" : v > 85 ? "bad" : v > 65 ? "warn" : "ok";
+    const hist = this._hist[id] || [];
+    const vals = hist.map((p) => p[1]).filter((x) => !isNaN(x));
+    const max = vals.length ? Math.max(...vals) : null;
+    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    const f = (x) => (x === null ? "—" : `${String(Math.round(x * 10) / 10).replace(".", ",")} %`);
+    return `<div class="card">
+      <h2><ha-icon icon="${icon}"></ha-icon>${label}</h2>
+      <div class="age ${lvl}"><span class="v">${v === null ? "—" : f(v)}</span><span class="l">maintenant</span></div>
+      <div class="bar ${lvl}"><i style="width:${v === null ? 0 : Math.max(2, Math.min(100, v))}%"></i></div>
+      ${this._spark(id, lvl, true)}
+      <div class="rows">
+        <div class="row"><span class="k"><ha-icon icon="mdi:chart-line"></ha-icon>Moyenne sur 24 h</span><b>${f(avg)}</b></div>
+        <div class="row"><span class="k"><ha-icon icon="mdi:arrow-up-bold"></ha-icon>Pic sur 24 h</span><b>${f(max)}</b></div>
+      </div></div>`;
+  }
+
+  _system() {
+    const h = this._hass;
+    const charge = valid(h.states[E.charge]) ? String(h.states[E.charge].state).replace(".", ",") : null;
+    const temp = valid(h.states[E.temp]) ? Math.round(parseFloat(h.states[E.temp].state)) : null;
+    const chips = `${charge !== null ? `<span class="chip info"><ha-icon icon="mdi:gauge"></ha-icon>Charge ${charge}</span>` : ""}${temp !== null && !isNaN(temp) ? `<span class="chip ${temp > 75 ? "bad" : temp > 65 ? "warn" : "ok"}"><ha-icon icon="mdi:thermometer"></ha-icon>Processeur ${temp} °C</span>` : ""}`;
+    if (!valid(h.states[E.cpu]) && !valid(h.states[E.ram])) {
+      return `<div class="card"><h2><ha-icon icon="mdi:server"></ha-icon>Ressources de Home Assistant</h2><div class="sub">Capteurs de charge pas encore disponibles : il faut recharger la configuration (ou redémarrer Home Assistant) et copier \`sysmon.py\` avec l'installeur.</div></div>`;
+    }
+    return `<div><div class="chips" style="margin-bottom:10px"><span class="chip"><ha-icon icon="mdi:server"></ha-icon>Ressources de Home Assistant</span>${chips}</div>
+      <div class="cols">${this._sysTile(E.cpu, "Processeur (CPU)", "mdi:cpu-64-bit")}${this._sysTile(E.ram, "Mémoire (RAM)", "mdi:memory")}</div></div>`;
   }
 
   _runRow(entityId) {
@@ -330,6 +365,7 @@ class MeteochampignonCard extends HTMLElement {
         <span class="chip info"><ha-icon icon="mdi:cpu-64-bit"></ha-icon>Cartes par ${esc(valid(src) ? SOURCES[src.state] || src.state : "—")}</span>
       </div>
       <div class="cols">${this._panel("cartes")}${this._panel("stations")}</div>
+      ${this._system()}
       <div class="card"><h2><ha-icon icon="mdi:robot"></ha-icon>Automatisations</h2><div class="auto">${autos}</div></div>
       <div class="card"><h2><ha-icon icon="mdi:gesture-tap-button"></ha-icon>Actions</h2><div class="actions">${actions}</div><div class="links">${links}</div></div>
       <div class="foot">Météochampignon · carte v${MC_VERSION}</div></div>`;
