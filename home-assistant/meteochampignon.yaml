@@ -60,6 +60,17 @@ rest_command:
     timeout: 20
 
 # ----------------------------------------------------------------------------
+# 1 bis) Scripts Python exécutés PAR Home Assistant (sans passer par GitHub Actions)
+#   - stations.py : collecte l'historique des stations (API Météo-France, Python
+#     standard, rien à installer) et l'écrit dans le dépôt via l'API GitHub ;
+#   - check_env.py : diagnostic (« HA peut-il générer les cartes lui-même ? »).
+# Copiés dans /config/meteochampignon/ par install.ps1.
+# ----------------------------------------------------------------------------
+shell_command:
+  meteochampignon_stations_ha: "python3 /config/meteochampignon/stations.py"
+  meteochampignon_diag: "python3 /config/meteochampignon/check_env.py"
+
+# ----------------------------------------------------------------------------
 # 2) Capteurs de suivi (lecture, toutes les 5 min)
 #    GitHub sans jeton = 60 requêtes/heure ; avec le jeton = 5000/heure.
 # ----------------------------------------------------------------------------
@@ -226,6 +237,33 @@ automation:
             data:
               notification_id: meteochampignon_dispatch
 
+  - id: meteochampignon_collecter_stations
+    alias: "Météochampignon - collecter les stations (Home Assistant)"
+    description: "Collecte directe de l'historique des stations par Home Assistant (indépendante de GitHub Actions) : à :15 et :45 de chaque heure. Chaque passage rattrape toutes les heures manquées des 23 dernières heures et n'écrit que s'il y a du neuf."
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: "15,45"
+    actions:
+      - action: shell_command.meteochampignon_stations_ha
+        response_variable: stations_ha
+        continue_on_error: true
+      - if: "{{ stations_ha is not defined or stations_ha.returncode | int(1) != 0 }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: meteochampignon_collecte_ha
+              title: "Météochampignon : la collecte des stations par Home Assistant a échoué"
+              message: >
+                {{ stations_ha.stdout if stations_ha is defined else 'Pas de réponse.' }}
+                Les traitements GitHub restent en secours, donc rien n'est perdu.
+                Cause fréquente : le jeton GitHub n'a pas « Contents : lecture et écriture »
+                (voir docs/home-assistant.md).
+        else:
+          - action: persistent_notification.dismiss
+            data:
+              notification_id: meteochampignon_collecte_ha
+
   - id: meteochampignon_alerte_probleme
     alias: "Météochampignon - alerte si retard ou échec"
     description: "Notification persistante si un voyant de problème reste allumé plus de 15 min ; elle disparaît seule au retour à la normale."
@@ -265,6 +303,19 @@ automation:
           notification_id: meteochampignon_probleme
 
 script:
+  meteochampignon_diagnostic:
+    alias: "Météochampignon - diagnostic Python"
+    icon: mdi:stethoscope
+    description: "Regarde si Home Assistant peut générer lui-même les cartes de pluie (paquets Python, mémoire, réseau). Ne modifie rien. Résultat dans une notification."
+    sequence:
+      - action: shell_command.meteochampignon_diag
+        response_variable: diag
+      - action: persistent_notification.create
+        data:
+          notification_id: meteochampignon_diagnostic
+          title: "Météochampignon : diagnostic Python"
+          message: "{{ diag.stdout | replace('\n', '\n\n') if diag is defined else 'Pas de réponse' }}"
+
   meteochampignon_lancer_maintenant:
     alias: "Météochampignon - lancer maintenant"
     icon: mdi:play-circle

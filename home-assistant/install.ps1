@@ -6,9 +6,11 @@
 #
 # Ce que fait le script :
 #   1. vérifie que le partage est joignable et ressemble à un dossier de config HA ;
-#   2. copie le paquet dans <config>\packages\ et le tableau de bord dans <config>\dashboards\ ;
-#   3. demande votre jeton GitHub (saisie masquée) et l'ajoute à secrets.yaml
-#      (sauvegarde datée de secrets.yaml avant toute modification) ;
+#   2. copie le paquet dans <config>\packages\, le tableau de bord dans <config>\dashboards\
+#      et les scripts Python dans <config>\meteochampignon\ ;
+#   3. demande votre jeton GitHub (saisie masquée) et l'ajoute à secrets.yaml, avec la
+#      clé Météo-France (lue dans .env.local, sans la redemander) — sauvegarde
+#      datée de secrets.yaml avant toute modification ;
 #   4. VÉRIFIE si configuration.yaml charge les « packages » et vous dit quoi
 #      ajouter sinon — il ne modifie JAMAIS configuration.yaml lui-même.
 # Il ne redémarre rien : la fin du script vous indique les deux dernières étapes.
@@ -43,6 +45,10 @@ Copy-Item (Join-Path $src 'meteochampignon.yaml') (Join-Path $packages 'meteocha
 Copy-Item (Join-Path $src 'dashboard.yaml') (Join-Path $dashboards 'meteochampignon.yaml') -Force
 Ok "packages\meteochampignon.yaml"
 Ok "dashboards\meteochampignon.yaml"
+$scriptsDir = Join-Path $Ha 'meteochampignon'
+New-Item -ItemType Directory -Force -Path $scriptsDir | Out-Null
+Copy-Item (Join-Path $src 'scripts\*.py') $scriptsDir -Force
+Ok "meteochampignon\stations.py + check_env.py"
 
 # --- 3) jeton GitHub --------------------------------------------------------
 Step "Jeton GitHub (secrets.yaml)"
@@ -66,6 +72,34 @@ if ($secretsText -match '(?m)^\s*github_dispatch_auth\s*:') {
   [System.IO.File]::AppendAllText($secretsPath, "$prefix# Météochampignon : jeton GitHub (Actions : lecture/écriture, dépôt drugpad/meteochampignon)`ngithub_dispatch_auth: `"Bearer $token`"`n", $utf8NoBom)
   $token = $null
   Ok "github_dispatch_auth ajouté à secrets.yaml"
+}
+
+# --- 3 bis) clé Météo-France ---------------------------------------------
+Step "Clé Météo-France (collecte des stations par Home Assistant)"
+$secretsText = if (Test-Path $secretsPath) { [System.IO.File]::ReadAllText($secretsPath) } else { '' }
+if ($secretsText -match '(?m)^\s*meteochampignon_mf_token\s*:') {
+  Warn "meteochampignon_mf_token existe déjà dans secrets.yaml : laissé tel quel."
+} else {
+  $mf = $null
+  $envFile = Join-Path $PSScriptRoot '..\.env.local'
+  if (Test-Path $envFile) {
+    $line = Select-String -Path $envFile -Pattern '^VITE_METEOFRANCE_API_TOKEN=(.+)$' | Select-Object -First 1
+    if ($line) { $mf = $line.Matches[0].Groups[1].Value.Trim(); Ok "clé trouvée dans .env.local (utilisée automatiquement)" }
+  }
+  if (-not $mf) {
+    Write-Host "    Collez votre clé API Météo-France (saisie masquée)."
+    $secure2 = Read-Host -Prompt '    Clé' -AsSecureString
+    $mf = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure2)).Trim()
+  }
+  if ([string]::IsNullOrWhiteSpace($mf)) {
+    Warn "Pas de clé Météo-France : la collecte par Home Assistant sera inactive (GitHub continue de collecter)."
+  } else {
+    if (Test-Path $secretsPath) { Copy-Item $secretsPath "$secretsPath.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')" }
+    $prefix = if ($secretsText.Length -gt 0 -and -not $secretsText.EndsWith("`n")) { "`n" } else { '' }
+    [System.IO.File]::AppendAllText($secretsPath, "$prefix# Météochampignon : clé API Météo-France (collecte des stations)`nmeteochampignon_mf_token: `"$mf`"`n", $utf8NoBom)
+    $mf = $null
+    Ok "meteochampignon_mf_token ajouté à secrets.yaml"
+  }
 }
 
 # --- 4) configuration.yaml --------------------------------------------------
@@ -95,6 +129,10 @@ Write-Host @"
       (doit afficher « La configuration ne contient pas d'erreur »)
    2. Redémarrer Home Assistant (le tableau de bord « Météochampignon »
       apparaît alors dans le menu latéral).
+ IMPORTANT (une seule fois) : le jeton GitHub doit avoir la permission
+ « Contents : Read and write » EN PLUS de « Actions » (voir docs/home-assistant.md),
+ sinon la collecte directe des stations échoue (GitHub continue en secours).
+
  Test : Paramètres > Automatisations > « Météochampignon - déclencher
  les traitements GitHub » > Exécuter, puis regardez l'onglet Actions du
  dépôt GitHub : un run « workflow_dispatch » doit apparaître.

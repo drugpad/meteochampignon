@@ -25,13 +25,55 @@ quand il n'y a rien de neuf. Appeler toutes les 15 min est sans conséquence.
 Si Home Assistant ou le jeton tombe, **rien ne casse** : les crons GitHub
 continuent (avec leurs trous habituels) et les données sont juste moins fraîches.
 
+## Collecte directe par Home Assistant (stations)
+
+GitHub Actions peut tomber (incident du 05/10/2026 : « The job was not acquired
+by Runner », des traitements restés 15 min en file puis annulés). Pour que les
+**stations ne dépendent plus de GitHub Actions**, Home Assistant fait lui-même
+les appels à l'API Météo-France :
+
+- le script `stations.py` (Python standard, **rien à installer**) tourne dans
+  Home Assistant à **:15 et :45** de chaque heure ;
+- un seul appel renvoie toutes les stations d'une heure ; chaque passage
+  rattrape les heures manquées des 23 dernières heures ;
+- il écrit le résultat dans le dépôt par l'API GitHub, avec le `sha` du fichier
+  lu : si GitHub (ou autre chose) a écrit entre-temps, il est refusé puis
+  recommence — **jamais d'écrasement** (testé avec un conflit simulé) ;
+- les traitements GitHub restent en **secours** : si Home Assistant est éteint,
+  GitHub prend le relais, et inversement.
+
+**Une seule chose à faire pour que ça marche** : le jeton GitHub doit avoir la
+permission **Contents : Read and write** en plus d'Actions. Sans elle, la collecte
+échoue avec une notification claire (rien n'est perdu, GitHub continue).
+
+1. <https://github.com/settings/personal-access-tokens> > votre jeton
+   `home-assistant-meteochampignon` > **Edit**.
+2. *Repository permissions* > **Contents** > **Read and write**.
+3. **Update**. La valeur du jeton ne change pas : rien à recopier.
+
+Puis relancez l'installeur (il copie les scripts et ajoute la clé Météo-France à
+`secrets.yaml`, lue dans `.env.local`, sans la redemander) et redémarrez Home
+Assistant.
+
+### Et les cartes de pluie ?
+
+Elles demandent des paquets Python lourds (numpy, scipy, s3fs, omfiles) que
+je ne peux pas essayer sur votre machine. Le bouton **« Diagnostic Python »** du
+tableau de bord (ou le script *Météochampignon - diagnostic Python*) regarde
+si Home Assistant les a, la mémoire disponible et le réseau, et affiche le
+résultat dans une notification, sans rien modifier ni installer. Tant qu'il
+n'est pas concluant, les cartes restent calculées sur GitHub, lancées par Home
+Assistant toutes les 15 min.
+
 ## Contenu du dossier `home-assistant/`
 
 | Fichier | Rôle |
 |---|---|
 | `meteochampignon.yaml` | Le paquet : appels GitHub, capteurs, voyants, alertes, script, déclaration du tableau de bord |
 | `dashboard.yaml` | Le tableau de bord « Météochampignon » (carte de suivi) |
-| `install.ps1` | Copie tout sur votre partage Samba et ajoute le jeton à `secrets.yaml` |
+| `scripts/stations.py` | Collecte des stations exécutée par Home Assistant (Python standard) |
+| `scripts/check_env.py` | Diagnostic : Home Assistant peut-il générer les cartes ? |
+| `install.ps1` | Copie tout sur votre partage Samba et ajoute le jeton et la clé Météo-France à `secrets.yaml` |
 
 ## Installation en 4 étapes
 
@@ -132,6 +174,7 @@ dans `home-assistant/meteochampignon.yaml`, puis relancez `install.ps1`.
 | Notification « GitHub a refusé… HTTP 401 » | jeton expiré, mal copié, ou `Bearer ` manquant dans `secrets.yaml` |
 | … HTTP 403 ou 404 | le jeton n'a pas **Actions : Read and write** sur ce dépôt |
 | … HTTP 422 | nom de branche incorrect (doit être `master`) ou workflow sans `workflow_dispatch` |
+| Notification « la collecte des stations par Home Assistant a échoué » | 403 : jeton sans « Contents : Read and write » (voir ci-dessus) ; 401 : jeton refusé ; « API Paquet indisponible » : clé Météo-France absente de `secrets.yaml` (relancer `install.ps1`) ou service Météo-France en panne |
 | Capteurs « indisponible » | réseau de Home Assistant, ou limite de requêtes GitHub (60/h sans jeton) : vérifier que le jeton est bien dans `secrets.yaml` |
 | « Cartes en retard » alors que tout tourne | la source `raw.githubusercontent.com` est injoignable depuis HA, ou la branche `data` n'a pas été publiée |
 | Erreur « dashboards » en double à la vérification | vous avez déjà une section `lovelace:` avec ses `dashboards:` : fusionnez le bloc `lovelace:` du paquet dans la vôtre |
