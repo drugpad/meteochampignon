@@ -36,6 +36,14 @@ views:
             text: "Lancer les deux traitements GitHub tout de suite ?"
 
       - type: button
+        name: Tester la collecte des stations (sans rien écrire)
+        icon: mdi:check-network
+        show_state: false
+        tap_action:
+          action: perform-action
+          perform_action: script.meteochampignon_tester_collecte
+
+      - type: button
         name: Diagnostic Python (cartes sur Home Assistant ?)
         icon: mdi:stethoscope
         show_state: false

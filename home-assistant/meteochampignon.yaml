@@ -69,6 +69,7 @@ rest_command:
 shell_command:
   meteochampignon_stations_ha: "python3 /config/meteochampignon/stations.py"
   meteochampignon_diag: "python3 /config/meteochampignon/check_env.py"
+  meteochampignon_stations_test: "python3 /config/meteochampignon/stations.py --check"
 
 # ----------------------------------------------------------------------------
 # 2) Capteurs de suivi (lecture, toutes les 5 min)
@@ -315,6 +316,22 @@ script:
           notification_id: meteochampignon_diagnostic
           title: "Météochampignon : diagnostic Python"
           message: "{{ diag.stdout | replace('\n', '\n\n') if diag is defined else 'Pas de réponse' }}"
+
+  meteochampignon_tester_collecte:
+    alias: "Météochampignon - tester la collecte des stations"
+    icon: mdi:check-network
+    description: "Vérifie, sans rien écrire, que Home Assistant peut collecter les stations : clé Météo-France, lecture de l'historique et permission d'écriture du jeton GitHub. Résultat dans une notification."
+    sequence:
+      - action: shell_command.meteochampignon_stations_test
+        response_variable: test
+        continue_on_error: true
+      - action: persistent_notification.create
+        data:
+          notification_id: meteochampignon_test_collecte
+          title: "Météochampignon : test de la collecte des stations"
+          message: >
+            {{ test.stdout if test is defined and test.stdout else 'Pas de réponse.' }}
+            {{ test.stderr if test is defined and test.stderr else '' }}
 
   meteochampignon_lancer_maintenant:
     alias: "Météochampignon - lancer maintenant"

@@ -22,7 +22,10 @@ Clés lues dans /config/secrets.yaml (ou HA_SECRETS) :
                                 lecture et écriture » en plus de « Actions »)
   meteochampignon_mf_token    : clé API Météo-France
 
-Usage : python3 stations.py [--dry-run]     (--dry-run : n'écrit rien)
+Usage : python3 stations.py [--dry-run | --check]
+          --dry-run : fait tout SAUF écrire dans le dépôt
+          --check   : test sans rien écrire : clé Météo-France, lecture de l'historique et
+                      PERMISSION D'ÉCRITURE du jeton (voir check())
 Sortie : une ligne JSON {"ok":…, …} ; code de sortie 0 si OK, 1 sinon.
 """
 import base64
@@ -51,6 +54,7 @@ COMPLETE_RATIO = 0.95
 ALWAYS_REFETCH_LAST_HOURS = 3
 MAX_WRITE_ATTEMPTS = 3
 DRY_RUN = "--dry-run" in sys.argv
+CHECK = "--check" in sys.argv
 
 
 def log(msg):
@@ -186,7 +190,53 @@ def merge(history, collected, now):
     return added
 
 
+def check():
+    """Test sans écriture. La permission d'écriture est vérifiée par un PUT avec un
+    sha volontairement FAUX : avec « Contents : Read and write », GitHub répond
+    409/422 (sha incorrect, rien n'est écrit) ; sans cette permission, 403/404."""
+    auth = read_secret("github_dispatch_auth")
+    mf_key = read_secret("meteochampignon_mf_token")
+    now = datetime.now(timezone.utc)
+    report = {"ok": True}
+
+    status, _ = http(f"{GITHUB_API}/repos/{REPO}", gh_headers(auth))
+    report["github_lecture"] = "OK" if status == 200 else f"ERREUR HTTP {status} (jeton refusé ou expiré ?)"
+    status, _ = http(
+        f"{GITHUB_API}/repos/{REPO}/contents/{HISTORY_PATH}",
+        {**gh_headers(auth), "Content-Type": "application/json"},
+        data=json.dumps({"message": "test de permission (jamais écrit)", "content": "e30=", "sha": "0" * 40, "branch": BRANCH}).encode(),
+        method="PUT",
+    )
+    if status in (409, 422):
+        report["github_ecriture"] = "OK (permission « Contents : Read and write » présente)"
+    else:
+        report["github_ecriture"] = f"REFUSÉE (HTTP {status}) : ajoutez « Contents : Read and write » au jeton" if status in (403, 404) else f"inattendu (HTTP {status})"
+        report["ok"] = False
+    if report["github_lecture"] != "OK":
+        report["ok"] = False
+
+    try:
+        history, _sha = load_history(auth)
+        n = sum(len(p) for p in history.get("stations", {}).values())
+        report["historique"] = f"OK ({len(history.get('stations', {}))} stations, {n} points)"
+    except Exception as err:  # noqa: BLE001
+        report["historique"] = f"ERREUR ({err})"
+        report["ok"] = False
+
+    last = (now - timedelta(minutes=PUBLICATION_LAG_MIN)).replace(minute=0, second=0, microsecond=0)
+    data = fetch_hour(mf_key, iso_hour(last))
+    if data is None:
+        report["meteofrance"] = "ERREUR : clé refusée ou service indisponible"
+        report["ok"] = False
+    else:
+        report["meteofrance"] = f"OK ({len(data)} stations reçues pour {iso_hour(last)})"
+    print(json.dumps(report, ensure_ascii=False, indent=1))
+    return 0 if report["ok"] else 1
+
+
 def main():
+    if CHECK:
+        return check()
     auth = read_secret("github_dispatch_auth")
     mf_key = read_secret("meteochampignon_mf_token")
     now = datetime.now(timezone.utc)
