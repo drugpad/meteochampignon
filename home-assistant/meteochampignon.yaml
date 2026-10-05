@@ -294,8 +294,11 @@ automation:
     description: "Collecte directe de l'historique des stations par Home Assistant (indépendante de GitHub Actions) : à :15 et :45 de chaque heure. Chaque passage rattrape toutes les heures manquées des 23 dernières heures et n'écrit que s'il y a du neuf."
     mode: single
     triggers:
+      # time_pattern n'accepte PAS une liste (« 15,45 ») : un déclencheur par minute.
       - trigger: time_pattern
-        minutes: "15,45"
+        minutes: 15
+      - trigger: time_pattern
+        minutes: 45
     actions:
       - action: shell_command.meteochampignon_stations_ha
         response_variable: stations_ha
@@ -322,7 +325,9 @@ automation:
     mode: single
     triggers:
       - trigger: time_pattern
-        minutes: "5,35"
+        minutes: 5
+      - trigger: time_pattern
+        minutes: 35
     actions:
       - action: shell_command.meteochampignon_cartes_ha
         continue_on_error: true
