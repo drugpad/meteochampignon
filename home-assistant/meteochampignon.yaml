@@ -70,6 +70,13 @@ shell_command:
   meteochampignon_stations_ha: "python3 /config/meteochampignon/stations.py"
   meteochampignon_diag: "python3 /config/meteochampignon/check_env.py"
   meteochampignon_stations_test: "python3 /config/meteochampignon/stations.py --check"
+  # Cartes de pluie calculées par Home Assistant. Les commandes « --launch » lancent le
+  # travail EN ARRIÈRE-PLAN et rendent la main aussitôt (une commande shell de HA est
+  # interrompue au bout de 60 s ; le calcul dure 3 à 5 min).
+  meteochampignon_deps_install: "python3 /config/meteochampignon/install_deps.py --launch"
+  meteochampignon_deps_check: "python3 /config/meteochampignon/install_deps.py --check"
+  meteochampignon_cartes_ha: "python3 /config/meteochampignon/maps.py --launch"
+  meteochampignon_cartes_ha_force: "python3 /config/meteochampignon/maps.py --launch --force"
 
 # ----------------------------------------------------------------------------
 # 2) Capteurs de suivi (lecture, toutes les 5 min)
@@ -84,6 +91,9 @@ rest:
         unique_id: meteochampignon_cartes_generation
         device_class: timestamp
         value_template: "{{ as_datetime(value_json.fetchedAt) }}"
+      - name: "Meteochampignon cartes source"
+        unique_id: meteochampignon_cartes_source
+        value_template: "{{ value_json.generatedBy | default('github-actions') }}"
       - name: "Meteochampignon cartes jours"
         unique_id: meteochampignon_cartes_jours
         unit_of_measurement: "jours"
@@ -207,36 +217,57 @@ template:
 # ----------------------------------------------------------------------------
 automation:
   - id: meteochampignon_declencher_jobs
-    alias: "Météochampignon - déclencher les traitements GitHub"
-    description: "Toutes les 15 min : lance le traitement des stations et celui des cartes (garde-fou d'âge côté GitHub). Notifie si GitHub refuse l'appel (jeton expiré, droits)."
+    alias: "Météochampignon - déclencher GitHub en secours"
+    description: "Toutes les 15 min, SEULEMENT si Home Assistant n'a pas produit de données depuis plus de 90 min : lance alors le traitement GitHub correspondant (stations et/ou cartes). Notifie si GitHub refuse l'appel (jeton expiré, droits)."
     mode: single
     triggers:
       - trigger: time_pattern
         minutes: "/15"
+    variables:
+      # Âge en secondes des dernières données (999999 = capteur indisponible => on considère périmé).
+      stations_age: >
+        {% set s = states('sensor.meteochampignon_stations_donnees') %}{{ 999999 if s in ['unknown', 'unavailable', ''] else (now() - (s | as_datetime)).total_seconds() }}
+      cartes_age: >
+        {% set s = states('sensor.meteochampignon_cartes_generation') %}{{ 999999 if s in ['unknown', 'unavailable', ''] else (now() - (s | as_datetime)).total_seconds() }}
     actions:
-      - action: rest_command.meteochampignon_stations
-        response_variable: resp_stations
-        continue_on_error: true
-      - action: rest_command.meteochampignon_cartes
-        response_variable: resp_cartes
-        continue_on_error: true
-      - if: >
-          {{ (resp_stations is not defined or resp_stations.status | int(0) != 204)
-             or (resp_cartes is not defined or resp_cartes.status | int(0) != 204) }}
+      - if: "{{ stations_age | float(999999) > 5400 }}"
         then:
-          - action: persistent_notification.create
-            data:
-              notification_id: meteochampignon_dispatch
-              title: "Météochampignon : GitHub a refusé le déclenchement"
-              message: >
-                Stations : HTTP {{ resp_stations.status if resp_stations is defined else 'pas de réponse' }}.
-                Cartes : HTTP {{ resp_cartes.status if resp_cartes is defined else 'pas de réponse' }}.
-                401 = jeton expiré ou mal copié ; 403/404 = le jeton n'a pas « Actions : lecture et écriture » sur le dépôt ;
-                422 = nom de branche incorrect. Voir docs/home-assistant.md.
-        else:
-          - action: persistent_notification.dismiss
-            data:
-              notification_id: meteochampignon_dispatch
+          - action: rest_command.meteochampignon_stations
+            response_variable: resp_stations
+            continue_on_error: true
+          - if: "{{ resp_stations is not defined or resp_stations.status | int(0) != 204 }}"
+            then:
+              - action: persistent_notification.create
+                data:
+                  notification_id: meteochampignon_dispatch_stations
+                  title: "Météochampignon : GitHub a refusé le déclenchement (stations)"
+                  message: >
+                    HTTP {{ resp_stations.status if resp_stations is defined else 'pas de réponse' }}.
+                    401 = jeton expiré ou mal copié ; 403/404 = le jeton n'a pas « Actions : lecture et écriture » ;
+                    422 = nom de branche incorrect. Voir docs/home-assistant.md.
+            else:
+              - action: persistent_notification.dismiss
+                data:
+                  notification_id: meteochampignon_dispatch_stations
+      - if: "{{ cartes_age | float(999999) > 5400 }}"
+        then:
+          - action: rest_command.meteochampignon_cartes
+            response_variable: resp_cartes
+            continue_on_error: true
+          - if: "{{ resp_cartes is not defined or resp_cartes.status | int(0) != 204 }}"
+            then:
+              - action: persistent_notification.create
+                data:
+                  notification_id: meteochampignon_dispatch_cartes
+                  title: "Météochampignon : GitHub a refusé le déclenchement (cartes)"
+                  message: >
+                    HTTP {{ resp_cartes.status if resp_cartes is defined else 'pas de réponse' }}.
+                    401 = jeton expiré ou mal copié ; 403/404 = le jeton n'a pas « Actions : lecture et écriture » ;
+                    422 = nom de branche incorrect. Voir docs/home-assistant.md.
+            else:
+              - action: persistent_notification.dismiss
+                data:
+                  notification_id: meteochampignon_dispatch_cartes
 
   - id: meteochampignon_collecter_stations
     alias: "Météochampignon - collecter les stations (Home Assistant)"
@@ -264,6 +295,17 @@ automation:
           - action: persistent_notification.dismiss
             data:
               notification_id: meteochampignon_collecte_ha
+
+  - id: meteochampignon_generer_cartes
+    alias: "Météochampignon - générer les cartes (Home Assistant)"
+    description: "Génère les cartes de pluie directement sur Home Assistant, à :05 et :35 de chaque heure. Le script a son propre garde-fou (rien si les cartes publiées ont moins de 50 min) et un verrou anti-doublon ; le calcul tourne en arrière-plan à priorité basse. Si les dépendances ne sont pas installées, il échoue sans conséquence (GitHub prend le relais)."
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: "5,35"
+    actions:
+      - action: shell_command.meteochampignon_cartes_ha
+        continue_on_error: true
 
   - id: meteochampignon_alerte_probleme
     alias: "Météochampignon - alerte si retard ou échec"
@@ -332,6 +374,44 @@ script:
           message: >
             {{ test.stdout if test is defined and test.stdout else 'Pas de réponse.' }}
             {{ test.stderr if test is defined and test.stderr else '' }}
+
+  meteochampignon_installer_dependances:
+    alias: "Météochampignon - installer les dépendances des cartes"
+    icon: mdi:package-down
+    description: "À faire UNE FOIS. Installe s3fs, omfiles… dans /config/meteochampignon/pydeps, à part du Python de Home Assistant (rien n'est modifié dans HA ; retour arrière = supprimer ce dossier)."
+    sequence:
+      - action: shell_command.meteochampignon_deps_install
+      - action: persistent_notification.create
+        data:
+          notification_id: meteochampignon_deps
+          title: "Météochampignon : installation lancée"
+          message: "L'installation tourne en arrière-plan (1 à 3 min). Cliquez ensuite sur « Vérifier les dépendances »."
+
+  meteochampignon_verifier_dependances:
+    alias: "Météochampignon - vérifier les dépendances des cartes"
+    icon: mdi:package-check
+    description: "Dit quels paquets sont disponibles pour générer les cartes, sans rien installer."
+    sequence:
+      - action: shell_command.meteochampignon_deps_check
+        response_variable: deps
+        continue_on_error: true
+      - action: persistent_notification.create
+        data:
+          notification_id: meteochampignon_deps
+          title: "Météochampignon : dépendances des cartes"
+          message: "{{ deps.stdout if deps is defined and deps.stdout else 'Pas de réponse' }} {{ deps.stderr if deps is defined and deps.stderr else '' }}"
+
+  meteochampignon_cartes_maintenant:
+    alias: "Météochampignon - générer les cartes maintenant (Home Assistant)"
+    icon: mdi:weather-pouring
+    description: "Lance le calcul des cartes sur Home Assistant tout de suite, en ignorant le garde-fou d'âge. Dure 3 à 5 min ; le résultat se voit dans « Dernière génération » et « Cartes générées par »."
+    sequence:
+      - action: shell_command.meteochampignon_cartes_ha_force
+      - action: persistent_notification.create
+        data:
+          notification_id: meteochampignon_cartes_ha
+          title: "Météochampignon : génération lancée"
+          message: "Le calcul tourne en arrière-plan (3 à 5 min). Regardez « Cartes générées par » : il doit passer à home-assistant. En cas d'échec : journal /config/meteochampignon/maps.log et état maps-status.json."
 
   meteochampignon_lancer_maintenant:
     alias: "Météochampignon - lancer maintenant"

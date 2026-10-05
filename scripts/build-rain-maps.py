@@ -53,7 +53,9 @@ LAT_MIN, LAT_MAX, LON_MIN, LON_MAX = 42.6, 45.15, -0.4, 3.4
 
 MM_SCALE = 10      # 1 niveau = 0,1 mm
 MM_MAX = 25.5      # 255 / MM_SCALE
-THREADS = 8
+# Lectures S3 en parallèle. 8 sur un runner GitHub ; Home Assistant (2 processeurs, déjà chargé)
+# lance le script avec MAPS_THREADS=3 pour ne pas le ralentir.
+THREADS = int(os.environ.get("MAPS_THREADS", "8"))
 PARIS = ZoneInfo("Europe/Paris")
 UTC = timezone.utc
 
@@ -360,6 +362,7 @@ def main():
             "model": "meteofrance_arome_france_hd", "run": arome.m.ref.strftime("%Y-%m-%dT%H:%MZ"),
         },
         "forecast": forecast,
+        "generatedBy": os.environ.get("GENERATED_BY", "github-actions"),  # qui a calculé ces cartes (suivi dans Home Assistant)
         "attribution": "Données : Météo-France (AROME, ARPEGE), ECMWF (IFS) via Open-Meteo.com (CC BY 4.0)",
     }
     with open(f"{OUT_DIR}/maps.json", "w", encoding="utf-8") as fh:

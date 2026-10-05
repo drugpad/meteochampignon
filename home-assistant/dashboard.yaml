@@ -51,6 +51,39 @@ views:
           action: perform-action
           perform_action: script.meteochampignon_diagnostic
 
+      # ---------- Cartes sur Home Assistant ----------
+      - type: entities
+        title: 🖥️ Cartes calculées par Home Assistant
+        show_header_toggle: false
+        entities:
+          - entity: sensor.meteochampignon_cartes_source
+            name: Cartes générées par (home-assistant ou github-actions)
+          - type: button
+            name: 1. Installer les dépendances (une seule fois)
+            icon: mdi:package-down
+            action_name: Installer
+            tap_action:
+              action: perform-action
+              perform_action: script.meteochampignon_installer_dependances
+              confirmation:
+                text: "Installer s3fs, omfiles… dans /config/meteochampignon/pydeps (à part de Home Assistant) ?"
+          - type: button
+            name: 2. Vérifier les dépendances
+            icon: mdi:package-check
+            action_name: Vérifier
+            tap_action:
+              action: perform-action
+              perform_action: script.meteochampignon_verifier_dependances
+          - type: button
+            name: 3. Générer les cartes maintenant
+            icon: mdi:weather-pouring
+            action_name: Générer
+            tap_action:
+              action: perform-action
+              perform_action: script.meteochampignon_cartes_maintenant
+              confirmation:
+                text: "Lancer le calcul des cartes sur Home Assistant (3 à 5 min, priorité basse) ?"
+
       # ---------- Cartes de pluie ----------
       - type: entities
         title: 🌧️ Cartes de pluie

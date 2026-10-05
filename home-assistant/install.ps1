@@ -7,7 +7,7 @@
 # Ce que fait le script :
 #   1. vérifie que le partage est joignable et ressemble à un dossier de config HA ;
 #   2. copie le paquet dans <config>\packages\, le tableau de bord dans <config>\dashboards\
-#      et les scripts Python dans <config>\meteochampignon\ ;
+#      et les scripts Python (stations, cartes) dans <config>\meteochampignon\ ;
 #   3. demande votre jeton GitHub (saisie masquée) et l'ajoute à secrets.yaml, avec la
 #      clé Météo-France (lue dans .env.local, sans la redemander) — sauvegarde
 #      datée de secrets.yaml avant toute modification ;
@@ -48,7 +48,11 @@ Ok "dashboards\meteochampignon.yaml"
 $scriptsDir = Join-Path $Ha 'meteochampignon'
 New-Item -ItemType Directory -Force -Path $scriptsDir | Out-Null
 Copy-Item (Join-Path $src 'scripts\*.py') $scriptsDir -Force
-Ok "meteochampignon\stations.py + check_env.py"
+Ok "meteochampignon\stations.py, maps.py, install_deps.py, check_env.py"
+# Le générateur de cartes est le MÊME fichier que sur GitHub (une seule source de vérité) ;
+# copié sous un nom importable (pas de tiret).
+Copy-Item (Join-Path $PSScriptRoot '..\scripts\build-rain-maps.py') (Join-Path $scriptsDir 'build_rain_maps.py') -Force
+Ok "meteochampignon\build_rain_maps.py (générateur des cartes)"
 
 # --- 3) jeton GitHub --------------------------------------------------------
 Step "Jeton GitHub (secrets.yaml)"

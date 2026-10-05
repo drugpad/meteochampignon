@@ -113,7 +113,9 @@ git push origin --delete data
 |---|---|
 | `packages/meteochampignon.yaml` | **ajouté** |
 | `dashboards/meteochampignon.yaml` | **ajouté** |
-| `meteochampignon/stations.py`, `meteochampignon/check_env.py` | **ajoutés** |
+| `meteochampignon/stations.py`, `maps.py`, `install_deps.py`, `check_env.py`, `build_rain_maps.py` | **ajoutés** |
+| `meteochampignon/pydeps/` (créé seulement si vous cliquez « Installer les dépendances ») | **paquets des cartes**, à part du Python de Home Assistant : supprimer le dossier suffit |
+| `meteochampignon/maps-out/`, `*.log`, `*-status.json`, `maps.lock` | fichiers de travail des scripts (supprimables) |
 | `configuration.yaml` | **2 lignes ajoutées en tête** (`homeassistant:` puis `packages: !include_dir_named packages`) |
 | `secrets.yaml` | **2 clés ajoutées** : `github_dispatch_auth` et `meteochampignon_mf_token` |
 
@@ -156,11 +158,13 @@ Si le dossier `packages/` ne contenait que ce fichier, vous pouvez aussi le
 supprimer. **Ne restaurez pas** `secrets.yaml` depuis une sauvegarde sans la
 relire : vous pourriez avoir ajouté d'autres secrets depuis.
 
-### Rien n'est installé dans le Python de Home Assistant
+### Le Python de Home Assistant n'est jamais modifié
 
-Le diagnostic a seulement *lu* l'environnement. Aucun paquet n'a été installé sur
-Home Assistant. (Si vous décidez un jour de faire tourner les cartes dessus, ce
-guide sera mis à jour avec ce qui aura été installé.)
+Les paquets des cartes (`s3fs`, `omfiles`…) s'installent **uniquement** dans
+`meteochampignon\pydeps` (option `--target` de pip, sans toucher aux paquets de
+Home Assistant). Retour arrière : **supprimer ce dossier**. Pour arrêter seulement
+la génération des cartes par Home Assistant (GitHub reprend dans les 90 min) :
+désactiver l'automatisation « Météochampignon - générer les cartes (Home Assistant) ».
 
 ---
 
