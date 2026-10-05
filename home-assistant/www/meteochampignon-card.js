@@ -7,7 +7,7 @@
  *
  * Lit les entités du paquet packages/meteochampignon.yaml.
  */
-const MC_VERSION = "1.0.0";
+const MC_VERSION = "1.0.1";
 
 const E = {
   probleme: "binary_sensor.meteochampignon_probleme",
@@ -147,12 +147,17 @@ class MeteochampignonCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    const sig = this._signature();
-    if (sig !== this._sig) {
-      this._sig = sig;
-      this._render();
+    try {
+      const sig = this._signature();
+      if (sig !== this._sig) {
+        this._sig = sig;
+        this._render();
+      }
+      if (Date.now() - this._histAt > 5 * 60 * 1000) this._loadHistory();
+    } catch (e) {
+      // Jamais de carte blanche : on affiche l'erreur dans le cadre pour pouvoir la lire.
+      this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="wrap"><div class="card"><h2>Erreur dans la carte Météochampignon</h2><pre style="white-space:pre-wrap;font-size:12px">${esc(e && e.stack ? e.stack : e)}</pre></div></div>`;
     }
-    if (Date.now() - this._histAt > 5 * 60 * 1000) this._loadHistory();
   }
 
   getCardSize() { return 12; }
