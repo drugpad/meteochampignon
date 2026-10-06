@@ -1,7 +1,12 @@
 // Barre de recherche d'adresse/ville avec autocomplétion (repris d'Unmask).
 import { useEffect, useRef, useState } from 'react'
 import { searchAddress, type GeocodeResult } from '../lib/geocoding'
+import { REGION_BOUNDS } from '../lib/regionOutline'
 import './SearchBar.css'
+
+// La carte est bloquée sur la région (maxBounds dans MapView) : un résultat au-delà (Paris, Lyon…) la
+// faisait sauter au bord de la zone sans rien afficher d'utile. Même marge que maxBounds.
+const SEARCH_AREA = REGION_BOUNDS.pad(0.25)
 
 interface SearchBarProps {
   onSelect: (result: GeocodeResult) => void
@@ -51,10 +56,11 @@ export function SearchBar({ onSelect }: SearchBarProps) {
 
     debounceRef.current = window.setTimeout(async () => {
       try {
-        const found = await searchAddress(query)
+        const all = await searchAddress(query)
         if (seq !== searchSeqRef.current) return
+        const found = all.filter((r) => SEARCH_AREA.contains([r.lat, r.lon]))
         setResults(found)
-        setError(null)
+        setError(all.length > 0 && found.length === 0 ? 'Aucun résultat dans la région (Midi-Pyrénées et alentours).' : null)
         setIsOpen(true)
       } catch {
         if (seq !== searchSeqRef.current) return

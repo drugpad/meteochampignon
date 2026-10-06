@@ -245,13 +245,20 @@ template:
           {% set s = states('sensor.meteochampignon_stations_donnees') %}
           {{ s in ['unknown', 'unavailable', ''] or (now() - (s | as_datetime)).total_seconds() > 3 * 3600 }}
 
-      # Un des deux traitements a échoué à son dernier passage.
+      # Un des deux traitements a échoué à son dernier passage, ET ce passage date de moins de 3 h.
+      # (Le traitement GitHub des stations ne tourne plus qu'en secours : son dernier échec restait
+      # sinon affiché pendant des heures, avec un bandeau rouge alors que tout était à jour.)
       - name: "Meteochampignon traitement en echec"
         unique_id: meteochampignon_traitement_en_echec
         device_class: problem
         state: >
-          {{ 'failure' in [states('sensor.meteochampignon_cartes_traitement'),
-                           states('sensor.meteochampignon_stations_traitement')] }}
+          {% set vide = ['unknown', 'unavailable', ''] %}
+          {% set cd = states('sensor.meteochampignon_cartes_traitement_date') %}
+          {% set sd = states('sensor.meteochampignon_stations_traitement_date') %}
+          {{ (is_state('sensor.meteochampignon_cartes_traitement', 'failure') and cd not in vide
+                and (now() - (cd | as_datetime)).total_seconds() < 10800)
+             or (is_state('sensor.meteochampignon_stations_traitement', 'failure') and sd not in vide
+                and (now() - (sd | as_datetime)).total_seconds() < 10800) }}
 
       # Synthèse : vrai si l'un des trois voyants est allumé.
       - name: "Meteochampignon probleme"

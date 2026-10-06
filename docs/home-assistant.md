@@ -10,8 +10,10 @@ mises à jour que toutes les quelques heures.
 
 Home Assistant tourne en continu. Ce paquet :
 
-1. **fait lui-même les traitements** (stations et cartes) et **appelle GitHub en
-   secours** seulement si les données ont plus de 90 min ;
+1. **fait lui-même la collecte des stations** (GitHub en secours si rien n'est
+   enregistré depuis 90 min) et **déclenche GitHub pour les cartes** dès qu'elles
+   ont plus de 55 min (Home Assistant ne peut pas les calculer lui-même sur un
+   processeur sans AVX2, voir plus bas) ;
 2. **surveille** la fraîcheur des cartes et des stations et l'état du dernier
    traitement, dans un **tableau de bord dédié** ;
 3. **vous alerte** (notification dans Home Assistant) si quelque chose est en

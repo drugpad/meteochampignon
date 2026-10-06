@@ -185,6 +185,10 @@ def merge(history, collected, now):
         merged = [p for p in merged if datetime.strptime(p["time"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc) >= cutoff]
         merged.sort(key=lambda p: p["time"])
         stations[sid] = merged
+    # Élagage de TOUTES les stations : une station qui a cessé de transmettre n'est plus dans
+    # `collected` et gardait sinon éternellement ses vieux points.
+    for sid, points in stations.items():
+        stations[sid] = [p for p in points if datetime.strptime(p["time"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc) >= cutoff]
     if added:
         history["fetchedAt"] = now.strftime("%Y-%m-%dT%H:%M:%S.000Z")
     return added

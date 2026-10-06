@@ -42,6 +42,12 @@ export async function mergeStationHistory(tmpPath) {
       .filter((p) => new Date(p.time).getTime() >= cutoff)
       .sort((a, b) => a.time.localeCompare(b.time))
   }
+  // Élagage de TOUTES les stations : une station qui a cessé de transmettre n'apparaît plus dans
+  // `collected` et gardait sinon éternellement ses vieux points (détail affiché sur plus de 10 jours).
+  for (const [id, points] of Object.entries(current.stations)) {
+    const kept = points.filter((p) => new Date(p.time).getTime() >= cutoff)
+    if (kept.length !== points.length) current.stations[id] = kept
+  }
   if (added > 0) current.fetchedAt = new Date().toISOString()
   await writeFile(OUTPUT_PATH, JSON.stringify(current))
   return added
