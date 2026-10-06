@@ -25,7 +25,7 @@
 // CLAUDE.md "Comptes à créer".
 import stationsData from '../data/stations-midi-pyrenees.json'
 import { getDailyForecast } from './openMeteo'
-import type { Station, StationDetail } from '../types'
+import type { ForecastDay, Station, StationDetail } from '../types'
 
 export const STATIC_STATIONS: Station[] = (
   stationsData as { id: string; name: string; lat: number; lon: number; altitude: number }[]
@@ -107,9 +107,11 @@ function expectedObservationsPerDay(now: number): Map<string, number> {
 }
 
 export async function fetchStationDetail(station: Station): Promise<StationDetail> {
+  // La mini prévision est un PLUS : sans elle (hors ligne, Open-Meteo injoignable), l'historique de la
+  // station — l'essentiel de l'écran, et la seule partie disponible dans la copie hors ligne — reste affiché.
   const [historyByStation, miniForecast] = await Promise.all([
     loadHistory(),
-    getDailyForecast({ lat: station.lat, lon: station.lon }, 5),
+    getDailyForecast({ lat: station.lat, lon: station.lon }, 5).catch(() => [] as ForecastDay[]),
   ])
 
   const points = (historyByStation[station.id] ?? []).slice().sort((a, b) => a.time.localeCompare(b.time))

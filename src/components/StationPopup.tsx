@@ -161,30 +161,36 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
       )}
 
       <div className="station-popup__section-title">Mini prévision 5 jours</div>
-      <div className="station-popup__legend">
-        <span className="station-popup__legend-item">
-          <span className="station-popup__legend-dot" style={{ background: '#2563eb' }} /> Pluie (mm)
-        </span>
-        <span className="station-popup__legend-item">
-          <span className="station-popup__legend-dot" style={{ background: '#dc2626' }} /> Max (°C)
-        </span>
-        <span className="station-popup__legend-item">
-          <span className="station-popup__legend-dot" style={{ background: '#f59e0b' }} /> Min (°C)
-        </span>
-      </div>
-      <ResponsiveContainer width="100%" height={120}>
-        <ComposedChart data={forecastData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-          <XAxis dataKey="label" interval={0} tick={<DayTick x={0} y={0} payload={{ value: '' }} />} tickLine={false} />
-          <YAxis yAxisId="precip" fontSize={10} width={28} />
-          <YAxis yAxisId="temp" orientation="right" fontSize={10} width={28} domain={['auto', 'auto']} />
-          <Tooltip
-            formatter={(v, name) => (name === 'precip' ? [`${v} mm`, 'Pluie'] : [`${v}°C`, name === 'tempMax' ? 'Max' : 'Min'])}
-          />
-          <Bar yAxisId="precip" dataKey="precip" fill="#2563eb" radius={[2, 2, 0, 0]} barSize={14} />
-          <Line yAxisId="temp" type="monotone" dataKey="tempMax" stroke="#dc2626" dot={{ r: 2 }} strokeWidth={2} />
-          <Line yAxisId="temp" type="monotone" dataKey="tempMin" stroke="#f59e0b" dot={{ r: 2 }} strokeWidth={2} />
-        </ComposedChart>
-      </ResponsiveContainer>
+      {forecastData.length === 0 ? (
+        <div className="station-popup__altitude">Prévision indisponible (pas de réseau).</div>
+      ) : (
+        <>
+          <div className="station-popup__legend">
+            <span className="station-popup__legend-item">
+              <span className="station-popup__legend-dot" style={{ background: '#2563eb' }} /> Pluie (mm)
+            </span>
+            <span className="station-popup__legend-item">
+              <span className="station-popup__legend-dot" style={{ background: '#dc2626' }} /> Max (°C)
+            </span>
+            <span className="station-popup__legend-item">
+              <span className="station-popup__legend-dot" style={{ background: '#f59e0b' }} /> Min (°C)
+            </span>
+          </div>
+          <ResponsiveContainer width="100%" height={120}>
+            <ComposedChart data={forecastData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <XAxis dataKey="label" interval={0} tick={<DayTick x={0} y={0} payload={{ value: '' }} />} tickLine={false} />
+              <YAxis yAxisId="precip" fontSize={10} width={28} />
+              <YAxis yAxisId="temp" orientation="right" fontSize={10} width={28} domain={['auto', 'auto']} />
+              <Tooltip
+                formatter={(v, name) => (name === 'precip' ? [`${v} mm`, 'Pluie'] : [`${v}°C`, name === 'tempMax' ? 'Max' : 'Min'])}
+              />
+              <Bar yAxisId="precip" dataKey="precip" fill="#2563eb" radius={[2, 2, 0, 0]} barSize={14} />
+              <Line yAxisId="temp" type="monotone" dataKey="tempMax" stroke="#dc2626" dot={{ r: 2 }} strokeWidth={2} />
+              <Line yAxisId="temp" type="monotone" dataKey="tempMin" stroke="#f59e0b" dot={{ r: 2 }} strokeWidth={2} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </>
+      )}
     </div>
   )
 }
