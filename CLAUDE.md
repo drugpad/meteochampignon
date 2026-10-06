@@ -69,6 +69,13 @@ API `DonneesPubliquesRadar v1` (`lib/meteoFranceRadar.ts`), vérifiée avec un v
 
 **Décision du 16/09/2026** : mis en pause au profit d'un resserrage de la grille Option A (voir plus haut) — bien moins risqué, et Open-Meteo/AROME est déjà proche de la résolution native visée. Option B resterait pertinente si on veut un jour la vraie pluie mesurée (pas un modèle), mais le décodage BUFR + l'alignement géographique représentent un chantier significatif, pas encore chiffré. Si repris un jour : commencer par valider le géoréférencement sur un point connu (ex. Toulouse) avant de brancher quoi que ce soit sur la carte.
 
+### 3.5 Guide des champignons (branche `evolchampi`, 06/10/2026)
+
+Bouton « 🍄 Champignons » à côté de Prévisions/Historique (icône seule sur mobile) → page plein écran (`MushroomGuide.tsx`) : liste de 21 fiches en cartes, puis fiche détaillée (critères, habitat, saison, précautions, **sosies avec leur photo et comment les distinguer**, sources). Navigation branchée sur l'historique du navigateur (`lib/useMushroomGuide.ts`) : le bouton retour du téléphone ramène fiche → liste → carte.
+
+- **Données** : `src/data/champignons.ts` (espèces + sosies réutilisés d'une fiche à l'autre). 5 tags : Comestible + (réputé bon), Comestible, Non comestible, Toxique, Mortel. Contenu recoupé sur les fiches Wikipédia de chaque espèce et les recommandations de l'Anses (cuisson 20-30 min, 150-200 g/semaine, pas aux enfants…), sources affichées sur chaque fiche. Avertissement permanent : la page aide à reconnaître, pas à décider de manger. Urgences : 15/112 et centre antipoison de Toulouse (05 61 77 74 47, CHU Purpan).
+- **Photos** : uniquement Wikimedia Commons (licences libres), redimensionnées à 720 px dans `public/champignons/` (~3,4 Mo, chargement paresseux). Auteur + licence + lien affichés sous chaque photo (`src/data/champignonPhotos.ts`, obligatoire pour CC BY / BY-SA). **Jamais les photos d'une appli tierce** (droits d'auteur).
+
 ## 4. Emprise géographique
 
 `MIDI_PYRENEES_BOUNDS` (`lib/config.ts`) : rectangle englobant lat 42.6–45.15, lon -0.4–3.4, couvrant large les 8 départements de l'ex-région (Ariège, Aveyron, Haute-Garonne, Gers, Lot, Hautes-Pyrénées, Tarn, Tarn-et-Garonne) y compris les zones frontalières (Pyrénées, causses).

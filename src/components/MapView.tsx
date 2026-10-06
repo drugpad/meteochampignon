@@ -12,11 +12,13 @@ import { getDailyForecast } from '../lib/openMeteo'
 import { fetchRainImage, fetchRainMapsMeta, firstCurrentDayIndex } from '../lib/rainMaps'
 import { REGION_BOUNDS } from '../lib/regionOutline'
 import { useIsMobile } from '../lib/useIsMobile'
+import { useMushroomGuide } from '../lib/useMushroomGuide'
 import { ForecastFullscreen } from './ForecastFullscreen'
 import { ForecastPanel } from './ForecastPanel'
 import { ForecastRainControls } from './ForecastRainControls'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
+import { MushroomGuide } from './MushroomGuide'
 import { RainControls } from './RainControls'
 import { RainOverlay } from './RainOverlay'
 import { RegionOutline } from './RegionOutline'
@@ -130,6 +132,7 @@ function InvalidateSizeOnResize() {
 export function MapView() {
   const isMobile = useIsMobile()
   const [mode, setMode] = useState<AppMode>('previsions')
+  const guide = useMushroomGuide()
   const [forecastState, setForecastState] = useState<ForecastState>({ status: 'idle' })
   const [mapsState, setMapsState] = useState<RainMapsState>({ status: 'loading' })
   const [images, setImages] = useState<Record<string, RainImageState>>({})
@@ -223,9 +226,13 @@ export function MapView() {
 
   return (
     <div className="map-view">
+      {guide.view && <MushroomGuide view={guide.view} onOpenSpecies={guide.openSpecies} onBack={guide.back} />}
       <div className="floating-controls">
         <div className="floating-controls__row">
           <ModeSwitch mode={mode} onChange={setMode} />
+          <button type="button" className="guide-open" onClick={guide.open} aria-label="Champignons">
+            🍄<span className="guide-open__label"> Champignons</span>
+          </button>
           <SearchBar onSelect={setSearchTarget} />
         </div>
 
