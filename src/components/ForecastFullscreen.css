@@ -102,3 +102,14 @@
 .forecast-fullscreen__body .forecast-day__temps {
   margin-bottom: 0;
 }
+
+.forecast-fullscreen__body .forecast-day__warn {
+  grid-column: 1 / -1;
+  max-width: none;
+  font-size: 12px;
+  margin: 0;
+}
+
+.forecast-fullscreen__body .forecast-day__model {
+  margin-top: 0;
+}

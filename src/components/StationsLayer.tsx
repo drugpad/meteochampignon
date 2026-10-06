@@ -6,19 +6,40 @@
 // petit point de carte est peu ergonomique au doigt (retour utilisateur).
 import L from 'leaflet'
 import { useRef, useState } from 'react'
-import { Marker, Popup } from 'react-leaflet'
+import { Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import { fetchStationDetail, STATIC_STATIONS } from '../lib/stations'
 import { useIsMobile } from '../lib/useIsMobile'
 import { StationFullscreen } from './StationFullscreen'
 import { StationPopup } from './StationPopup'
 import type { Station, StationDetailState } from '../types'
 
-const STATION_ICON = L.divIcon({
+const PIN_ICON = L.divIcon({
   className: 'station-marker',
   html: '<div class="station-marker__pin">🌧️</div>',
   iconSize: [26, 26],
   iconAnchor: [13, 13],
 })
+
+// Au zoom de départ, 239 pastilles de 26 px se recouvrent complètement (surtout sur téléphone) : en
+// dessous du zoom 10, de simples points, plus petits tant qu'on est loin. La zone cliquable reste
+// de 28 px (doigt), seul le point dessiné rétrécit.
+const dotIcon = (px: number) =>
+  L.divIcon({
+    className: 'station-marker',
+    html: `<div class="station-marker__dot" style="width:${px}px;height:${px}px"></div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  })
+const DOT_FAR = dotIcon(9)
+const DOT_MID = dotIcon(14)
+const iconForZoom = (zoom: number) => (zoom >= 10 ? PIN_ICON : zoom >= 9 ? DOT_MID : DOT_FAR)
+
+function useIconForZoom() {
+  const map = useMap()
+  const [zoom, setZoom] = useState(() => map.getZoom())
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) })
+  return iconForZoom(zoom)
+}
 
 // Âge au-delà duquel rouvrir une popup recharge le détail (même seuil que le
 // cache de l'historique, voir HISTORY_MAX_AGE_MS dans lib/stations.ts).
@@ -33,7 +54,7 @@ function loadDetail(station: Station, setState: (s: StationDetailState) => void)
 
 // Desktop : popup Leaflet classique, chargement au popupopen (comportement
 // inchangé).
-function StationMarkerDesktop({ station }: { station: Station }) {
+function StationMarkerDesktop({ station, icon }: { station: Station; icon: L.DivIcon }) {
   const [state, setState] = useState<StationDetailState>({ status: 'idle' })
   const loadedAtRef = useRef(0)
 
@@ -63,7 +84,7 @@ function StationMarkerDesktop({ station }: { station: Station }) {
   // l'ouverture) voit déjà la bonne taille — pas de repositionnement après
   // coup nécessaire.
   return (
-    <Marker position={[station.lat, station.lon]} icon={STATION_ICON} eventHandlers={{ popupopen: handleOpen }}>
+    <Marker position={[station.lat, station.lon]} icon={icon} eventHandlers={{ popupopen: handleOpen }}>
       <Popup minWidth={290} maxWidth={310}>
         <StationPopup state={state} />
       </Popup>
@@ -74,11 +95,11 @@ function StationMarkerDesktop({ station }: { station: Station }) {
 // Mobile : pas de popup Leaflet, le clic déclenche le chargement et
 // notifie le parent (un seul écran plein-écran partagé, pas un par
 // marqueur — voir StationsLayer).
-function StationMarkerMobile({ station, onOpen }: { station: Station; onOpen: (station: Station) => void }) {
+function StationMarkerMobile({ station, icon, onOpen }: { station: Station; icon: L.DivIcon; onOpen: (station: Station) => void }) {
   return (
     <Marker
       position={[station.lat, station.lon]}
-      icon={STATION_ICON}
+      icon={icon}
       eventHandlers={{ click: () => onOpen(station) }}
     />
   )
@@ -86,6 +107,7 @@ function StationMarkerMobile({ station, onOpen }: { station: Station; onOpen: (s
 
 export function StationsLayer() {
   const isMobile = useIsMobile()
+  const icon = useIconForZoom()
   const [mobileSelection, setMobileSelection] = useState<{ station: Station; state: StationDetailState } | null>(null)
 
   const handleMobileOpen = (station: Station) => {
@@ -97,7 +119,7 @@ export function StationsLayer() {
     return (
       <>
         {STATIC_STATIONS.map((station) => (
-          <StationMarkerDesktop key={station.id} station={station} />
+          <StationMarkerDesktop key={station.id} station={station} icon={icon} />
         ))}
       </>
     )
@@ -106,7 +128,7 @@ export function StationsLayer() {
   return (
     <>
       {STATIC_STATIONS.map((station) => (
-        <StationMarkerMobile key={station.id} station={station} onOpen={handleMobileOpen} />
+        <StationMarkerMobile key={station.id} station={station} icon={icon} onOpen={handleMobileOpen} />
       ))}
       {mobileSelection && (
         <StationFullscreen

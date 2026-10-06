@@ -63,6 +63,20 @@
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
 }
 
+.station-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.station-marker__dot {
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2px solid white;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
 .station-marker__pin {
   width: 26px;
   height: 26px;
@@ -74,4 +88,26 @@
   border: 2px solid #2563eb;
   font-size: 13px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* Mobile : les commandes du haut ne doivent pas manger la moitié de l'écran. Ligne 1 = mode +
+   Champignons + Hors ligne (icônes seules), ligne 2 = recherche, ligne 3 = sélecteur de pluie. */
+@media (max-width: 640px) {
+  .floating-controls {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    gap: 6px;
+  }
+
+  .floating-controls__row {
+    gap: 6px;
+  }
+
+  /* L'attribution (obligatoire) passait sur deux lignes en grand corps et chevauchait le bouton des
+     fonds de carte : corps réduit, elle reste lisible mais ne prend plus que ~2 lignes de 9 px. */
+  .leaflet-control-attribution {
+    font-size: 9px;
+    line-height: 1.3;
+  }
 }

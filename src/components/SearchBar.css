@@ -61,4 +61,11 @@
     flex-basis: 100%;
     max-width: none;
   }
+
+  /* iOS Safari zoome automatiquement sur tout champ dont la police fait moins de 16 px (et ne
+     redézoome pas toujours après) : 16 px sur mobile, gabarit un peu plus compact autour. */
+  .search-bar input {
+    font-size: 16px;
+    padding: 8px 12px;
+  }
 }

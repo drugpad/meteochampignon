@@ -31,3 +31,15 @@
 .mode-switch__btn--active:hover {
   background: #1d4ed8;
 }
+
+@media (max-width: 640px) {
+  .mode-switch {
+    gap: 2px;
+    padding: 3px;
+  }
+
+  .mode-switch__btn {
+    padding: 8px 9px;
+    font-size: 13px;
+  }
+}

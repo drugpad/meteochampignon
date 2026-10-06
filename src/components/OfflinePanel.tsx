@@ -157,8 +157,10 @@ export function OfflinePanel() {
             </button>
           )}
           {!installable && isIos() && !isStandalone() && (
-            <p className="offline__note">
-              Sur iPhone : bouton Partager, puis « Sur l'écran d'accueil » pour installer l'appli.
+            <p className="offline__note offline__note--warn">
+              <b>Sur iPhone</b> : installe d'abord l'appli (bouton Partager, puis « Sur l'écran d'accueil »), ouvre-la
+              depuis son icône, <b>puis</b> enregistre la copie depuis là. Une copie faite dans Safari n'est pas
+              partagée avec l'appli installée, et Safari l'efface après 7 jours sans visite.
             </p>
           )}
         </div>
