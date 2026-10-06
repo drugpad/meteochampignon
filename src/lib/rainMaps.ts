@@ -47,6 +47,14 @@ export async function fetchRainMapsMeta(): Promise<RainMapsMeta> {
   return meta
 }
 
+// URL de tous les fichiers des cartes actuelles (maps.json en premier) : sert à les enregistrer
+// pour le mode hors ligne (src/lib/offline.ts). Même source et mêmes URL que fetchRainImage.
+export function rainMapsUrls(meta: RainMapsMeta): string[] {
+  const v = encodeURIComponent(meta.fetchedAt)
+  const files = [meta.rain24h.file, ...meta.forecast.map((d) => d.file)]
+  return [`${activeBase}/maps.json`, ...files.map((f) => `${activeBase}/${f}?v=${v}`)]
+}
+
 // Décode un PNG en niveaux de gris : le niveau est lu dans le canal rouge.
 // `colorSpaceConversion: 'none'` évite toute correction de couleur qui
 // altérerait les valeurs (ce sont des données, pas une image à afficher).

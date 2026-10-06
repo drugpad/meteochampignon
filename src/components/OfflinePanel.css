@@ -1,0 +1,200 @@
+.offline {
+  position: relative;
+  flex: none;
+}
+
+/* Même gabarit que le bouton « Champignons » (MushroomGuide.css). */
+.offline__open {
+  border: none;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+}
+
+.offline__open:hover {
+  background: #f0f0f0;
+}
+
+.offline__open--off {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.offline__card {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 1100;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100dvh - 90px);
+  overflow-y: auto;
+  background: white;
+  color: #222;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  padding: 14px;
+  font-size: 14px;
+}
+
+.offline__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.offline__close {
+  border: none;
+  background: none;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: #555;
+}
+
+.offline__note {
+  margin: 8px 0;
+  line-height: 1.4;
+  color: #444;
+}
+
+.offline__note--warn {
+  background: #ffedd5;
+  color: #9a3412;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.offline__note--error {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.offline__levels {
+  border: none;
+  margin: 10px 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.offline__level {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.offline__level small {
+  display: block;
+  color: #666;
+}
+
+.offline__primary,
+.offline__secondary {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.offline__primary {
+  background: #2f7d4f;
+  color: white;
+}
+
+.offline__primary:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.offline__secondary {
+  margin-top: 10px;
+  background: #e8f1ec;
+  color: #1f5c3a;
+}
+
+.offline__progress {
+  margin: 4px 0;
+}
+
+.offline__bar {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.offline__bar i {
+  display: block;
+  height: 100%;
+  background: #2f7d4f;
+  transition: width 0.2s;
+}
+
+.offline__row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  color: #444;
+}
+
+.offline__link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.offline__saved {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+  display: grid;
+  gap: 4px;
+}
+
+.offline__saved small {
+  color: #666;
+  line-height: 1.35;
+}
+
+@media (max-width: 640px) {
+  .offline__open {
+    padding: 10px 12px;
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .offline__label {
+    display: none;
+  }
+
+  /* Sur mobile, la carte s'ouvre sur toute la largeur de l'écran plutôt que sous le petit bouton. */
+  .offline {
+    position: static;
+  }
+
+  .offline__card {
+    left: 0;
+    right: 0;
+    top: 62px;
+    width: auto;
+  }
+}

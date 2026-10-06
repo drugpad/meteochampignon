@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MapContainer, LayersControl, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
+import { IGN_PLAN_URL, readOfflineInfo } from '../lib/offline'
 import { fetchRainImage, fetchRainMapsMeta, firstCurrentDayIndex } from '../lib/rainMaps'
 import { REGION_BOUNDS } from '../lib/regionOutline'
 import { useIsMobile } from '../lib/useIsMobile'
@@ -18,6 +19,7 @@ import { ForecastPanel } from './ForecastPanel'
 import { ForecastRainControls } from './ForecastRainControls'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
+import { OfflinePanel } from './OfflinePanel'
 import { MushroomGuide } from './MushroomGuide'
 import { RainControls } from './RainControls'
 import { RainOverlay } from './RainOverlay'
@@ -129,6 +131,10 @@ function InvalidateSizeOnResize() {
   return null
 }
 
+// Sans réseau au démarrage, on ouvre directement le fond enregistré (le Plan OSM ne s'afficherait pas).
+const START_OFFLINE = typeof navigator !== 'undefined' && !navigator.onLine
+const OFFLINE_INFO = readOfflineInfo()
+
 export function MapView() {
   const isMobile = useIsMobile()
   const [mode, setMode] = useState<AppMode>('previsions')
@@ -233,6 +239,7 @@ export function MapView() {
           <button type="button" className="guide-open" onClick={guide.open} aria-label="Champignons">
             🍄<span className="guide-open__label"> Champignons</span>
           </button>
+          <OfflinePanel />
           <SearchBar onSelect={setSearchTarget} />
         </div>
 
@@ -263,10 +270,21 @@ export function MapView() {
         <DataAttribution />
 
         <LayersControl position="bottomleft">
-          <LayersControl.BaseLayer checked name="Plan">
+          <LayersControl.BaseLayer checked={!START_OFFLINE} name="Plan">
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+              eventHandlers={{ tileerror: handleTileError }}
+            />
+          </LayersControl.BaseLayer>
+          {/* Plan IGN : seul fond enregistrable pour le hors ligne (OSM l'interdit, voir lib/offline.ts).
+              Hors ligne, les zooms au-delà de la copie sont agrandis plutôt que laissés vides. */}
+          <LayersControl.BaseLayer checked={START_OFFLINE} name="Plan IGN (hors ligne)">
+            <TileLayer
+              attribution='&copy; <a href="https://www.ign.fr">IGN</a> - Géoplateforme'
+              url={IGN_PLAN_URL}
+              maxNativeZoom={START_OFFLINE ? (OFFLINE_INFO?.maxZoom ?? 12) : 18}
+              crossOrigin="anonymous"
               eventHandlers={{ tileerror: handleTileError }}
             />
           </LayersControl.BaseLayer>
