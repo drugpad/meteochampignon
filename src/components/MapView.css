@@ -57,6 +57,12 @@
   width: 100%;
 }
 
+.forecast-cross {
+  background: none;
+  border: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+
 .station-marker__pin {
   width: 26px;
   height: 26px;

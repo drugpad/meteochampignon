@@ -6,7 +6,7 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MapContainer, LayersControl, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import { MapContainer, LayersControl, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
 import { fetchRainImage, fetchRainMapsMeta, firstCurrentDayIndex } from '../lib/rainMaps'
@@ -66,6 +66,26 @@ function DataAttribution() {
     }
   }, [map])
   return null
+}
+
+// Croix posée là où l'on a cliqué pour la prévision. Contour blanc + trait
+// sombre : lisible sur le fond clair, le satellite et les couleurs de la carte
+// de pluie. Non interactive : un clic dessus passe au fond de carte, donc
+// recliquer au même endroit relance bien la prévision.
+const FORECAST_CROSS_ICON = L.divIcon({
+  className: 'forecast-cross',
+  html:
+    '<svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true">' +
+    '<path d="M14 3v22M3 14h22" stroke="#fff" stroke-width="6" stroke-linecap="round" fill="none"/>' +
+    '<path d="M14 3v22M3 14h22" stroke="#111827" stroke-width="3" stroke-linecap="round" fill="none"/>' +
+    '</svg>',
+  iconSize: [28, 28],
+  iconAnchor: [14, 14],
+})
+
+function ForecastCross({ point }: { point: { lat: number; lon: number } | null }) {
+  if (!point) return null
+  return <Marker position={[point.lat, point.lon]} icon={FORECAST_CROSS_ICON} interactive={false} keyboard={false} zIndexOffset={1000} />
 }
 
 function ClickHandler({ enabled, onClick }: { enabled: boolean; onClick: (lat: number, lon: number) => void }) {
@@ -257,6 +277,8 @@ export function MapView() {
         <RegionOutline />
 
         {mode === 'historique' && <StationsLayer />}
+
+        {mode === 'previsions' && <ForecastCross point={forecastState.status === 'idle' ? null : forecastState.point} />}
 
         {mapsState.status === 'ready' && currentImage.status === 'ready' && (
           <RainOverlay image={currentImage.image} bounds={mapsState.meta.bounds} />
