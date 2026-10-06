@@ -61,6 +61,18 @@ def log(msg):
     print(time.strftime("%H:%M:%S"), msg, flush=True)
 
 
+def rss_mb():
+    """Mémoire résidente de CE processus, en Mo (None hors Linux)."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return round(int(line.split()[1]) / 1024)
+    except OSError:
+        pass
+    return None
+
+
 def write_status(**fields):
     fields["fin"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     with open(STATUS, "w", encoding="utf-8") as fh:
@@ -76,7 +88,14 @@ def launch():
     kwargs = {"start_new_session": True} if os.name == "posix" else {}
     if os.name == "posix":
         kwargs["preexec_fn"] = lambda: os.nice(10)  # priorité basse : Home Assistant reste réactif
-    subprocess.Popen(args, stdout=logfile, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, cwd=HERE, **kwargs)
+    # Le shell relais écrit le code de sortie dans le journal : un processus tué sans un mot
+    # (manque de mémoire, plantage d'une bibliothèque native) laisse sinon AUCUNE trace.
+    relay = (
+        'echo "$(date +%H:%M:%S) processus lancé (pid $$)"; "$@"; code=$?; '
+        'echo "$(date +%H:%M:%S) processus terminé, code $code '
+        '(137 = tué faute de mémoire, 139 = plantage natif, 0 = normal)"'
+    )
+    subprocess.Popen(["sh", "-c", relay, "sh"] + args, stdout=logfile, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, cwd=HERE, **kwargs)
     print(json.dumps({"ok": True, "lance": True, "journal": LOG}, ensure_ascii=False))
     return 0
 
@@ -168,13 +187,30 @@ def publish(folder, auth):
 
 def generate():
     """Appelle le générateur (même code que GitHub Actions)."""
+    import faulthandler  # noqa: PLC0415
+    import threading  # noqa: PLC0415
+
+    faulthandler.enable()  # un plantage natif (segfault) écrit au moins la pile Python dans le journal
+    stop = threading.Event()
+
+    def watch():
+        while not stop.wait(10):
+            log(f"  … en cours, mémoire du processus : {rss_mb()} Mo")
+
+    threading.Thread(target=watch, daemon=True).start()
+    log(f"import du générateur (mémoire {rss_mb()} Mo)…")
     import build_rain_maps  # copié sous ce nom par install.ps1  # noqa: PLC0415
+
+    log(f"générateur importé (mémoire {rss_mb()} Mo)")
 
     build_rain_maps.OUT_DIR = OUT_DIR
     if os.path.isdir(OUT_DIR):
         for n in os.listdir(OUT_DIR):
             os.remove(os.path.join(OUT_DIR, n))
-    build_rain_maps.main()
+    try:
+        build_rain_maps.main()
+    finally:
+        stop.set()
 
 
 def run():
