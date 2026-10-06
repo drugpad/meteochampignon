@@ -5,6 +5,7 @@
 // sur l'historique du navigateur : le bouton retour du téléphone ramène de
 // la fiche à la liste puis à la carte, au lieu de quitter l'appli (une page
 // qu'on parcourt longuement en forêt, contrairement au détail station).
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ANSES_URL,
@@ -12,7 +13,9 @@ import {
   LOOKALIKES,
   SPECIES,
   photoOf,
+  type Confusion,
   type Edibility,
+  type Lookalike,
   type Species,
 } from '../data/champignons'
 import type { PhotoId } from '../data/champignonPhotos'
@@ -122,7 +125,7 @@ function SpeciesList({ onOpen }: { onOpen: (id: string) => void }) {
         {SPECIES.map((s) => (
           <li key={s.id}>
             <button type="button" className="guide-card" onClick={() => onOpen(s.id)}>
-              <img className="guide-card__photo" src={photoUrl(s.photo)} alt="" loading="lazy" />
+              <img className="guide-card__photo" src={photoUrl(s.photos[0].id)} alt="" loading="lazy" />
               <span className="guide-card__text">
                 <span className="guide-card__name">{s.name}</span>
                 <span className="guide-card__latin">{s.latin}</span>
@@ -161,101 +164,144 @@ function PhotoCredit({ id }: { id: PhotoId }) {
   )
 }
 
+function Gallery({ species: s }: { species: Species }) {
+  const [index, setIndex] = useState(0)
+  const current = s.photos[index] ?? s.photos[0]
+  return (
+    <div className="guide-gallery">
+      <img className="guide-gallery__main" src={photoUrl(current.id)} alt={`${s.name} : ${current.label}`} />
+      <PhotoCredit id={current.id} />
+      {s.photos.length > 1 && (
+        <div className="guide-gallery__thumbs">
+          {s.photos.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              className={i === index ? 'guide-thumb guide-thumb--active' : 'guide-thumb'}
+              onClick={() => setIndex(i)}
+            >
+              <img src={photoUrl(p.id)} alt="" loading="lazy" />
+              <span>{p.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ConfusionCard({ species: s, confusion }: { species: Species; confusion: Confusion }) {
+  const l: Lookalike = LOOKALIKES[confusion.with]
+  const [zoomed, setZoomed] = useState(false)
+  return (
+    <div className={`guide-confusion guide-confusion--${l.edibility}`}>
+      <div className="guide-confusion__head">
+        {l.photo && (
+          <button
+            type="button"
+            className={zoomed ? 'guide-confusion__photo guide-confusion__photo--zoomed' : 'guide-confusion__photo'}
+            onClick={() => setZoomed((z) => !z)}
+            aria-label={zoomed ? 'Réduire la photo' : 'Agrandir la photo'}
+          >
+            <img src={photoUrl(l.photo)} alt={l.name} loading="lazy" />
+          </button>
+        )}
+        <div className="guide-confusion__title">
+          <div className="guide-confusion__name">{l.name}</div>
+          <div className="guide-sheet__latin">{l.latin}</div>
+          <EdibilityTag edibility={l.edibility} />
+        </div>
+      </div>
+      {l.photo && zoomed && <PhotoCredit id={l.photo} />}
+      <p className="guide-confusion__danger">{l.danger}</p>
+      <table className="guide-compare">
+        <thead>
+          <tr>
+            <th />
+            <th className="guide-compare__mine">{s.short}</th>
+            <th className="guide-compare__other">{l.short}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {confusion.rows.map(([part, mine, other]) => (
+            <tr key={part}>
+              <th scope="row">{part}</th>
+              <td>{mine}</td>
+              <td className="guide-compare__other">{other}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {confusion.note && <p className="guide-confusion__note">{confusion.note}</p>}
+    </div>
+  )
+}
+
 function SpeciesSheet({ species: s }: { species: Species }) {
   const sources = [
     { label: `Wikipédia : ${s.latin}`, url: s.wiki },
     ...s.confusions.flatMap(({ with: key }) => {
-      const l = LOOKALIKES[key]
-      return 'wiki' in l ? [{ label: `Wikipédia : ${l.latin}`, url: l.wiki }] : []
+      const l: Lookalike = LOOKALIKES[key]
+      return l.wiki ? [{ label: `Wikipédia : ${l.latin}`, url: l.wiki }] : []
     }),
     { label: 'Anses : intoxications liées à la cueillette', url: ANSES_URL },
   ]
 
   return (
     <div className="guide__content">
-      <figure className="guide-hero">
-        <img src={photoUrl(s.photo)} alt={s.name} />
-        <PhotoCredit id={s.photo} />
-      </figure>
+      <Gallery species={s} />
 
       <div className="guide-sheet__head">
-        <h1>{s.name}</h1>
-        <div className="guide-sheet__latin">{s.latin}</div>
+        <div>
+          <h1>{s.name}</h1>
+          <div className="guide-sheet__latin">{s.latin}</div>
+        </div>
         <EdibilityTag edibility={s.edibility} />
       </div>
 
+      <div className="guide-key">
+        <span className="guide-key__label">🔑 Critère clé</span> {s.key}
+      </div>
       {s.warning && <div className="guide-warning">⚠ {s.warning}</div>}
 
-      <h2>Comment le reconnaître</h2>
-      <ul>
-        {s.identification.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
+      <table className="guide-traits">
+        <tbody>
+          {s.traits.map(([part, value]) => (
+            <tr key={part}>
+              <th scope="row">{part}</th>
+              <td>{value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
-      <h2>Où et quand</h2>
-      <p>
-        <strong>Habitat : </strong>
-        {s.habitat}
-      </p>
-      <p>
-        <strong>Saison : </strong>
-        {s.season}
-      </p>
+      <h2>Ne pas confondre avec</h2>
+      {s.noDangerousLookalike && <p className="guide-safe">Pas de sosie dangereux connu : vérifiez quand même chaque exemplaire.</p>}
+      {s.confusions.map((c) => (
+        <ConfusionCard key={c.with} species={s} confusion={c} />
+      ))}
 
-      {s.tips && (
-        <>
-          <h2>Bon à savoir</h2>
-          <p>{s.tips}</p>
-        </>
-      )}
+      <details className="guide-more">
+        <summary>Plus de détails et sources</summary>
+        {s.details.length > 0 && (
+          <ul>
+            {s.details.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
+        <ul className="guide-sources">
+          {sources.map((src) => (
+            <li key={src.url}>
+              <a href={src.url} target="_blank" rel="noreferrer">
+                {src.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </details>
 
-      <h2>Risques de confusion</h2>
-      {s.noDangerousLookalike && (
-        <p className="guide-safe">
-          Pas de sosie dangereux connu. Vérifiez quand même chaque exemplaire : un champignon abîmé ou atypique
-          peut tromper.
-        </p>
-      )}
-      {s.confusions.map(({ with: key, howToTell }) => {
-        const l = LOOKALIKES[key]
-        return (
-          <div key={key} className={`guide-confusion guide-confusion--${l.edibility}`}>
-            {'photo' in l && (
-              <figure className="guide-confusion__photo">
-                <img src={photoUrl(l.photo)} alt={l.name} loading="lazy" />
-                <PhotoCredit id={l.photo} />
-              </figure>
-            )}
-            <div className="guide-confusion__head">
-              <div className="guide-confusion__name">{l.name}</div>
-              <div className="guide-sheet__latin">{l.latin}</div>
-              <EdibilityTag edibility={l.edibility} />
-            </div>
-            <p className="guide-confusion__danger">{l.danger}</p>
-            <div className="guide-confusion__label">Comment les distinguer</div>
-            <ul>
-              {howToTell.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          </div>
-        )
-      })}
-
-      <SafetyBanner />
       <Emergency />
-
-      <h2>Sources</h2>
-      <ul className="guide-sources">
-        {sources.map((src) => (
-          <li key={src.url}>
-            <a href={src.url} target="_blank" rel="noreferrer">
-              {src.label}
-            </a>
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }

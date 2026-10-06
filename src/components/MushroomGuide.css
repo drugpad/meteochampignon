@@ -152,7 +152,7 @@
 }
 
 .guide-warning {
-  margin: 16px 0 0;
+  margin: 10px 0 0;
   padding: 12px 14px;
   border-radius: 10px;
   background: #fdecea;
@@ -272,20 +272,61 @@
 
 /* --- Fiche --- */
 
-.guide-hero {
+.guide-gallery {
   margin: -16px -16px 0;
 }
 
-.guide-hero img {
+.guide-gallery__main {
   display: block;
   width: 100%;
-  max-height: 380px;
+  height: 300px;
+  object-fit: contain; /* photo entière : un recadrage coupait le chapeau ou la base */
+  background: #2a2a26;
+}
+
+.guide-gallery .guide-credit {
+  padding: 0 16px;
+}
+
+.guide-gallery__thumbs {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px 0;
+  overflow-x: auto;
+}
+
+.guide-thumb {
+  flex: none;
+  width: 76px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  color: #6b6b66;
+}
+
+.guide-thumb img {
+  display: block;
+  width: 100%;
+  height: 56px;
   object-fit: cover;
+  border-radius: 6px;
   background: #ddd8c8;
 }
 
-.guide-hero .guide-credit {
-  padding: 0 16px;
+.guide-thumb span {
+  display: block;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 2px 0;
+}
+
+.guide-thumb--active {
+  border-color: #3d4a1f;
+  color: #3d4a1f;
+  font-weight: 700;
 }
 
 .guide-credit {
@@ -300,8 +341,14 @@
 
 .guide-sheet__head {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
   margin-top: 14px;
+}
+
+.guide-sheet__head .guide-tag {
+  margin-top: 4px;
 }
 
 .guide-sheet__latin {
@@ -310,9 +357,51 @@
   font-size: 14px;
 }
 
+.guide-key {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #e8efdc;
+  border: 1px solid #b6c98f;
+  color: #2f3d14;
+  font-size: 14px;
+}
+
+.guide-key__label {
+  font-weight: 700;
+}
+
+.guide-traits,
+.guide-compare {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.guide-traits {
+  margin-top: 12px;
+}
+
+.guide-traits th,
+.guide-traits td,
+.guide-compare th,
+.guide-compare td {
+  padding: 6px 4px;
+  border-bottom: 1px solid #e6e3d8;
+  text-align: left;
+  vertical-align: top;
+}
+
+.guide-traits th,
+.guide-compare tbody th {
+  width: 84px;
+  color: #6b6b66;
+  font-weight: 500;
+}
+
 .guide-confusion {
-  margin-bottom: 14px;
-  padding: 12px 14px;
+  margin-bottom: 12px;
+  padding: 12px;
   border-radius: 12px;
   background: white;
   border: 1px solid #e0ddd3;
@@ -336,42 +425,108 @@
   border-left-color: #4d8a2e;
 }
 
+.guide-confusion__head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
 .guide-confusion__photo {
-  margin: 0 0 10px;
+  flex: none;
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ddd8c8;
+  cursor: zoom-in;
 }
 
 .guide-confusion__photo img {
   display: block;
   width: 100%;
-  max-height: 260px;
+  height: 100%;
   object-fit: cover;
-  border-radius: 8px;
-  background: #ddd8c8;
 }
 
-.guide-confusion__head {
+.guide-confusion__photo--zoomed {
+  width: 100%;
+  height: auto;
+  cursor: zoom-out;
+}
+
+.guide-confusion__photo--zoomed img {
+  height: auto;
+  max-height: 360px;
+}
+
+.guide-confusion__title {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  flex: 1;
 }
 
 .guide-confusion__name {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
+  line-height: 1.3;
 }
 
 .guide-confusion__danger {
-  margin-top: 8px !important;
+  margin: 8px 0 4px !important;
+  font-size: 13px;
+  color: #57534e;
+}
+
+.guide-compare thead th {
+  font-size: 13px;
+  padding-bottom: 4px;
+}
+
+.guide-compare__mine {
+  color: #166534;
+}
+
+.guide-compare td.guide-compare__other {
+  background: #fdf1e7;
+  color: #7c2d12;
+}
+
+.guide-compare th.guide-compare__other {
+  color: #9a3412;
+}
+
+.guide-confusion__note {
+  margin: 8px 0 0 !important;
+  font-size: 13px;
+  font-weight: 700;
+  color: #7f1d1d;
+}
+
+.guide-more {
+  margin: 20px 0 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: white;
+  border: 1px solid #e0ddd3;
   font-size: 14px;
 }
 
-.guide-confusion__label {
+.guide-more summary {
+  cursor: pointer;
   font-weight: 700;
-  font-size: 14px;
-  margin-bottom: 4px;
+  color: #3d4a1f;
+}
+
+.guide-more ul {
+  margin-top: 8px;
 }
 
 .guide-sources {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 /* --- Bouton d'ouverture sur la carte --- */

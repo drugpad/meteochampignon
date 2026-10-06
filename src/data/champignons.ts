@@ -2,10 +2,12 @@
 //
 // Contenu recoupé le 06/10/2026 sur les fiches Wikipédia de chaque espèce
 // (et de chaque sosie) et sur les recommandations de l'Anses pour la
-// cueillette — sources affichées au bas de chaque fiche. Les tags de
-// comestibilité suivent l'usage des guides français : « Comestible + » =
-// réputé bon à excellent. Ne rien ajouter ici sans source : cette page sert
-// à reconnaître, jamais à décider seul de manger (avertissement affiché).
+// cueillette — sources affichées au bas de chaque fiche. Format volontairement
+// court : un critère clé, une ligne par partie du champignon, les confusions
+// en tableau face à face ; le texte long reste dans `details` (replié).
+// Les tags suivent l'usage des guides français : « Comestible + » = réputé
+// bon à excellent. Ne rien ajouter sans source : cette page sert à
+// reconnaître, jamais à décider seul de manger (avertissement affiché).
 import { PHOTOS, type PhotoId } from './champignonPhotos'
 
 export type Edibility = 'excellent' | 'comestible' | 'non-comestible' | 'toxique' | 'mortel'
@@ -29,36 +31,47 @@ export type Photo = {
 /** Espèce qui ressemble à l'une des fiches (sosie), décrite une seule fois. */
 export type Lookalike = {
   name: string
+  /** Nom court pour l'en-tête de colonne du tableau comparatif. */
+  short: string
   latin: string
   edibility: Edibility
   photo?: PhotoId
-  /** Ce qu'elle provoque ou pourquoi on l'évite. */
+  /** Ce qu'elle provoque, en une phrase. */
   danger: string
   wiki?: string
 }
 
+/** Ligne du tableau comparatif : [partie, l'espèce de la fiche, le sosie]. */
+export type CompareRow = [string, string, string]
+
 export type Confusion = {
   /** Clé de LOOKALIKES. */
   with: keyof typeof LOOKALIKES
-  /** Comment la distinguer de l'espèce de la fiche. */
-  howToTell: string[]
+  rows: CompareRow[]
+  /** Remarque sous le tableau, si besoin. */
+  note?: string
 }
+
+export type Trait = [string, string]
 
 export type Species = {
   id: string
   name: string
+  short: string
   latin: string
   edibility: Edibility
-  photo: PhotoId
-  /** Précaution indispensable (cuisson, quantité…), affichée en encadré. */
+  /** Première = vue d'ensemble, puis les détails (dessous, pied, coupe…). */
+  photos: { id: PhotoId; label: string }[]
+  /** Le ou les signes qui tranchent. */
+  key: string
+  /** Précaution vitale, affichée en rouge. */
   warning?: string
-  identification: string[]
-  habitat: string
-  season: string
-  tips?: string
+  traits: Trait[]
   confusions: Confusion[]
   /** Quand aucun sosie dangereux n'est connu. */
   noDangerousLookalike?: boolean
+  /** Texte complet, replié par défaut (« Plus de détails »). */
+  details: string[]
   wiki: string
 }
 
@@ -71,89 +84,97 @@ const WIKI = 'https://fr.wikipedia.org/wiki/'
 export const LOOKALIKES = {
   gyromitre: {
     name: 'Gyromitre',
+    short: 'Gyromitre',
     latin: 'Gyromitra esculenta',
     edibility: 'mortel',
     photo: 'gyromitra-esculenta',
-    danger:
-      'Contient de la gyromitrine : intoxications parfois mortelles, même après cuisson, et effet cumulatif d’un repas à l’autre. Vente interdite en France depuis 1991.',
+    danger: 'Gyromitrine : intoxications parfois mortelles, même cuite, effet cumulatif. Vente interdite en France depuis 1991.',
     wiki: WIKI + 'Gyromitra_esculenta',
   },
   verpe: {
     name: 'Verpe de Bohême',
+    short: 'Verpe',
     latin: 'Verpa bohemica',
     edibility: 'toxique',
     photo: 'verpa-bohemica',
-    danger: 'Toxique crue ou mal cuite ; troubles digestifs et de la coordination signalés même cuite chez certaines personnes.',
+    danger: 'Toxique crue ou mal cuite ; troubles digestifs et de coordination signalés même cuite.',
     wiki: WIKI + 'Verpa_bohemica',
   },
   'bolet-amer': {
     name: 'Bolet amer (bolet de fiel)',
+    short: 'Bolet amer',
     latin: 'Tylopilus felleus',
     edibility: 'non-comestible',
     photo: 'tylopilus-felleus',
-    danger: 'Pas dangereux, mais d’une amertume extrême qui augmente à la cuisson : un seul exemplaire gâche tout le plat.',
+    danger: 'Pas dangereux, mais si amer qu’un seul exemplaire gâche tout le plat.',
     wiki: WIKI + 'Tylopilus_felleus',
   },
   'bolet-satan': {
     name: 'Bolet de Satan',
+    short: 'B. de Satan',
     latin: 'Rubroboletus satanas',
     edibility: 'toxique',
     photo: 'rubroboletus-satanas',
-    danger: 'Gastro-entérite violente (vomissements répétés, diarrhées parfois sanglantes), même cuit.',
+    danger: 'Gastro-entérite violente (vomissements répétés), même cuit.',
     wiki: WIKI + 'Rubroboletus_satanas',
   },
   'fausse-girolle': {
     name: 'Fausse girolle',
+    short: 'Fausse girolle',
     latin: 'Hygrophoropsis aurantiaca',
     edibility: 'non-comestible',
     photo: 'hygrophoropsis-aurantiaca',
-    danger: 'Sans intérêt culinaire et de comestibilité discutée (troubles digestifs anciennement rapportés) : à ne pas consommer.',
+    danger: 'Sans intérêt, comestibilité discutée : à laisser.',
     wiki: WIKI + 'Hygrophoropsis_aurantiaca',
   },
   'clitocybe-olivier': {
     name: 'Clitocybe de l’olivier',
+    short: 'Clitocybe',
     latin: 'Omphalotus olearius',
     edibility: 'toxique',
     photo: 'omphalotus-olearius',
-    danger: 'Syndrome gastro-intestinal parfois sévère (nausées, fortes diarrhées). Très commun dans le Midi.',
+    danger: 'Troubles digestifs parfois sévères. Très commun dans le Midi.',
     wiki: WIKI + 'Omphalotus_olearius',
   },
   'cortinaires-mortels': {
-    name: 'Cortinaire couleur de rocou et cortinaire très joli',
+    name: 'Cortinaire couleur de rocou, cortinaire très joli',
+    short: 'Cortinaire',
     latin: 'Cortinarius orellanus, C. rubellus',
     edibility: 'mortel',
     photo: 'cortinarius-orellanus',
-    danger:
-      'Orellanine : détruit les reins. Les premiers signes peuvent n’apparaître que plusieurs jours après le repas, quand les reins sont déjà atteints (insuffisance rénale parfois définitive, ou décès).',
+    danger: 'Détruit les reins. Premiers signes parfois plusieurs jours après le repas, quand il est trop tard.',
     wiki: WIKI + 'Cortinarius_orellanus',
   },
   'amanite-tue-mouches': {
     name: 'Amanite tue-mouches',
+    short: 'Tue-mouches',
     latin: 'Amanita muscaria',
     edibility: 'toxique',
     photo: 'amanita-muscaria',
-    danger: 'Syndrome panthérinien (confusion, agitation, somnolence), très rarement mortel.',
+    danger: 'Confusion, agitation, somnolence ; très rarement mortelle.',
     wiki: WIKI + 'Amanita_muscaria',
   },
   'amanite-phalloide': {
     name: 'Amanite phalloïde',
+    short: 'Phalloïde',
     latin: 'Amanita phalloides',
     edibility: 'mortel',
     photo: 'amanita-phalloides',
-    danger:
-      'Responsable de la plupart des décès par champignon. Environ 30 g (un demi-chapeau) peuvent tuer un adulte : destruction du foie, premiers symptômes digestifs plusieurs heures après le repas, fausse amélioration, puis atteinte grave du foie.',
+    danger: 'Première cause de décès par champignon : ~30 g peuvent tuer. Détruit le foie, symptômes retardés de plusieurs heures.',
     wiki: WIKI + 'Amanita_phalloides',
   },
   'petites-lepiotes': {
     name: 'Petites lépiotes (lépiote brun incarnat…)',
+    short: 'Petite lépiote',
     latin: 'Lepiota brunneoincarnata, L. helveola…',
     edibility: 'mortel',
     photo: 'lepiota-brunneoincarnata',
-    danger: 'Contiennent les mêmes toxines que l’amanite phalloïde (amatoxines) : intoxications mortelles documentées.',
+    danger: 'Mêmes toxines que l’amanite phalloïde : intoxications mortelles.',
     wiki: WIKI + 'Lepiota_brunneoincarnata',
   },
   'lepiote-veneneuse': {
-    name: 'Lépiote vénéneuse (lépiote brune)',
+    name: 'Lépiote vénéneuse',
+    short: 'L. vénéneuse',
     latin: 'Chlorophyllum brunneum',
     edibility: 'toxique',
     photo: 'chlorophyllum-brunneum',
@@ -162,739 +183,865 @@ export const LOOKALIKES = {
   },
   'amanite-panthere': {
     name: 'Amanite panthère',
+    short: 'Panthère',
     latin: 'Amanita pantherina',
     edibility: 'toxique',
     photo: 'amanita-pantherina',
-    danger: 'Syndrome panthérinien (confusion, agitation, troubles de la conscience), plus marqué qu’avec la tue-mouches.',
+    danger: 'Confusion, agitation, troubles de la conscience.',
     wiki: WIKI + 'Amanita_pantherina',
   },
   'lactaire-toison': {
     name: 'Lactaire à toison',
+    short: 'L. à toison',
     latin: 'Lactarius torminosus',
     edibility: 'toxique',
     photo: 'lactarius-torminosus',
-    danger: 'Très irritant pour le tube digestif (vomissements, diarrhées).',
+    danger: 'Très irritant pour le tube digestif.',
     wiki: WIKI + 'Lactarius_torminosus',
   },
   'lactaire-delicieux': {
     name: 'Lactaire délicieux',
+    short: 'L. délicieux',
     latin: 'Lactarius deliciosus',
     edibility: 'comestible',
     photo: 'lactarius-deliciosus',
-    danger: 'Aucun : confusion sans conséquence (voir sa fiche).',
+    danger: 'Aucun : confusion sans conséquence.',
   },
   'lactaire-sanguin': {
     name: 'Lactaire sanguin',
+    short: 'L. sanguin',
     latin: 'Lactarius sanguifluus',
     edibility: 'excellent',
     photo: 'lactarius-sanguifluus',
-    danger: 'Aucun : confusion sans conséquence (voir sa fiche).',
+    danger: 'Aucun : confusion sans conséquence.',
   },
   'tricholome-tigre': {
     name: 'Tricholome tigré',
+    short: 'T. tigré',
     latin: 'Tricholoma pardinum',
     edibility: 'toxique',
     photo: 'tricholoma-pardinum',
-    danger:
-      'L’un des tricholomes les plus toxiques : vomissements et diarrhées violents dans les 15 min à 2 h, pendant plusieurs jours, hospitalisation parfois nécessaire.',
+    danger: 'L’un des tricholomes les plus toxiques : vomissements violents pendant plusieurs jours.',
     wiki: WIKI + 'Tricholoma_pardinum',
   },
   'tricholome-josserand': {
     name: 'Tricholome de Josserand',
+    short: 'T. de Josserand',
     latin: 'Tricholoma josserandii',
     edibility: 'toxique',
     danger: 'Troubles digestifs.',
   },
   'tricholome-vergete': {
     name: 'Tricholome vergeté',
+    short: 'T. vergeté',
     latin: 'Tricholoma virgatum',
     edibility: 'non-comestible',
-    danger: 'Amer et âcre, immangeable.',
+    danger: 'Amer et âcre.',
   },
   'helvelle-lacuneuse': {
     name: 'Helvelle lacuneuse',
+    short: 'Helvelle',
     latin: 'Helvella lacunosa',
     edibility: 'toxique',
     danger: 'Toxique crue ou mal cuite.',
   },
   'chanterelles-grises': {
     name: 'Chanterelle cendrée, chanterelle sinueuse',
+    short: 'Ch. grises',
     latin: 'Craterellus cinereus, Pseudocraterellus undulatus',
     edibility: 'comestible',
-    danger: 'Aucun : comestibles elles aussi.',
+    danger: 'Aucun : comestibles aussi.',
   },
   leotie: {
     name: 'Léotie lubrique',
+    short: 'Léotie',
     latin: 'Leotia lubrica',
     edibility: 'non-comestible',
     danger: 'Suspecte, sans intérêt.',
   },
   'hydne-roussissant': {
     name: 'Hydne roussissant',
+    short: 'H. roussissant',
     latin: 'Hydnum rufescens',
     edibility: 'comestible',
-    danger: 'Aucun : comestible lui aussi.',
+    danger: 'Aucun : comestible aussi.',
   },
   'bolets-rudes': {
-    name: 'Autres bolets rudes (bolet orangé des chênes, des bouleaux…)',
+    name: 'Autres bolets rudes (des chênes, des bouleaux…)',
+    short: 'Autres rudes',
     latin: 'Leccinum aurantiacum, L. versipelle…',
     edibility: 'comestible',
-    danger: 'Aucun s’ils sont bien cuits (même précaution que le bolet orangé des peupliers).',
+    danger: 'Aucun s’ils sont bien cuits.',
   },
   'bolet-blafard': {
     name: 'Bolet blafard',
+    short: 'B. blafard',
     latin: 'Suillellus luridus',
     edibility: 'comestible',
-    danger: 'Comestible seulement bien cuit, mais très proche de bolets toxiques : réservé aux connaisseurs.',
+    danger: 'Comestible bien cuit seulement, proche de bolets toxiques : pour connaisseurs.',
   },
   'russules-acres': {
-    name: 'Russules à saveur âcre (russule émétique…)',
+    name: 'Russules âcres (russule émétique…)',
+    short: 'R. âcres',
     latin: 'Russula emetica…',
     edibility: 'toxique',
-    danger: 'Troubles digestifs (vomissements).',
+    danger: 'Vomissements.',
   },
   'bolets-visqueux': {
     name: 'Bolet granulé, bolet élégant',
+    short: 'Autres Suillus',
     latin: 'Suillus granulatus, S. grevillei',
     edibility: 'comestible',
-    danger: 'Aucun : comestibles moyens, mêmes précautions (retirer la peau visqueuse).',
+    danger: 'Aucun : mêmes précautions.',
   },
   ramaires: {
-    name: 'Clavaires / ramaires (clavaire élégante…)',
+    name: 'Clavaires / ramaires',
+    short: 'Ramaires',
     latin: 'Ramaria formosa…',
     edibility: 'toxique',
-    danger: 'Plusieurs sont purgatives (troubles digestifs).',
+    danger: 'Plusieurs sont purgatives.',
   },
   'sparassis-brevipes': {
     name: 'Sparassis à pied court',
+    short: 'S. pied court',
     latin: 'Sparassis brevipes',
     edibility: 'non-comestible',
-    danger: 'Odeur désagréable (eau de Javel, urine) : à laisser.',
-  },
-  'autres-cepes': {
-    name: 'Les autres cèpes (bordeaux, bronzé, des pins, d’été)',
-    latin: 'Boletus edulis, B. aereus, B. pinophilus, B. reticulatus',
-    edibility: 'excellent',
-    danger: 'Aucun : les quatre cèpes sont tous d’excellents comestibles.',
+    danger: 'Odeur désagréable : à laisser.',
   },
 } satisfies Record<string, Lookalike>
 
-// --- Confusions qui reviennent sur plusieurs fiches -----------------------
+// --- Morceaux partagés par plusieurs fiches -------------------------------
 
 const MORILLE_CONFUSIONS: Confusion[] = [
   {
     with: 'gyromitre',
-    howToTell: [
-      'Chapeau en circonvolutions, comme un cerveau, brun-roux : PAS d’alvéoles en nid d’abeille.',
-      'Coupée en deux dans la longueur, elle est cloisonnée en plusieurs chambres irrégulières ; une morille est creuse d’une seule cavité, du sommet du chapeau au bas du pied.',
-      'Souvent sous les conifères, au printemps comme les morilles.',
+    rows: [
+      ['Chapeau', 'alvéoles en nid d’abeille', 'circonvolutions de cerveau, brun-roux'],
+      ['Coupée en long', 'creuse, une seule cavité', 'plusieurs chambres cloisonnées'],
     ],
   },
   {
     with: 'verpe',
-    howToTell: [
-      'Chapeau en clochette fixé seulement tout en haut du pied : on peut glisser un doigt entre le chapeau et le pied. Chez la morille, le chapeau est soudé au pied sur tout son bord inférieur.',
-      'Pied rempli d’une moelle cotonneuse, pas creux d’un seul tenant.',
-      'Chapeau couvert de plis en long plutôt que de vraies alvéoles.',
+    rows: [
+      ['Attache du chapeau', 'soudé au pied tout autour', 'fixé seulement au sommet (doigt passe dessous)'],
+      ['Pied', 'creux d’un seul tenant', 'rempli de moelle cotonneuse'],
     ],
   },
 ]
 
-const MORILLE_WARNING =
-  'Toxique crue ou mal cuite : toujours bien cuire (l’Anses recommande 20 à 30 min à la poêle pour les champignons sauvages). Même cuites, de grandes quantités au même repas ont provoqué des troubles neurologiques (vertiges, tremblements, troubles de la vue) : rester raisonnable.'
+const MORILLE_WARNING = 'Toxique crue ou mal cuite : bien cuire, et pas de grosses quantités au même repas.'
+
+const MORILLE_DETAILS = [
+  'Cuisson : l’Anses recommande 20 à 30 min à la poêle pour tous les champignons sauvages.',
+  'Même cuites, de grandes quantités au même repas ont provoqué des troubles neurologiques (vertiges, tremblements, troubles de la vue).',
+]
 
 const CEPE_CONFUSIONS: Confusion[] = [
   {
     with: 'bolet-amer',
-    howToTell: [
-      'Pores blancs puis rose sale en vieillissant ; ceux d’un cèpe passent au jaune puis au vert olive, jamais au rose.',
-      'Réseau sur le pied brun foncé, grossier et en relief ; chez le cèpe, il est fin et blanchâtre à brun clair.',
-      'En cas de doute, goûter une miette crue du bout de la langue puis la recracher : l’amertume est immédiate et intense.',
+    rows: [
+      ['Pores', 'blancs → jaunes → olive', 'blancs → rose sale'],
+      ['Réseau du pied', 'fin, clair', 'brun foncé, grossier'],
+      ['Goût (cru, recraché)', 'doux', 'très amer'],
     ],
   },
   {
     with: 'bolet-satan',
-    howToTell: [
-      'Pores rouges à orangés ; un cèpe n’a jamais les pores rouges.',
-      'Chapeau blanchâtre à gris pâle, pied ventru rouge couvert d’un réseau.',
-      'Chair qui bleuit à la coupe (celle des cèpes reste blanche) ; odeur désagréable en vieillissant.',
-      'Plutôt l’été, sur sol calcaire, sous les chênes, hêtres ou charmes.',
+    rows: [
+      ['Chapeau', 'brun', 'blanchâtre à gris pâle'],
+      ['Pores', 'blancs, jaunes ou olive', 'rouges à orangés'],
+      ['Chair à la coupe', 'reste blanche', 'bleuit'],
     ],
+    note: 'Été, sol calcaire, chênes : là où pousse aussi le cèpe d’été.',
   },
 ]
 
-const CEPE_TIPS =
-  'Règle des cèpes : pores blancs, jaunes ou vert olive (jamais rouges ni roses), chair blanche qui ne change pas de couleur à la coupe, réseau fin et clair sur le pied.'
+const CEPE_KEY = 'Chair blanche qui ne change pas à la coupe + pores jamais rouges ni roses + fin réseau clair sur le pied.'
 
 export const SPECIES: Species[] = [
   {
     id: 'morille-commune',
     name: 'Morille commune',
+    short: 'Morille',
     latin: 'Morchella esculenta',
     edibility: 'excellent',
-    photo: 'morchella-esculenta',
+    photos: [{ id: 'morchella-esculenta', label: 'Ensemble' }],
+    key: 'Alvéoles en nid d’abeille + coupée en long, creuse d’une seule cavité du sommet à la base.',
     warning: MORILLE_WARNING,
-    identification: [
-      'Chapeau arrondi à ovoïde, jaune-ocre à beige, couvert d’alvéoles irrégulières en nid d’abeille séparées par des côtes.',
-      'Chapeau soudé directement au pied sur tout son bord inférieur, sans partie libre.',
-      'Coupée en deux dans la longueur, elle est entièrement creuse, d’une seule cavité continue du sommet du chapeau au bas du pied.',
-      'Pied blanchâtre, granuleux, souvent élargi à la base.',
+    traits: [
+      ['Chapeau', 'arrondi, jaune-ocre à beige, alvéoles irrégulières'],
+      ['Attache', 'chapeau soudé au pied tout autour'],
+      ['Pied', 'blanchâtre, granuleux, élargi à la base'],
+      ['Intérieur', 'entièrement creux, une seule cavité'],
+      ['Où', 'sols calcaires : frênes, ormes, vieux vergers, bords de rivières'],
+      ['Quand', 'mars à mai'],
     ],
-    habitat:
-      'Sols calcaires ou sablonneux bien drainés : sous les frênes et les ormes, en lisière, dans les vieux vergers, au bord des cours d’eau.',
-    season: 'Printemps : mars à mai.',
     confusions: MORILLE_CONFUSIONS,
+    details: MORILLE_DETAILS,
     wiki: WIKI + 'Morchella_esculenta',
   },
   {
     id: 'morille-conique',
     name: 'Morille conique',
+    short: 'Morille',
     latin: 'Morchella conica (groupe elata)',
     edibility: 'excellent',
-    photo: 'morchella-conica',
+    photos: [{ id: 'morchella-conica', label: 'Ensemble' }],
+    key: 'Chapeau conique sombre à côtes verticales + creuse d’une seule cavité.',
     warning: MORILLE_WARNING,
-    identification: [
-      'Chapeau conique, pointu, gris-brun à brun foncé presque noir.',
-      'Alvéoles allongées, rangées entre des côtes verticales à peu près parallèles, souvent plus sombres.',
-      'Chapeau soudé au pied, parfois avec un petit sillon à la jonction.',
-      'Comme toutes les morilles : entièrement creuse d’une seule cavité quand on la coupe en long.',
+    traits: [
+      ['Chapeau', 'conique, pointu, gris-brun à presque noir'],
+      ['Alvéoles', 'allongées entre des côtes verticales'],
+      ['Attache', 'soudé au pied, parfois un petit sillon à la jonction'],
+      ['Intérieur', 'entièrement creux, une seule cavité'],
+      ['Où', 'montagne, conifères, places de feu, copeaux'],
+      ['Quand', 'mars à juin (plus tard en altitude)'],
     ],
-    habitat:
-      'Surtout en montagne et moyenne montagne, sous les conifères (sapins, épicéas), sur les places de feu et débris de bois ; parfois sur copeaux dans les jardins.',
-    season: 'Printemps : mars à juin, plus tard en altitude.',
     confusions: MORILLE_CONFUSIONS,
+    details: MORILLE_DETAILS,
     wiki: WIKI + 'Morchella_conica',
   },
   {
     id: 'cepe-de-bordeaux',
     name: 'Cèpe de Bordeaux',
+    short: 'Cèpe',
     latin: 'Boletus edulis',
     edibility: 'excellent',
-    photo: 'boletus-edulis',
-    identification: [
-      'Chapeau brun clair à brun foncé, souvent bordé d’une fine marge plus pâle, lisse, un peu gras par temps humide.',
-      'Dessous à tubes et pores : blancs chez le jeune, puis jaunâtres, puis vert olive.',
-      'Pied ventru, blanchâtre à brun pâle, couvert d’un fin réseau blanc en relief, surtout dans sa moitié haute.',
-      'Chair blanche et ferme qui ne change pas de couleur à la coupe (un peu rosée juste sous la peau du chapeau).',
+    photos: [
+      { id: 'boletus-edulis', label: 'Ensemble' },
+      { id: 'boletus-edulis--dessous', label: 'Pores' },
+      { id: 'boletus-edulis--pied', label: 'Pied' },
+      { id: 'boletus-edulis--coupe', label: 'Coupe' },
     ],
-    habitat: 'Sous les chênes, hêtres, châtaigniers, sapins et épicéas ; clairières et lisières.',
-    season: 'Fin d’été et automne, surtout septembre-octobre, environ 10 jours après de bonnes pluies.',
-    tips: CEPE_TIPS,
-    confusions: [...CEPE_CONFUSIONS, { with: 'autres-cepes', howToTell: ['Teinte du chapeau, réseau du pied et habitat : voir les autres fiches de cèpes.'] }],
+    key: CEPE_KEY,
+    traits: [
+      ['Chapeau', 'brun, fine marge plus claire, un peu gras'],
+      ['Dessous', 'pores blancs → jaunâtres → vert olive'],
+      ['Pied', 'ventru, fin réseau blanc en haut'],
+      ['Chair', 'blanche, ferme, ne change pas'],
+      ['Où', 'chênes, hêtres, châtaigniers, sapins, épicéas'],
+      ['Quand', 'surtout sept.-oct., ~10 jours après de bonnes pluies'],
+    ],
+    confusions: CEPE_CONFUSIONS,
+    details: ['Chair un peu rosée juste sous la peau du chapeau.', 'Les quatre cèpes (Bordeaux, bronzé, des pins, d’été) sont tous d’excellents comestibles : se tromper entre eux est sans conséquence.'],
     wiki: WIKI + 'Boletus_edulis',
   },
   {
     id: 'cepe-bronze',
     name: 'Cèpe bronzé',
+    short: 'Cèpe',
     latin: 'Boletus aereus',
     edibility: 'excellent',
-    photo: 'boletus-aereus',
-    identification: [
-      'Chapeau brun-noir à noirâtre, sec, mat et velouté.',
-      'Pores blancs, puis jaunes, puis vert olive.',
-      'Pied brun, trapu, avec un réseau fin peu visible.',
-      'Chair blanche, très ferme, qui ne change pas de couleur à la coupe.',
+    photos: [
+      { id: 'boletus-aereus', label: 'Ensemble' },
+      { id: 'boletus-aereus--pied', label: 'Pied' },
+      { id: 'boletus-aereus--coupe', label: 'Coupe' },
     ],
-    habitat:
-      'Espèce de chaleur : chênes et châtaigniers sur sols acides bien drainés, clairières ensoleillées, jusqu’à environ 1 100 m.',
-    season: 'Fin de printemps à l’automne, surtout l’été, 7 à 10 jours après de fortes pluies orageuses.',
-    tips: CEPE_TIPS,
+    key: CEPE_KEY,
+    traits: [
+      ['Chapeau', 'brun-noir à noirâtre, sec, velouté'],
+      ['Dessous', 'pores blancs → jaunes → olive'],
+      ['Pied', 'brun, trapu, réseau fin peu visible'],
+      ['Chair', 'blanche, très ferme, ne change pas'],
+      ['Où', 'chênes et châtaigniers, clairières chaudes, sol acide'],
+      ['Quand', 'surtout l’été, 7 à 10 jours après des orages'],
+    ],
     confusions: CEPE_CONFUSIONS,
+    details: ['Espèce de chaleur, jusqu’à environ 1 100 m.'],
     wiki: WIKI + 'Boletus_aereus',
   },
   {
     id: 'cepe-des-pins',
     name: 'Cèpe des pins',
+    short: 'Cèpe',
     latin: 'Boletus pinophilus',
     edibility: 'excellent',
-    photo: 'boletus-pinophilus',
-    identification: [
-      'Chapeau brun-rouge acajou à bordeaux, ridé ou bosselé, souvent bordé d’une pruine blanche chez le jeune.',
-      'Pores blancs, puis jaunes, puis vert olive.',
-      'Pied blanc rosé en haut, brun-rouille vers la base, réseau blanc sur les deux tiers supérieurs.',
-      'Chair blanche ferme, qui ne change pas de couleur à la coupe.',
+    photos: [
+      { id: 'boletus-pinophilus', label: 'Ensemble' },
+      { id: 'boletus-pinophilus--dessous', label: 'Pores' },
+      { id: 'boletus-pinophilus--pied', label: 'Pied' },
     ],
-    habitat: 'Surtout sous les pins, mais aussi sapins, épicéas, hêtres et châtaigniers, souvent en montagne, sur sols acides.',
-    season: 'Du printemps (mai-juin) à l’automne.',
-    tips: CEPE_TIPS,
+    key: CEPE_KEY,
+    traits: [
+      ['Chapeau', 'brun-rouge acajou, ridé, marge givrée jeune'],
+      ['Dessous', 'pores blancs → jaunes → olive'],
+      ['Pied', 'blanc rosé en haut, brun-rouille en bas, réseau blanc'],
+      ['Chair', 'blanche, ferme, ne change pas'],
+      ['Où', 'pins, aussi sapins, épicéas, hêtres, châtaigniers ; montagne'],
+      ['Quand', 'mai à l’automne'],
+    ],
     confusions: CEPE_CONFUSIONS,
+    details: ['Chair un peu rosée sous la peau du chapeau.'],
     wiki: WIKI + 'Boletus_pinophilus',
   },
   {
     id: 'cepe-d-ete',
-    name: 'Cèpe d’été (cèpe réticulé)',
+    name: 'Cèpe d’été',
+    short: 'Cèpe',
     latin: 'Boletus reticulatus (= B. aestivalis)',
     edibility: 'excellent',
-    photo: 'boletus-reticulatus',
-    identification: [
-      'Chapeau brun clair noisette, sec, velouté, qui se craquelle souvent par temps sec.',
-      'Pores blancs, puis jaunes, puis vert olive.',
-      'Réseau bien marqué sur toute la longueur du pied, souvent jusqu’à la base.',
-      'Chair blanche, qui ne change pas de couleur, plus tendre que celle du cèpe de Bordeaux ; souvent véreux.',
+    photos: [
+      { id: 'boletus-reticulatus', label: 'Ensemble' },
+      { id: 'boletus-reticulatus--dessous', label: 'Pores' },
+      { id: 'boletus-reticulatus--pied', label: 'Réseau' },
     ],
-    habitat: 'Surtout sous les chênes, aussi hêtres et châtaigniers ; lisières, parcs, bois clairs. Aime la chaleur.',
-    season: 'Mai à octobre, pic en juillet après les orages, seconde poussée en octobre.',
-    tips: CEPE_TIPS,
+    key: CEPE_KEY + ' Ici, réseau sur TOUT le pied.',
+    traits: [
+      ['Chapeau', 'brun clair noisette, velouté, craquelé par temps sec'],
+      ['Dessous', 'pores blancs → jaunes → olive'],
+      ['Pied', 'réseau marqué jusqu’à la base'],
+      ['Chair', 'blanche, plus tendre, ne change pas ; souvent véreux'],
+      ['Où', 'chênes surtout, hêtres, châtaigniers, lisières'],
+      ['Quand', 'mai à octobre, pic en juillet'],
+    ],
     confusions: CEPE_CONFUSIONS,
+    details: ['Aime la chaleur ; seconde poussée en octobre.'],
     wiki: WIKI + 'Boletus_reticulatus',
   },
   {
     id: 'girolle',
     name: 'Girolle',
+    short: 'Girolle',
     latin: 'Cantharellus cibarius',
     edibility: 'excellent',
-    photo: 'cantharellus-cibarius',
-    identification: [
-      'Champignon entièrement jaune d’œuf à jaune orangé.',
-      'Sous le chapeau, PAS de vraies lames : des plis épais et peu profonds, fourchus et reliés entre eux, qui descendent sur le pied.',
-      'Chapeau irrégulier, marge enroulée puis ondulée, s’évasant en entonnoir.',
-      'Chair blanche à jaunâtre, ferme, qui se déchire en long ; odeur fruitée (abricot).',
-      'Pousse sur la terre, jamais sur le bois.',
+    photos: [
+      { id: 'cantharellus-cibarius', label: 'Ensemble' },
+      { id: 'cantharellus-cibarius--dessous', label: 'Plis' },
+      { id: 'cantharellus-cibarius--pied', label: 'Profil' },
     ],
-    habitat: 'Sous les feuillus et les conifères, sur sols acides, souvent dans la mousse.',
-    season: 'Juin à novembre.',
+    key: 'Pas de vraies lames : des plis épais, fourchus, qui descendent sur le pied. Pousse sur la terre, jamais sur le bois.',
+    traits: [
+      ['Chapeau', 'jaune d’œuf, irrégulier, en entonnoir'],
+      ['Dessous', 'plis épais, peu profonds, reliés entre eux'],
+      ['Chair', 'blanche à jaunâtre, ferme, se déchire en long'],
+      ['Odeur', 'fruitée (abricot)'],
+      ['Où', 'feuillus et conifères, sol acide, mousse'],
+      ['Quand', 'juin à novembre'],
+    ],
     confusions: [
       {
         with: 'fausse-girolle',
-        howToTell: [
-          'Vraies lames fines et serrées, régulièrement fourchues, orange vif, qui se détachent à l’ongle.',
-          'Chair mince et molle, pied plus sombre.',
-          'Pousse souvent sur des débris de bois de conifères.',
+        rows: [
+          ['Dessous', 'plis épais', 'vraies lames fines et serrées'],
+          ['Couleur', 'jaune d’œuf', 'orange vif'],
+          ['Chair', 'ferme', 'mince et molle'],
         ],
       },
       {
         with: 'clitocybe-olivier',
-        howToTell: [
-          'Vraies lames, fines et serrées.',
-          'Pousse en touffes sur du bois : souches ou pieds d’olivier, de chêne, de châtaignier, parfois sur des racines enterrées.',
-          'Plus grand, orange vif à brun-rouge.',
+        rows: [
+          ['Dessous', 'plis épais', 'vraies lames'],
+          ['Pousse', 'sur la terre', 'en touffes, sur bois ou souches'],
         ],
       },
       {
         with: 'cortinaires-mortels',
-        howToTell: [
-          'Vraies lames, orange-fauve puis rouille.',
-          'Chez le jeune, un voile en toile d’araignée (cortine) relie le bord du chapeau au pied.',
-          'Chapeau roux-orangé à brun-rouge, chair plus fibreuse, pied souvent strié de fibres.',
+        rows: [
+          ['Dessous', 'plis jaunes', 'vraies lames fauves puis rouille'],
+          ['Jeune', '—', 'voile en toile d’araignée sous le chapeau'],
         ],
       },
     ],
+    details: [],
     wiki: WIKI + 'Cantharellus_cibarius',
   },
   {
     id: 'bolet-orange-des-peupliers',
     name: 'Bolet orangé des peupliers',
+    short: 'B. orangé',
     latin: 'Leccinum albostipitatum',
     edibility: 'comestible',
-    photo: 'leccinum-albostipitatum',
-    warning: 'Toxique cru ou mal cuit (troubles digestifs) : toujours bien cuire. Le pied, fibreux, est souvent écarté.',
-    identification: [
-      'Chapeau orange vif puis orange terne, 4 à 20 cm.',
-      'Pores blanchâtres puis gris-beige.',
-      'Pied haut et blanc couvert de fines mèches (scabres) d’abord blanches, qui roussissent puis noircissent au toucher.',
-      'Chair blanche qui rosit, grisaille puis noircit à la coupe : c’est normal pour ce groupe.',
+    photos: [
+      { id: 'leccinum-albostipitatum', label: 'Ensemble' },
+      { id: 'leccinum-albostipitatum--pied', label: 'Pied' },
     ],
-    habitat: 'Uniquement sous les peupliers, surtout les trembles.',
-    season: 'Été et automne.',
+    key: 'Chapeau orange + pied blanc hérissé de mèches qui noircissent, sous les peupliers.',
+    warning: 'Toxique cru ou mal cuit : toujours bien cuire.',
+    traits: [
+      ['Chapeau', 'orange vif puis terne, 4 à 20 cm'],
+      ['Dessous', 'pores blanchâtres puis gris-beige'],
+      ['Pied', 'haut, blanc, mèches blanches qui roussissent puis noircissent'],
+      ['Chair', 'blanche, rosit puis noircit à la coupe (normal)'],
+      ['Où', 'uniquement sous peupliers, surtout trembles'],
+      ['Quand', 'été et automne'],
+    ],
     confusions: [
       {
         with: 'bolets-rudes',
-        howToTell: [
-          'Le bolet orangé des chênes a des mèches rousses sur le pied ; le bolet des bouleaux, des mèches noires.',
-          'Les arbres voisins donnent la meilleure indication.',
-        ],
+        rows: [['Mèches du pied', 'blanches au début', 'rousses (chênes) ou noires (bouleaux)']],
       },
     ],
     noDangerousLookalike: true,
+    details: ['Le pied, fibreux, est souvent écarté.'],
     wiki: WIKI + 'Leccinum_albostipitatum',
   },
   {
     id: 'tricholome-pretentieux',
-    name: 'Tricholome prétentieux (petit-gris)',
+    name: 'Tricholome prétentieux',
+    short: 'Prétentieux',
     latin: 'Tricholoma portentosum',
     edibility: 'excellent',
-    photo: 'tricholoma-portentosum',
-    identification: [
-      'Chapeau gris à gris-noir, souvent mamelonné, couvert de fines fibrilles noires rayonnantes ; visqueux par temps humide, la peau se pèle.',
-      'Lames blanches à reflets jaunâtres.',
-      'Pied blanc, souvent teinté de jaune pâle. Ni anneau, ni volve.',
-      'Odeur de farine.',
+    photos: [
+      { id: 'tricholoma-portentosum', label: 'Ensemble' },
+      { id: 'tricholoma-portentosum--chapeau', label: 'Chapeau' },
+      { id: 'tricholoma-portentosum--dessous', label: 'Lames' },
+      { id: 'tricholoma-portentosum--coupe', label: 'Coupe' },
     ],
-    habitat: 'Pinèdes (pin sylvestre surtout), souvent en troupes.',
-    season: 'Fin d’automne : octobre à décembre, souvent après les premières gelées.',
-    tips: 'Les deux signes qui le confirment : reflets jaunes sur les lames et le pied, et chapeau à fibrilles noires dont la peau se pèle.',
+    key: 'Chapeau gris à fibrilles noires dont la peau se pèle + reflets jaunes sur les lames et le pied.',
+    traits: [
+      ['Chapeau', 'gris à gris-noir, fibrilles noires rayonnantes, visqueux humide'],
+      ['Dessous', 'lames blanches à reflets jaunes'],
+      ['Pied', 'blanc teinté de jaune pâle ; ni anneau ni volve'],
+      ['Odeur', 'farine'],
+      ['Où', 'pinèdes (pin sylvestre), en troupes'],
+      ['Quand', 'oct. à déc., souvent après les premières gelées'],
+    ],
     confusions: [
       {
         with: 'tricholome-tigre',
-        howToTell: [
-          'Chapeau couvert de petites écailles grises disposées en cercles concentriques, pas de fibrilles rayonnantes.',
-          'Lames et pied sans reflets jaunes.',
-          'Plutôt sur sol calcaire, en montagne, sous les hêtres et les sapins.',
+        rows: [
+          ['Chapeau', 'fibrilles rayonnantes', 'petites écailles en cercles'],
+          ['Reflets jaunes', 'oui', 'non'],
+          ['Où', 'pins', 'calcaire, montagne, hêtres et sapins'],
         ],
       },
       {
         with: 'tricholome-josserand',
-        howToTell: ['Pas de reflets jaunes, chapeau lisse sans fibrilles noires, peau qui ne se pèle pas.', 'Odeur de farine rance.'],
+        rows: [
+          ['Reflets jaunes', 'oui', 'non'],
+          ['Chapeau', 'fibrilles, peau qui se pèle', 'lisse, ne se pèle pas'],
+          ['Odeur', 'farine', 'farine rance'],
+        ],
       },
       {
         with: 'tricholome-vergete',
-        howToTell: ['Chapeau conique et pointu, sans jaune sur les lames ni le pied.', 'Saveur amère et âcre ; plutôt sous les épicéas.'],
+        rows: [
+          ['Chapeau', 'mamelonné', 'conique, pointu'],
+          ['Reflets jaunes', 'oui', 'non'],
+          ['Goût', 'doux', 'amer, âcre'],
+        ],
       },
       {
         with: 'amanite-phalloide',
-        howToTell: [
-          'Anneau blanc sous le chapeau et volve blanche en forme de sac à la base du pied : toujours déterrer le pied entier.',
-          'Chapeau vert olive à verdâtre, lames blanches.',
+        rows: [
+          ['Chapeau', 'gris à fibrilles noires', 'vert olive'],
+          ['Pied', 'ni anneau ni volve', 'anneau + volve en sac à la base'],
         ],
+        note: 'Toujours déterrer le pied entier : la volve reste souvent dans la terre.',
       },
     ],
+    details: [],
     wiki: WIKI + 'Tricholoma_portentosum',
   },
   {
     id: 'oronge',
-    name: 'Oronge (amanite des Césars)',
+    name: 'Oronge',
+    short: 'Oronge',
     latin: 'Amanita caesarea',
     edibility: 'excellent',
-    photo: 'amanita-caesarea',
-    warning:
-      'Ne jamais ramasser d’« œufs » encore fermés : à ce stade, aucun de ses caractères n’est visible et elle peut être confondue avec l’amanite phalloïde, mortelle.',
-    identification: [
-      'Chapeau orange vif à rouge-orangé, 8 à 20 cm, lisse, normalement sans flocons blancs, marge striée.',
-      'Lames JAUNES.',
-      'Pied JAUNE avec un anneau jaune.',
-      'À la base, une grande volve BLANCHE en forme de sac : le champignon sort d’un « œuf » blanc.',
+    photos: [
+      { id: 'amanita-caesarea', label: 'Ensemble' },
+      { id: 'amanita-caesarea--dessous', label: 'Lames' },
+      { id: 'amanita-caesarea--pied', label: 'Pied et volve' },
+      { id: 'amanita-caesarea--oeuf', label: 'Œuf coupé' },
     ],
-    habitat: 'Régions chaudes : sous les chênes et les châtaigniers, lisières et bois clairs ensoleillés.',
-    season: 'Juillet à octobre, surtout après les orages d’été.',
-    tips: 'Lames jaunes + pied jaune + volve blanche en sac : cette combinaison n’existe chez aucune autre amanite d’Europe.',
+    key: 'Lames JAUNES + pied JAUNE + volve BLANCHE en sac : combinaison unique chez les amanites d’Europe.',
+    warning: 'Jamais d’« œufs » fermés : à ce stade, elle peut être confondue avec l’amanite phalloïde, mortelle.',
+    traits: [
+      ['Chapeau', 'orange vif à rouge-orangé, lisse, marge striée'],
+      ['Dessous', 'lames jaunes'],
+      ['Pied', 'jaune, anneau jaune'],
+      ['Base', 'grande volve blanche en sac'],
+      ['Où', 'chênes et châtaigniers, bois clairs chauds'],
+      ['Quand', 'juillet à octobre, après les orages'],
+    ],
     confusions: [
       {
         with: 'amanite-tue-mouches',
-        howToTell: [
-          'Lames et pied BLANCS : c’est le critère qui tranche.',
-          'Flocons blancs sur le chapeau… que la pluie peut laver, et le rouge peut pâlir vers l’orange : ne jamais se fier au seul chapeau.',
-          'Base du pied entourée de bourrelets, pas d’une volve en sac.',
+        rows: [
+          ['Lames et pied', 'jaunes', 'BLANCS'],
+          ['Chapeau', 'lisse', 'flocons blancs (la pluie peut les laver)'],
+          ['Base', 'volve en sac', 'bourrelets'],
         ],
       },
       {
         with: 'amanite-phalloide',
-        howToTell: [
-          'À l’état d’œuf, impossible de les distinguer sans couper : coupé en long, l’œuf d’oronge montre déjà un chapeau orange et des lames jaunes, celui de la phalloïde est tout blanc ou verdâtre. Le plus sûr est de ne pas cueillir les œufs.',
-          'Adulte : chapeau vert olive à blanchâtre, lames et pied blancs.',
+        rows: [
+          ['Œuf coupé en long', 'chapeau orange, lames jaunes', 'tout blanc ou verdâtre'],
+          ['Adulte', 'orange, lames jaunes', 'vert olive, lames blanches'],
         ],
       },
     ],
+    details: [],
     wiki: WIKI + 'Amanita_caesarea',
   },
   {
     id: 'trompette-de-la-mort',
     name: 'Trompette de la mort',
+    short: 'Trompette',
     latin: 'Craterellus cornucopioides',
     edibility: 'excellent',
-    photo: 'craterellus-cornucopioides',
-    identification: [
-      'Forme de trompette ou de corne d’abondance, creuse jusqu’à la base.',
-      'Intérieur gris-brun à noir ; extérieur gris cendré, lisse ou à peine ridé, sans lames ni plis marqués.',
-      'Chair très mince, élastique. Pousse en troupes serrées.',
+    photos: [
+      { id: 'craterellus-cornucopioides', label: 'Ensemble' },
+      { id: 'craterellus-cornucopioides--profil', label: 'Extérieur' },
     ],
-    habitat: 'Sous les feuillus (hêtres, chênes, châtaigniers), sur sol argileux et humide, dans les feuilles mortes et les coins sombres.',
-    season: 'Août à novembre.',
+    key: 'Trompette noire creuse jusqu’à la base, extérieur gris presque lisse.',
+    traits: [
+      ['Forme', 'trompette, creuse jusqu’en bas'],
+      ['Intérieur', 'gris-brun à noir'],
+      ['Extérieur', 'gris cendré, lisse ou à peine ridé'],
+      ['Chair', 'très mince, élastique'],
+      ['Où', 'hêtres, chênes, châtaigniers ; sol argileux humide, coins sombres'],
+      ['Quand', 'août à novembre'],
+    ],
     confusions: [
       {
         with: 'chanterelles-grises',
-        howToTell: ['Plis bien visibles sous le chapeau chez la chanterelle cendrée ; forme moins régulière en cornet chez la sinueuse.'],
+        rows: [['Extérieur', 'presque lisse', 'plis bien visibles']],
       },
       {
         with: 'helvelle-lacuneuse',
-        howToTell: ['Chapeau en selle tourmentée, gris-noir, posé sur un pied creusé de côtes et de trous : pas une trompette.'],
+        rows: [['Forme', 'trompette creuse', 'chapeau en selle tourmentée sur pied côtelé']],
       },
     ],
     noDangerousLookalike: true,
+    details: ['Pousse en troupes serrées dans les feuilles mortes.'],
     wiki: WIKI + 'Craterellus_cornucopioides',
   },
   {
     id: 'pied-de-mouton',
     name: 'Pied-de-mouton',
+    short: 'Pied-de-mouton',
     latin: 'Hydnum repandum',
     edibility: 'excellent',
-    photo: 'hydnum-repandum',
-    identification: [
-      'Chapeau crème à orangé pâle, irrégulier et épais.',
-      'Dessous sans lames ni pores : des aiguillons (petits picots de 3 à 6 mm) serrés, crème, qui se détachent facilement.',
-      'Pied blanc, court et épais, souvent décentré.',
-      'Chair blanche, ferme et cassante.',
+    photos: [
+      { id: 'hydnum-repandum', label: 'Ensemble' },
+      { id: 'hydnum-repandum--dessous', label: 'Aiguillons' },
+      { id: 'hydnum-repandum--pied', label: 'Dessous' },
     ],
-    habitat: 'Sous les feuillus et les conifères, souvent sur sol calcaire, en groupes, en lignes ou en cercles.',
-    season: 'Août à décembre.',
-    tips: 'Les vieux exemplaires deviennent amers : préférer les jeunes, on peut gratter les aiguillons.',
+    key: 'Sous le chapeau : des aiguillons (petits picots), ni lames ni pores.',
+    traits: [
+      ['Chapeau', 'crème à orangé pâle, épais, irrégulier'],
+      ['Dessous', 'aiguillons de 3-6 mm, crème, se détachent facilement'],
+      ['Pied', 'blanc, court, épais, souvent décentré'],
+      ['Chair', 'blanche, ferme, cassante'],
+      ['Où', 'feuillus et conifères, souvent calcaire, en cercles'],
+      ['Quand', 'août à décembre'],
+    ],
     confusions: [
       {
         with: 'hydne-roussissant',
-        howToTell: ['Plus petit et plus fin, chapeau plus orangé-roux, aiguillons qui ne descendent pas sur le pied.'],
+        rows: [
+          ['Taille', 'trapu', 'plus petit, plus fin'],
+          ['Aiguillons', 'descendent sur le pied', 'ne descendent pas'],
+        ],
       },
     ],
     noDangerousLookalike: true,
+    details: ['Les vieux deviennent amers : prendre les jeunes, on peut gratter les aiguillons.'],
     wiki: WIKI + 'Hydnum_repandum',
   },
   {
     id: 'bolet-bai',
     name: 'Bolet bai',
+    short: 'Bolet bai',
     latin: 'Imleria badia',
     edibility: 'excellent',
-    photo: 'imleria-badia',
-    identification: [
-      'Chapeau brun bai (marron acajou), velouté et sec, gluant par temps humide.',
-      'Pores jaunes à vert-jaune qui bleuissent nettement quand on appuie.',
-      'Pied brun, strié en long, SANS réseau.',
-      'Chair blanc-jaunâtre, qui bleuit légèrement à la coupe.',
+    photos: [
+      { id: 'imleria-badia', label: 'Ensemble' },
+      { id: 'imleria-badia--dessous', label: 'Pores bleuis' },
+      { id: 'imleria-badia--pied', label: 'Pied' },
     ],
-    habitat: 'Surtout sous les conifères, aussi en forêt mixte ; sols acides, bois frais et moussus.',
-    season: 'Été et automne, parfois jusqu’au début de l’hiver.',
-    tips: 'Retirer le pied s’il est fibreux. Le bleuissement des pores est normal chez cette espèce.',
+    key: 'Chapeau marron acajou + pores jaunes qui bleuissent au toucher + pied SANS réseau.',
+    traits: [
+      ['Chapeau', 'brun bai, velouté sec, gluant humide'],
+      ['Dessous', 'pores jaunes à vert-jaune, bleuissent nettement'],
+      ['Pied', 'brun, strié, sans réseau'],
+      ['Chair', 'blanc-jaunâtre, bleuit un peu'],
+      ['Où', 'conifères surtout, sol acide, mousse'],
+      ['Quand', 'été à début d’hiver'],
+    ],
     confusions: [
       {
         with: 'bolet-amer',
-        howToTell: ['Pores blancs puis rose sale (jamais jaunes), qui ne bleuissent pas ; réseau brun foncé sur le pied ; goût très amer.'],
+        rows: [
+          ['Pores', 'jaunes, bleuissent', 'blancs → rose sale'],
+          ['Pied', 'sans réseau', 'réseau brun foncé'],
+        ],
       },
     ],
     noDangerousLookalike: true,
+    details: ['Le bleuissement est normal chez cette espèce. Retirer le pied s’il est fibreux.'],
     wiki: WIKI + 'Imleria_badia',
   },
   {
     id: 'lepiote-elevee',
     name: 'Lépiote élevée (coulemelle)',
+    short: 'Coulemelle',
     latin: 'Macrolepiota procera',
     edibility: 'excellent',
-    photo: 'macrolepiota-procera',
-    warning: 'Ne jamais cueillir une lépiote dont le chapeau ouvert fait moins de 10 cm : plusieurs petites lépiotes sont mortelles.',
-    identification: [
-      'Grand chapeau (10 à 25 cm ouvert), d’abord en baguette de tambour puis en parasol, mamelon brun au centre et écailles brunes sur fond crème.',
-      'Lames blanches, libres (non attachées au pied).',
-      'Pied très haut, mince, bulbeux à la base, chiné de bandes brunes comme une peau de serpent.',
-      'Anneau double, épais, qui coulisse le long du pied. Pas de volve.',
+    photos: [
+      { id: 'macrolepiota-procera', label: 'Ensemble' },
+      { id: 'macrolepiota-procera--anneau', label: 'Anneau' },
+      { id: 'macrolepiota-procera--pied', label: 'Pied chiné' },
+      { id: 'macrolepiota-procera--dessous', label: 'Lames' },
     ],
-    habitat: 'Prairies, lisières, clairières et bois clairs.',
-    season: 'Juillet à novembre.',
-    tips: 'Seul le chapeau se mange : le pied est trop fibreux.',
+    key: 'Grand chapeau (plus de 10 cm) + anneau double qui coulisse + pied chiné comme une peau de serpent.',
+    warning: 'Jamais de lépiote de moins de 10 cm : plusieurs petites lépiotes sont mortelles.',
+    traits: [
+      ['Chapeau', '10 à 25 cm, mamelon brun, écailles brunes sur fond crème'],
+      ['Dessous', 'lames blanches, libres'],
+      ['Pied', 'très haut, bulbeux, chiné de brun'],
+      ['Anneau', 'double, épais, coulissant ; pas de volve'],
+      ['Où', 'prairies, lisières, clairières'],
+      ['Quand', 'juillet à novembre'],
+    ],
     confusions: [
       {
         with: 'petites-lepiotes',
-        howToTell: [
-          'Chapeau de moins de 10 cm, anneau fin et fixe (qui ne coulisse pas), souvent rosé ou brun-rosé.',
-          'Règle de sécurité : jamais de lépiote de moins de 10 cm.',
+        rows: [
+          ['Chapeau', 'plus de 10 cm', 'moins de 10 cm, souvent rosé'],
+          ['Anneau', 'double, coulisse', 'fin, fixe'],
         ],
       },
       {
         with: 'lepiote-veneneuse',
-        howToTell: [
-          'Pied lisse, sans chinures, plus court que le diamètre du chapeau.',
-          'Anneau simple ; chair qui rougit fortement quand on la gratte ou la coupe.',
-          'Souvent près des composts et dans les jardins.',
+        rows: [
+          ['Pied', 'chiné, plus long que le chapeau est large', 'lisse, plus court'],
+          ['Chair grattée', 'ne change pas', 'rougit fortement'],
         ],
+        note: 'Souvent près des composts et dans les jardins.',
       },
       {
         with: 'amanite-panthere',
-        howToTell: [
-          'Pied blanc et lisse, sans chinures, avec un bourrelet (volve) en bas du pied.',
-          'Chapeau brun couvert de petites verrues blanches.',
+        rows: [
+          ['Pied', 'chiné', 'blanc lisse, bourrelet à la base'],
+          ['Chapeau', 'écailles brunes', 'brun à verrues blanches'],
         ],
       },
     ],
+    details: ['Seul le chapeau se mange : le pied est trop fibreux.'],
     wiki: WIKI + 'Macrolepiota_procera',
   },
   {
     id: 'lactaire-delicieux',
     name: 'Lactaire délicieux',
+    short: 'L. délicieux',
     latin: 'Lactarius deliciosus',
     edibility: 'comestible',
-    photo: 'lactarius-deliciosus',
-    identification: [
-      'Chapeau orange carotte, zoné de cercles plus foncés, creusé au centre, taché de vert avec l’âge.',
-      'Cassé, il laisse couler un lait ORANGE CAROTTE qui rougit très lentement.',
-      'Lames orange ; tout le champignon verdit en vieillissant ou au froissement.',
-      'Pied orange, creux, marqué de petites fossettes.',
+    photos: [
+      { id: 'lactarius-deliciosus', label: 'Ensemble' },
+      { id: 'lactarius-deliciosus--dessous', label: 'Lames et lait' },
+      { id: 'lactarius-deliciosus--lait', label: 'Lait qui rougit' },
     ],
-    habitat: 'Exclusivement sous les pins.',
-    season: 'Septembre à novembre.',
-    tips: 'Colore l’urine en rouge : c’est sans danger.',
+    key: 'Cassé, il laisse couler un lait ORANGE CAROTTE. Sous les pins.',
+    traits: [
+      ['Chapeau', 'orange carotte, cercles plus foncés, taché de vert'],
+      ['Dessous', 'lames orange'],
+      ['Lait', 'orange carotte, rougit très lentement'],
+      ['Pied', 'orange, creux, petites fossettes'],
+      ['Où', 'exclusivement sous les pins'],
+      ['Quand', 'septembre à novembre'],
+    ],
     confusions: [
       {
         with: 'lactaire-toison',
-        howToTell: [
-          'Lait BLANC qui ne change pas de couleur.',
-          'Chapeau rose saumon dont la marge enroulée est laineuse, poilue.',
-          'Plutôt sous les bouleaux.',
+        rows: [
+          ['Lait', 'orange', 'BLANC'],
+          ['Chapeau', 'orange, zoné', 'rose saumon, marge laineuse'],
+          ['Où', 'pins', 'bouleaux'],
         ],
       },
-      {
-        with: 'lactaire-sanguin',
-        howToTell: ['Lait rouge vineux dès la cassure (pas orange).'],
-      },
+      { with: 'lactaire-sanguin', rows: [['Lait', 'orange carotte', 'rouge vin dès la cassure']] },
     ],
+    details: ['Verdit en vieillissant ou au froissement.', 'Colore l’urine en rouge : sans danger.'],
     wiki: WIKI + 'Lactarius_deliciosus',
   },
   {
     id: 'lactaire-sanguin',
     name: 'Lactaire sanguin',
+    short: 'L. sanguin',
     latin: 'Lactarius sanguifluus',
     edibility: 'excellent',
-    photo: 'lactarius-sanguifluus',
-    identification: [
-      'Chapeau orange terne à rose-vineux, taché de vert avec l’âge.',
-      'Cassé, il laisse couler un lait ROUGE VINEUX dès la cassure.',
-      'Pied court et trapu, marqué de petites fossettes.',
+    photos: [
+      { id: 'lactarius-sanguifluus', label: 'Ensemble' },
+      { id: 'lactarius-sanguifluus--dessous', label: 'Lames' },
+      { id: 'lactarius-sanguifluus--lait', label: 'Lait' },
     ],
-    habitat: 'Sous les pins, sur sol calcaire.',
-    season: 'Septembre à novembre.',
-    tips: 'Souvent considéré comme le meilleur des lactaires. Colore l’urine en rouge, sans danger.',
+    key: 'Cassé, il laisse couler un lait ROUGE VIN dès la cassure. Sous les pins, sur calcaire.',
+    traits: [
+      ['Chapeau', 'orange terne à rose-vineux, taché de vert'],
+      ['Lait', 'rouge vineux immédiatement'],
+      ['Pied', 'court, trapu, petites fossettes'],
+      ['Où', 'pins, sol calcaire'],
+      ['Quand', 'septembre à novembre'],
+    ],
     confusions: [
-      {
-        with: 'lactaire-delicieux',
-        howToTell: ['Lait orange carotte qui ne rougit que lentement.'],
-      },
+      { with: 'lactaire-delicieux', rows: [['Lait', 'rouge vin', 'orange carotte']] },
       {
         with: 'lactaire-toison',
-        howToTell: ['Lait BLANC, chapeau rose saumon à marge laineuse, sous les bouleaux.'],
+        rows: [
+          ['Lait', 'rouge vin', 'BLANC'],
+          ['Où', 'pins', 'bouleaux'],
+        ],
       },
     ],
+    details: ['Souvent considéré comme le meilleur des lactaires.', 'Colore l’urine en rouge : sans danger.'],
     wiki: WIKI + 'Lactarius_sanguifluus',
   },
   {
     id: 'chanterelle-en-tube',
     name: 'Chanterelle en tube',
+    short: 'Ch. en tube',
     latin: 'Craterellus tubaeformis',
     edibility: 'excellent',
-    photo: 'craterellus-tubaeformis',
-    identification: [
-      'Petit chapeau brun-gris de 3 à 7 cm, en entonnoir percé au centre.',
-      'Dessous : PAS de vraies lames, des plis jaunâtres à gris, fourchus, qui descendent sur le pied.',
-      'Pied jaune, creux, souple, souvent aplati et sillonné.',
-      'Pousse en troupes nombreuses.',
+    photos: [
+      { id: 'craterellus-tubaeformis', label: 'Ensemble' },
+      { id: 'craterellus-tubaeformis--dessous', label: 'Plis' },
     ],
-    habitat: 'Forêts de conifères et de feuillus très humides, dans la mousse, près du bois pourri.',
-    season: 'De la mi-automne aux premières gelées.',
+    key: 'Chapeau brun percé au centre + plis (pas de lames) + pied jaune creux.',
+    traits: [
+      ['Chapeau', 'brun-gris, 3 à 7 cm, entonnoir percé'],
+      ['Dessous', 'plis gris-jaunâtre, fourchus'],
+      ['Pied', 'jaune, creux, souple, aplati'],
+      ['Où', 'mousse, bois très humides, près du bois pourri'],
+      ['Quand', 'mi-automne aux premières gelées'],
+    ],
     confusions: [
       {
         with: 'cortinaires-mortels',
-        howToTell: [
-          'Vraies lames, fauves puis couleur rouille.',
-          'Pied plein (pas creux), voile en toile d’araignée chez le jeune.',
-          'Ne jamais ramasser « en vrac » : vérifier chaque exemplaire.',
+        rows: [
+          ['Dessous', 'plis', 'vraies lames fauves puis rouille'],
+          ['Pied', 'creux', 'plein'],
         ],
+        note: 'Ne jamais ramasser en vrac : vérifier chaque exemplaire.',
       },
-      {
-        with: 'leotie',
-        howToTell: ['Petite tête gélatineuse, bosselée, jaune-vert, sans plis ni lames.'],
-      },
+      { with: 'leotie', rows: [['Tête', 'chapeau à plis', 'petite tête gélatineuse sans plis']] },
     ],
+    details: ['Pousse en troupes nombreuses.'],
     wiki: WIKI + 'Craterellus_tubaeformis',
   },
   {
     id: 'sparassis-crepu',
-    name: 'Sparassis crépu (morille des pins)',
+    name: 'Sparassis crépu',
+    short: 'Sparassis',
     latin: 'Sparassis crispa',
     edibility: 'comestible',
-    photo: 'sparassis-crispa',
-    identification: [
-      'Grosse boule de 10 à 40 cm qui évoque un chou-fleur ou une éponge.',
-      'Faite de lames aplaties, ondulées et frisées, serrées et entremêlées.',
-      'Crème à beige, brunissant avec l’âge ; une base épaisse commune.',
+    photos: [
+      { id: 'sparassis-crispa', label: 'Ensemble' },
+      { id: 'sparassis-crispa--detail', label: 'Lames frisées' },
+      { id: 'sparassis-crispa--base', label: 'Sur souche' },
     ],
-    habitat: 'Au pied des conifères, surtout des pins, ou sur leurs souches ; revient souvent au même endroit.',
-    season: 'Septembre à novembre.',
-    tips: 'Ne cueillir que les jeunes (les vieux deviennent coriaces et indigestes) et bien nettoyer terre et aiguilles.',
+    key: 'Grosse boule en chou-fleur faite de lames plates et frisées, au pied des pins.',
+    traits: [
+      ['Forme', 'boule de 10 à 40 cm, lames aplaties, ondulées'],
+      ['Couleur', 'crème à beige, brunit avec l’âge'],
+      ['Où', 'pied ou souche de conifères, surtout pins ; revient au même endroit'],
+      ['Quand', 'septembre à novembre'],
+    ],
     confusions: [
-      { with: 'sparassis-brevipes', howToTell: ['Plus petit et plus jaune, odeur d’eau de Javel ou d’urine.'] },
-      {
-        with: 'ramaires',
-        howToTell: ['Rameaux cylindriques dressés comme du corail, pas de lames aplaties et frisées.', 'Souvent jaunes, orangés ou rosés.'],
-      },
+      { with: 'sparassis-brevipes', rows: [['Odeur', 'agréable', 'Javel ou urine']] },
+      { with: 'ramaires', rows: [['Forme', 'lames plates frisées', 'rameaux cylindriques dressés']] },
     ],
+    details: ['Ne prendre que les jeunes (les vieux sont coriaces) et bien nettoyer terre et aiguilles.'],
     wiki: WIKI + 'Sparassis_crispa',
   },
   {
     id: 'bolet-a-pied-rouge',
     name: 'Bolet à pied rouge',
+    short: 'Pied rouge',
     latin: 'Neoboletus erythropus',
     edibility: 'comestible',
-    photo: 'neoboletus-erythropus',
-    warning: 'Toxique cru : à consommer seulement bien cuit (au moins 15 à 20 min).',
-    identification: [
-      'Chapeau brun foncé, velouté.',
-      'Pores rouges qui bleuissent instantanément au toucher.',
-      'Pied jaune couvert de fines ponctuations rouges, SANS réseau.',
-      'Chair jaune qui bleuit immédiatement et intensément à la coupe.',
+    photos: [
+      { id: 'neoboletus-erythropus', label: 'Ensemble' },
+      { id: 'neoboletus-erythropus--dessous', label: 'Pores et pied' },
+      { id: 'neoboletus-erythropus--coupe', label: 'Bleuissement' },
     ],
-    habitat: 'Sous les conifères et les feuillus, sur sols acides.',
-    season: 'Juin à novembre.',
-    tips: 'Un bolet à pores rouges dont le pied porte un RÉSEAU (et non des ponctuations) n’est pas un bolet à pied rouge : laisser aux connaisseurs.',
+    key: 'Chapeau brun foncé + pores rouges + pied ponctué de rouge SANS réseau + chair qui bleuit aussitôt.',
+    warning: 'Toxique cru : au moins 15 à 20 min de cuisson.',
+    traits: [
+      ['Chapeau', 'brun foncé, velouté'],
+      ['Dessous', 'pores rouges, bleuissent au toucher'],
+      ['Pied', 'jaune ponctué de rouge, sans réseau'],
+      ['Chair', 'jaune, bleuit immédiatement et fort'],
+      ['Où', 'conifères et feuillus, sol acide'],
+      ['Quand', 'juin à novembre'],
+    ],
     confusions: [
       {
         with: 'bolet-satan',
-        howToTell: [
-          'Chapeau blanchâtre à gris pâle (pas brun foncé).',
-          'Pied couvert d’un réseau, pas de ponctuations.',
-          'Chair qui ne bleuit que modérément ; odeur désagréable en vieillissant ; sur sol calcaire.',
+        rows: [
+          ['Chapeau', 'brun foncé', 'blanchâtre'],
+          ['Pied', 'ponctuations', 'réseau'],
+          ['Sol', 'acide', 'calcaire'],
         ],
       },
-      {
-        with: 'bolet-blafard',
-        howToTell: ['Pied couvert d’un réseau ; pores plutôt orangés.'],
-      },
+      { with: 'bolet-blafard', rows: [['Pied', 'ponctuations', 'réseau']] },
     ],
+    details: ['Pores rouges + pied à RÉSEAU : ce n’est pas lui, laisser aux connaisseurs.'],
     wiki: WIKI + 'Neoboletus_erythropus',
   },
   {
     id: 'russule-charbonniere',
     name: 'Russule charbonnière',
+    short: 'Charbonnière',
     latin: 'Russula cyanoxantha',
     edibility: 'excellent',
-    photo: 'russula-cyanoxantha',
-    identification: [
-      'Chapeau très variable : violet, bleu-gris, vert, souvent mêlés.',
-      'Lames blanches, serrées, souples et grasses au toucher (lardacées) : on peut y passer le doigt sans les casser, ce qui est rare chez les russules.',
-      'Pied blanc, parfois teinté de violet, qui casse net comme de la craie. Ni anneau, ni volve.',
-      'Chair blanche, saveur douce.',
+    photos: [
+      { id: 'russula-cyanoxantha', label: 'Ensemble' },
+      { id: 'russula-cyanoxantha--dessous', label: 'Lames' },
     ],
-    habitat: 'Sous les feuillus (hêtres, chênes), aussi sous les conifères ; bois clairs.',
-    season: 'Juin à novembre.',
+    key: 'Lames souples et grasses au toucher (elles ne cassent pas) + pied qui casse net comme de la craie.',
+    traits: [
+      ['Chapeau', 'violet, bleu-gris, vert, souvent mêlés'],
+      ['Dessous', 'lames blanches, serrées, souples (lardacées)'],
+      ['Pied', 'blanc, cassant ; ni anneau ni volve'],
+      ['Chair', 'blanche, saveur douce'],
+      ['Où', 'hêtres, chênes, aussi conifères'],
+      ['Quand', 'juin à novembre'],
+    ],
     confusions: [
       {
         with: 'amanite-phalloide',
-        howToTell: [
-          'Anneau sous le chapeau et volve en sac à la base : toujours déterrer le pied entier, la volve reste souvent dans la terre.',
-          'Chapeau vert olive, pied fibreux qui ne casse pas comme de la craie.',
+        rows: [
+          ['Pied', 'ni anneau ni volve, casse comme de la craie', 'anneau + volve en sac, fibreux'],
+          ['Chapeau', 'violet-vert mêlé', 'vert olive uniforme'],
         ],
+        note: 'Toujours déterrer le pied entier.',
       },
-      {
-        with: 'russules-acres',
-        howToTell: ['Lames cassantes (elles s’effritent sous le doigt) ; chapeau souvent rouge vif.'],
-      },
+      { with: 'russules-acres', rows: [['Lames', 'souples', 'cassantes (s’effritent)']] },
     ],
+    details: [],
     wiki: WIKI + 'Russula_cyanoxantha',
   },
   {
     id: 'bolet-jaune',
     name: 'Bolet jaune (nonnette voilée)',
+    short: 'Bolet jaune',
     latin: 'Suillus luteus',
     edibility: 'comestible',
-    photo: 'suillus-luteus',
-    warning: 'Plus ou moins laxatif selon les personnes : retirer la peau visqueuse du chapeau et commencer par de petites quantités.',
-    identification: [
-      'Chapeau brun chocolat, très visqueux (gluant) par temps humide ; la peau se pèle facilement.',
-      'Pores jaunes, petits.',
-      'Grand anneau membraneux sur le pied (blanchâtre à violacé).',
+    photos: [
+      { id: 'suillus-luteus', label: 'Ensemble' },
+      { id: 'suillus-luteus--dessous', label: 'Pores et anneau' },
+      { id: 'suillus-luteus--pied', label: 'Pied' },
     ],
-    habitat: 'Exclusivement sous les pins, en plaine comme en montagne.',
-    season: 'Août à décembre.',
-    tips: 'Prendre les jeunes exemplaires et retirer le pied.',
+    key: 'Chapeau brun gluant + pores jaunes + grand anneau sur le pied. Sous les pins.',
+    warning: 'Laxatif chez certains : retirer la peau gluante, commencer petit.',
+    traits: [
+      ['Chapeau', 'brun chocolat, très gluant, peau qui se pèle'],
+      ['Dessous', 'pores jaunes, petits'],
+      ['Pied', 'grand anneau membraneux'],
+      ['Où', 'exclusivement sous les pins'],
+      ['Quand', 'août à décembre'],
+    ],
     confusions: [
       {
         with: 'bolets-visqueux',
-        howToTell: ['Bolet granulé : pas d’anneau. Bolet élégant : chapeau jaune-orangé, sous les mélèzes.'],
+        rows: [['Anneau', 'oui', 'non (granulé) ; sous mélèzes (élégant)']],
       },
     ],
     noDangerousLookalike: true,
+    details: ['Prendre les jeunes et retirer le pied.'],
     wiki: WIKI + 'Suillus_luteus',
   },
 ]
