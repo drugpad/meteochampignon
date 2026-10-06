@@ -99,9 +99,19 @@ export function tileUrls(maxZoom: number): string[] {
 // ---------------------------------------------------------------------------------------------
 const abs = (path: string) => new URL(path, location.origin).href
 
+// Erreur HTTP avec son code : un 404 sur une tuile veut dire « pas de tuile ici » (mer, hors couverture),
+// pas une panne.
+class HttpError extends Error {
+  status: number
+  constructor(status: number, url: string) {
+    super(`HTTP ${status} pour ${url}`)
+    this.status = status
+  }
+}
+
 async function store(cache: Cache, url: string, init?: RequestInit): Promise<number> {
   const res = await fetch(url, init)
-  if (!res.ok) throw new Error(`HTTP ${res.status} pour ${url}`)
+  if (!res.ok) throw new HttpError(res.status, url)
   const size = (await res.clone().arrayBuffer()).byteLength
   await cache.put(url, res)
   return size
@@ -182,18 +192,33 @@ export async function downloadOffline(
   tick('Fond de carte')
 
   // 1) Tuiles (le plus gros, et le plus susceptible d'échouer : en premier, avant de toucher aux données).
+  // Mesuré le 06/10/2026 sur la région : ~0,5 % de tuiles en 404 (la mer au large du golfe du Lion n'a pas
+  // de tuile à fort zoom) — normal, pas un échec — et quelques coupures de connexion ou 502 passagers
+  // (réessayés 3 fois avec attente). Les tuiles déjà enregistrées sont sautées : une reprise après
+  // échec, ou le passage d'un niveau au suivant, ne retélécharge pas ce qu'on a déjà.
+  const RETRY_WAIT_MS = [800, 2500]
   let failures = 0
+  let absent = 0
   await runPool(
     tiles,
     async (url) => {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          bytes += await store(cache, url, { mode: 'cors' })
-          files++
-          break
-        } catch {
-          if (attempt === 1) failures++
-          else await new Promise((r) => setTimeout(r, 600))
+      if (await cache.match(url, { ignoreVary: true })) {
+        files++
+      } else {
+        for (let attempt = 0; attempt <= RETRY_WAIT_MS.length; attempt++) {
+          try {
+            bytes += await store(cache, url, { mode: 'cors' })
+            files++
+            break
+          } catch (err) {
+            if (err instanceof HttpError && err.status === 404) {
+              absent++
+              break
+            }
+            if (signal.aborted) break
+            if (attempt === RETRY_WAIT_MS.length) failures++
+            else await new Promise((r) => setTimeout(r, RETRY_WAIT_MS[attempt]))
+          }
         }
       }
       done++
@@ -203,8 +228,11 @@ export async function downloadOffline(
   )
   if (signal.aborted) throw new Error('Téléchargement annulé.')
   if (failures > Math.max(5, tiles.length * MAX_TILE_FAILURES_RATIO)) {
-    throw new Error(`Fond de carte incomplet (${failures} tuiles manquantes sur ${tiles.length}). Réessaie avec une meilleure connexion.`)
+    throw new Error(
+      `Fond de carte incomplet (${failures} tuiles manquantes sur ${tiles.length}). Réessaie : seules les tuiles manquantes seront retéléchargées.`,
+    )
   }
+  void absent // tuiles sans équivalent côté IGN (mer) : rien à enregistrer
 
   // 2) Photos du guide des champignons.
   tick('Guide des champignons')
