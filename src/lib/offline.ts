@@ -16,16 +16,19 @@ const INFO_KEY = 'mc-offline-info'
 export const IGN_PLAN_URL =
   'https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png'
 
-// Poids MESURÉ le 06/10/2026 : zoom ≤ 11 = 756 tuiles = 12 Mo (≈ 17 Ko par tuile en moyenne, les
-// zones rurales sont bien plus légères que les villes) ; zoom ≤ 12 ≈ 2 300 tuiles, zoom ≤ 13 ≈ 8 500.
+// Poids MESURÉ le 06/10/2026 (somme réelle des fichiers du cache, pas des compteurs) : une tuile du Plan
+// IGN pèse ~68 Ko en moyenne (31 Ko au zoom 7, ~70 Ko aux zooms 10-11). Niveau Standard : 756 tuiles =
+// 50 Mo + ~9 Mo de guide, appli et données = 59 Mo. Zoom ≤ 12 : ~2 750 tuiles ; zoom ≤ 13 : 10 544 tuiles.
+// (Une première version annonçait 15 / 55 / 190 Mo : un compteur d'octets sous-estimait à cause
+// d'additions concurrentes qui s'écrasaient.)
 export type OfflineLevel = 'standard' | 'detaille' | 'fin'
 export const LEVELS: Record<OfflineLevel, { label: string; maxZoom: number; approxMo: number; hint: string }> = {
-  standard: { label: 'Standard', maxZoom: 11, approxMo: 15, hint: "zoom jusqu'à la vallée / la ville (≈ 20 s)" },
-  detaille: { label: 'Détaillé', maxZoom: 12, approxMo: 55, hint: "zoom jusqu'au village (≈ 1 min)" },
-  fin: { label: 'Fin', maxZoom: 13, approxMo: 190, hint: "zoom jusqu'aux chemins (≈ 3 à 4 min, en Wi-Fi)" },
+  standard: { label: 'Standard', maxZoom: 11, approxMo: 60, hint: "zoom jusqu'à la vallée / la ville (≈ 1 min)" },
+  detaille: { label: 'Détaillé', maxZoom: 12, approxMo: 200, hint: "zoom jusqu'au village (≈ 3 min, en Wi-Fi)" },
+  fin: { label: 'Fin', maxZoom: 13, approxMo: 750, hint: "zoom jusqu'aux chemins (≈ 10 min, Wi-Fi, beaucoup de place)" },
 }
 const MIN_ZOOM = 7
-const AVG_TILE_BYTES = 24 * 1024 // marge au-dessus de la moyenne mesurée (17 Ko), pour le test de place
+const AVG_TILE_BYTES = 72 * 1024 // moyenne mesurée (68 Ko) + marge, pour le test de place disponible
 // Requêtes en parallèle vers la Géoplateforme. Débit mesuré le 06/10/2026 (tuiles de 20 à 90 Ko, le
 // délai de réponse domine) : 6 → 17 tuiles/s, 12 → 31, 24 → 60, 48 → 63 (et un échec). 20 = presque le
 // plafond, sans dépasser ce que fait un navigateur qui affiche une grande carte.
@@ -109,17 +112,34 @@ class HttpError extends Error {
   }
 }
 
-async function store(cache: Cache, url: string, init?: RequestInit): Promise<number> {
-  const res = await fetch(url, init)
-  if (!res.ok) throw new HttpError(res.status, url)
-  const size = (await res.clone().arrayBuffer()).byteLength
-  await cache.put(url, res)
-  return size
+// Délai maximum par fichier. Mesuré le 06/10/2026 : sans lui, UNE tuile qui traîne retenait toute la fin du
+// téléchargement (« bloqué à 100 % » ~40 s alors que tout le reste était fini). Au-delà, la requête est
+// annulée et réessayée (voir la boucle des tuiles).
+const FETCH_TIMEOUT_MS = 20000 // fichiers volumineux (historique de 2 Mo, photos)
+const TILE_TIMEOUT_MS = 6000 // une tuile (~70 Ko) qui met plus de 6 s est bloquée : on réessaie sur une autre connexion
+
+async function store(cache: Cache, url: string, init?: RequestInit, timeoutMs = FETCH_TIMEOUT_MS): Promise<number> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal })
+    if (!res.ok) throw new HttpError(res.status, url)
+    const size = (await res.clone().arrayBuffer()).byteLength
+    await cache.put(url, res)
+    return size
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
-async function runPool<T>(items: T[], worker: (item: T) => Promise<void>, signal: AbortSignal) {
+async function runPool<T>(
+  items: T[],
+  worker: (item: T) => Promise<void>,
+  signal: AbortSignal,
+  concurrency = CONCURRENCY,
+) {
   let next = 0
-  const lanes = Array.from({ length: Math.min(CONCURRENCY, items.length) }, async () => {
+  const lanes = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     while (next < items.length) {
       if (signal.aborted) return
       await worker(items[next++])
@@ -187,19 +207,39 @@ export async function downloadOffline(
   let bytes = 0
   let files = 0
   let done = 0
-  const total = tiles.length + photos.length + 14 // + fichiers de l'appli et des données
-  const tick = (stage: string) => onProgress({ done, total, stage })
-  tick('Fond de carte')
+  // Barre de progression pondérée par le POIDS à télécharger (une photo ≈ 5 tuiles, l'appli et les
+  // données ≈ 200 tuiles au total) : sinon la barre atteignait 99-100 % à la fin des tuiles alors qu'il restait
+  // ~10 Mo (photos du guide, appli, cartes de pluie, historique) — « bloquée à 100 % » pendant des secondes.
+  const PHOTO_UNITS = 5
+  const SHELL_UNITS = 70
+  const DATA_UNITS = 130
+  const total = tiles.length + photos.length * PHOTO_UNITS + SHELL_UNITS + DATA_UNITS
+  let tilesDone = false
+  // Jamais 100 % avant la fin réelle (le panneau repasse à « Copie du… » quand tout est terminé).
+  const tick = () =>
+    onProgress({
+      done: Math.min(done, total - 1),
+      total,
+      stage: tilesDone ? 'Cartes de pluie et stations' : 'Fond de carte, guide et application',
+    })
+  tick()
 
-  // 1) Tuiles (le plus gros, et le plus susceptible d'échouer : en premier, avant de toucher aux données).
+  // Le guide (photos) et l'appli ne dépendent pas des tuiles : téléchargés EN MÊME TEMPS (hôtes différents,
+  // 6 requêtes chacun), ce qui supprime leur durée de la fin. Les données (cartes de pluie, stations) restent
+  // en dernier : si quelque chose échoue avant, l'ancienne copie des données reste cohérente.
   // Mesuré le 06/10/2026 sur la région : ~0,5 % de tuiles en 404 (la mer au large du golfe du Lion n'a pas
   // de tuile à fort zoom) — normal, pas un échec — et quelques coupures de connexion ou 502 passagers
   // (réessayés 3 fois avec attente). Les tuiles déjà enregistrées sont sautées : une reprise après
   // échec, ou le passage d'un niveau au suivant, ne retélécharge pas ce qu'on a déjà.
-  const RETRY_WAIT_MS = [800, 2500]
+  const RETRY_WAIT_MS = [300, 1000]
   let failures = 0
   let absent = 0
-  await runPool(
+
+  // Chronométrage par étape (console) : utile pour comprendre où le temps passe sur un appareil donné.
+  const t0 = performance.now()
+  const lap = (name: string) => console.info(`[hors ligne] ${name} : ${((performance.now() - t0) / 1000).toFixed(1)} s`)
+
+  const tilesTask = runPool(
     tiles,
     async (url) => {
       if (await cache.match(url, { ignoreVary: true })) {
@@ -207,7 +247,8 @@ export async function downloadOffline(
       } else {
         for (let attempt = 0; attempt <= RETRY_WAIT_MS.length; attempt++) {
           try {
-            bytes += await store(cache, url, { mode: 'cors' })
+            const size = await store(cache, url, { mode: 'cors' }, TILE_TIMEOUT_MS)
+            bytes += size
             files++
             break
           } catch (err) {
@@ -222,66 +263,93 @@ export async function downloadOffline(
         }
       }
       done++
-      if (done % 10 === 0) tick('Fond de carte')
+      if (done % 10 === 0) tick()
     },
     signal,
   )
+
+  const photosTask = runPool(
+    photos,
+    async (url) => {
+      try {
+        const size = await store(cache, url)
+        bytes += size
+        files++
+      } catch {
+        // une photo manquante n'empêche pas l'usage du guide (le texte, lui, est dans l'appli)
+      }
+      done += PHOTO_UNITS
+      tick()
+    },
+    signal,
+    6,
+  )
+
+  let shellError: unknown = null
+  const shellTask = (async () => {
+    const shell = await discoverShell(cache)
+    bytes += shell.bytes
+    files += 2
+    done += SHELL_UNITS / 2
+    await runPool(
+      shell.urls,
+      async (url) => {
+        try {
+          const size = await store(cache, url)
+          bytes += size
+          files++
+        } catch {
+          // ressource facultative
+        }
+        done += SHELL_UNITS / 2 / Math.max(1, shell.urls.length)
+      },
+      signal,
+      6,
+    )
+  })().catch((err) => {
+    shellError = err
+  })
+
+  await Promise.all([
+    tilesTask.then(() => {
+      tilesDone = true
+      lap(`tuiles terminées (${failures} échecs, ${absent} absentes)`)
+      tick()
+    }),
+    photosTask.then(() => lap('photos du guide terminées')),
+    shellTask.then(() => lap('appli terminée')),
+  ])
   if (signal.aborted) throw new Error('Téléchargement annulé.')
   if (failures > Math.max(5, tiles.length * MAX_TILE_FAILURES_RATIO)) {
     throw new Error(
       `Fond de carte incomplet (${failures} tuiles manquantes sur ${tiles.length}). Réessaie : seules les tuiles manquantes seront retéléchargées.`,
     )
   }
+  if (shellError) throw shellError
   void absent // tuiles sans équivalent côté IGN (mer) : rien à enregistrer
 
-  // 2) Photos du guide des champignons.
-  tick('Guide des champignons')
-  await runPool(
-    photos,
-    async (url) => {
-      try {
-        bytes += await store(cache, url)
-        files++
-      } catch {
-        // une photo manquante n'empêche pas l'usage du guide (le texte, lui, est dans l'appli)
-      }
-      done++
-      if (done % 5 === 0) tick('Guide des champignons')
-    },
-    signal,
-  )
-
-  // 3) L'appli elle-même.
-  tick("Application")
-  const shell = await discoverShell(cache)
-  bytes += shell.bytes
-  files += 2
-  await runPool(
-    shell.urls,
-    async (url) => {
-      try {
-        bytes += await store(cache, url)
-        files++
-      } catch {
-        // ressource facultative
-      }
-      done++
-    },
-    signal,
-  )
-
-  // 4) Données (en dernier : si quelque chose a échoué avant, l'ancienne copie des données reste cohérente).
-  tick('Cartes de pluie et stations')
+  // Données : les fichiers en parallèle (ils étaient enregistrés un par un, soit ~10 allers-retours à la suite).
+  tick()
   const meta = await fetchRainMapsMeta()
-  for (const [i, url] of rainMapsUrls(meta).entries()) {
-    bytes += await store(cache, url, i === 0 ? { cache: 'no-store' } : undefined)
-    files++
-    done++
-  }
-  bytes += await store(cache, abs('/station-history.json'), { cache: 'no-store' })
-  files++
+  lap('maps.json lu')
+  done += 10
+  const dataUrls = [...rainMapsUrls(meta), abs('/station-history.json')]
+  await runPool(
+    dataUrls,
+    async (url) => {
+      // maps.json et l'historique doivent être FRAIS (jamais la réponse du cache HTTP du navigateur)
+      const fresh = url.endsWith('/maps.json') || url.endsWith('/station-history.json')
+      const size = await store(cache, url, fresh ? { cache: 'no-store' } : undefined)
+      bytes += size
+      files++
+      done += (DATA_UNITS - 10) / dataUrls.length
+      tick()
+    },
+    signal,
+    6,
+  )
+  lap('données enregistrées')
   done = total
-  tick('Terminé')
 
   const info: OfflineInfo = {
     savedAt: new Date().toISOString(),
