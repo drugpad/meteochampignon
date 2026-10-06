@@ -268,7 +268,7 @@ template:
 automation:
   - id: meteochampignon_declencher_jobs
     alias: "Météochampignon - déclencher GitHub en secours"
-    description: "Toutes les 15 min, SEULEMENT si Home Assistant n'a pas produit de données depuis plus de 90 min : lance alors le traitement GitHub correspondant (stations et/ou cartes). Notifie si GitHub refuse l'appel (jeton expiré, droits)."
+    description: "Toutes les 15 min : lance le traitement GitHub des CARTES dès qu'elles ont plus de 55 min (Home Assistant ne peut pas les calculer : son processeur n'a pas AVX2), et celui des STATIONS seulement si Home Assistant n'a rien enregistré depuis plus de 90 min. Notifie si GitHub refuse l'appel (jeton expiré, droits)."
     mode: single
     triggers:
       - trigger: time_pattern
@@ -299,7 +299,8 @@ automation:
               - action: persistent_notification.dismiss
                 data:
                   notification_id: meteochampignon_dispatch_stations
-      - if: "{{ cartes_age | float(999999) > 5400 }}"
+      # 3300 s = 55 min : le traitement GitHub ignore de lui-même une demande si les cartes ont moins de 50 min.
+      - if: "{{ cartes_age | float(999999) > 3300 }}"
         then:
           - action: rest_command.meteochampignon_cartes
             response_variable: resp_cartes
@@ -348,19 +349,6 @@ automation:
           - action: persistent_notification.dismiss
             data:
               notification_id: meteochampignon_collecte_ha
-
-  - id: meteochampignon_generer_cartes
-    alias: "Météochampignon - générer les cartes (Home Assistant)"
-    description: "Génère les cartes de pluie directement sur Home Assistant, à :05 et :35 de chaque heure. Le script a son propre garde-fou (rien si les cartes publiées ont moins de 50 min) et un verrou anti-doublon ; le calcul tourne en arrière-plan à priorité basse. Si les dépendances ne sont pas installées, il échoue sans conséquence (GitHub prend le relais)."
-    mode: single
-    triggers:
-      - trigger: time_pattern
-        minutes: 5
-      - trigger: time_pattern
-        minutes: 35
-    actions:
-      - action: shell_command.meteochampignon_cartes_ha
-        continue_on_error: true
 
   - id: meteochampignon_alerte_probleme
     alias: "Météochampignon - alerte si retard ou échec"

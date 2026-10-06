@@ -8,7 +8,7 @@
  * Lit les entités du paquet packages/meteochampignon.yaml.
  */
 ;(() => {
-const MC_VERSION = "1.1.0";
+const MC_VERSION = "1.1.1";
 
 const E = {
   probleme: "binary_sensor.meteochampignon_probleme",
@@ -31,17 +31,13 @@ const E = {
 };
 const AUTOMATIONS = [
   ["meteochampignon_collecter_stations", "Collecte des stations", "mdi:thermometer", "à :15 et :45"],
-  ["meteochampignon_generer_cartes", "Génération des cartes", "mdi:weather-pouring", "à :05 et :35"],
-  ["meteochampignon_declencher_jobs", "Secours GitHub", "mdi:github", "si > 90 min sans données"],
+  ["meteochampignon_declencher_jobs", "Cartes et secours GitHub", "mdi:github", "cartes > 55 min · stations > 90 min"],
   ["meteochampignon_alerte_probleme", "Alerte de problème", "mdi:bell-alert", "notification"],
 ];
 const ACTIONS = [
-  ["script.meteochampignon_lancer_maintenant", "Tout lancer", "mdi:rocket-launch", "ok", "Lancer maintenant la collecte et les cartes ?"],
-  ["script.meteochampignon_cartes_maintenant", "Cartes ici", "mdi:weather-pouring", "ok", "Générer les cartes sur Home Assistant (3 à 5 min) ?"],
+  ["script.meteochampignon_lancer_maintenant", "Tout lancer", "mdi:rocket-launch", "ok", "Lancer maintenant la collecte des stations et les cartes (sur GitHub) ?"],
   ["script.meteochampignon_tester_collecte", "Tester la collecte", "mdi:flask-outline", "info", null],
   ["script.meteochampignon_diagnostic", "Diagnostic", "mdi:stethoscope", "info", null],
-  ["script.meteochampignon_installer_dependances", "1. Installer les dépendances", "mdi:download", "warn", "Installer les paquets Python des cartes (1 à 3 min) ?"],
-  ["script.meteochampignon_verifier_dependances", "2. Vérifier les dépendances", "mdi:check-decagram", "info", null],
 ];
 const LINKS = [
   ["https://meteochampignon.vercel.app/", "Le site", "mdi:open-in-new"],

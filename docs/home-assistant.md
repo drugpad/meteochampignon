@@ -55,51 +55,29 @@ Puis relancez l'installeur (il copie les scripts et ajoute la clé Météo-Franc
 `secrets.yaml`, lue dans `.env.local`, sans la redemander) et redémarrez Home
 Assistant.
 
-## Les cartes de pluie sur Home Assistant
+## Les cartes de pluie : GitHub les calcule, Home Assistant les déclenche
 
-Même principe que les stations : **Home Assistant d'abord, GitHub en secours**.
+**Home Assistant ne peut pas calculer les cartes sur certaines machines.** Le calcul lit
+les fichiers de prévision d'Open-Meteo avec la bibliothèque `omfiles`, qui utilise les
+instructions processeur **AVX2**. Sur un processeur sans AVX2 (par exemple un Intel
+Pentium ou Celeron, dont Intel désactive AVX), elle plante avec « Illegal instruction »
+(code 132) : constaté sur un **Intel Pentium G4400T** le 06/10/2026, malgré des
+dépendances correctement installées. Le diagnostic (script « diagnostic Python ») indique
+si la machine a AVX2 (ligne « instructions AVX2 »).
 
-- Le script `maps.py` génère les cartes (même générateur que sur GitHub : un seul
-  fichier source, `scripts/build-rain-maps.py`) en lisant les données des modèles
-  météo sur le stockage public d'Open-Meteo (aucun appel d'API, aucun quota).
-- Il les publie sur la branche `data` du dépôt par l'API GitHub : l'application web
-  ne change pas.
-- Il tourne à **:05 et :35** de chaque heure, **en arrière-plan à priorité basse**
-  (3 à 5 min, ~600 Mo) : Home Assistant reste réactif. Il a un garde-fou (rien si
-  les cartes publiées ont moins de 50 min) et un verrou (jamais deux calculs en
-  parallèle).
-- **GitHub prend le relais tout seul** : si les données ont plus de 90 min,
-  Home Assistant lance le traitement GitHub correspondant. Le voyant « Cartes
-  générées par » du tableau de bord indique qui a produit les cartes actuelles
-  (`home-assistant` ou `github-actions`).
+Répartition qui en découle, et qui marche :
 
-### Mise en route (une seule fois, 3 clics dans le tableau de bord)
+- **Stations** : calculées et enregistrées **par Home Assistant** (Python standard, aucun
+  prérequis processeur), GitHub en secours.
+- **Cartes** : calculées **par GitHub** (traitement « Cartes de pluie »). **Home Assistant
+  les déclenche** : dès que les cartes ont plus de **55 min**, il lance le traitement
+  (le traitement ignore la demande s'il a moins de 50 min). Résultat : des cartes
+  rafraîchies environ toutes les heures, sans dépendre du cron GitHub qui saute des créneaux.
 
-1. Relancez l'installeur (il copie les nouveaux scripts), puis **vérifiez la
-   configuration et redémarrez** Home Assistant.
-2. Carte « Cartes calculées par Home Assistant » :
-   1. **Installer les dépendances** : installe `s3fs`, `omfiles`… dans
-      `/config/meteochampignon/pydeps`, **à part du Python de Home Assistant**
-      (rien n'est modifié dans Home Assistant). Dure 1 à 3 min.
-   2. **Vérifier les dépendances** : notification « ok: true ».
-   3. **Générer les cartes maintenant** : lance un premier calcul (3 à 5 min).
-      « Cartes générées par » doit passer à `home-assistant`.
-3. C'est tout : l'automatisation « générer les cartes » prend le relais à :05 et :35.
-
-### En cas de problème
-
-| Symptôme | Cause probable |
-|---|---|
-| « ok: false » à la vérification | l'installation a échoué : lire `/config/meteochampignon/install-deps.log` (accessible par le partage Samba) |
-| « Cartes générées par » reste sur `github-actions` | le calcul a échoué : lire `/config/meteochampignon/maps.log` et `maps-status.json` |
-| Erreur « refusée (HTTP 403) » dans `maps.log` | le jeton GitHub n'a pas « Contents : Read and write » |
-| Home Assistant ralentit pendant le calcul | réduire `MAPS_THREADS` (3 par défaut) ou décaler l'automatisation ; GitHub peut aussi reprendre seul les cartes (désactiver l'automatisation « générer les cartes ») |
-
-**Retour arrière des cartes sur Home Assistant** : désactiver l'automatisation
-« Météochampignon - générer les cartes (Home Assistant) » (GitHub reprend dans les
-90 min) et, si vous voulez tout retirer, supprimer le dossier
-`/config/meteochampignon/pydeps` (les paquets installés) : le Python de Home
-Assistant n'a jamais été modifié.
+Si vous changez un jour de machine pour une avec AVX2, le calcul sur Home Assistant
+redevient possible : les scripts `maps.py`, `install_deps.py` et `build_rain_maps.py`
+sont toujours copiés par l'installeur (journal `maps.log`, qui indique le code de sortie
+du processus), mais l'automatisation de calcul a été retirée du paquet.
 
 ## Contenu du dossier `home-assistant/`
 
@@ -110,7 +88,7 @@ Assistant n'a jamais été modifié.
 | `scripts/stations.py` | Collecte des stations exécutée par Home Assistant (Python standard) |
 | `scripts/maps.py` | Génération et publication des cartes de pluie par Home Assistant |
 | `scripts/install_deps.py` | Installe les paquets des cartes dans `pydeps/`, à part de Home Assistant |
-| `scripts/check_env.py` | Diagnostic : Home Assistant peut-il générer les cartes ? |
+| `scripts/check_env.py` | Diagnostic : Python, mémoire, **processeur (AVX2)**, réseau |
 | `install.ps1` | Copie tout sur votre partage Samba et ajoute le jeton et la clé Météo-France à `secrets.yaml` |
 
 ## Installation en 4 étapes

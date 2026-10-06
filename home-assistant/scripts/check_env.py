@@ -51,6 +51,18 @@ except Exception as err:  # noqa: BLE001
 
 add(True, "processeurs", str(os.cpu_count()))
 try:
+    model, flags = "?", set()
+    for l in open("/proc/cpuinfo"):
+        if l.startswith("model name") and model == "?":
+            model = l.split(":", 1)[1].strip()
+        elif l.startswith("flags") and not flags:
+            flags = set(l.split(":", 1)[1].split())
+    wanted = ["sse4_2", "avx", "avx2", "bmi2", "fma", "avx512f"]
+    add(True, "processeur", f"{model} | " + ", ".join(f"{w}={'oui' if w in flags else 'NON'}" for w in wanted))
+    add("avx2" in flags, "instructions AVX2 (requises par la lecture des fichiers de prévision « .om »)", "oui" if "avx2" in flags else "NON : la bibliothèque omfiles plante (instruction illégale)")
+except Exception as err:  # noqa: BLE001
+    add(False, "processeur", str(err))
+try:
     free = shutil.disk_usage("/config").free // (1024 * 1024)
     add(free >= 500, "espace libre sur /config", f"{free} Mo")
 except Exception as err:  # noqa: BLE001
