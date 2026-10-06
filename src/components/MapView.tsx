@@ -13,6 +13,7 @@ import { IGN_PLAN_URL, readOfflineInfo } from '../lib/offline'
 import { fetchRainImage, fetchRainMapsMeta, firstCurrentDayIndex } from '../lib/rainMaps'
 import { REGION_BOUNDS } from '../lib/regionOutline'
 import { useIsMobile } from '../lib/useIsMobile'
+import { useParisToday } from '../lib/useParisToday'
 import { useMushroomGuide } from '../lib/useMushroomGuide'
 import { ForecastFullscreen } from './ForecastFullscreen'
 import { ForecastPanel } from './ForecastPanel'
@@ -145,6 +146,7 @@ export function MapView() {
   const [selectedForecastDay, setSelectedForecastDay] = useState(0)
   const [reloadKey, setReloadKey] = useState(0)
   const [searchTarget, setSearchTarget] = useState<GeocodeResult | null>(null)
+  const { today } = useParisToday()
 
   // Numéro du dernier clic : deux clics rapprochés lancent deux requêtes, et
   // la plus lente (donc souvent la première) ne doit pas écraser la réponse
@@ -205,11 +207,19 @@ export function MapView() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [mapsState, reloadMaps])
 
+  // Onglet resté ouvert après minuit : si le jour choisi est désormais passé, on affiche le premier jour
+  // encore valable (sinon la carte montrerait « hier » alors que son bouton a disparu). Valeur dérivée au
+  // rendu : le choix de l'utilisateur (selectedForecastDay) n'est pas modifié.
+  const shownForecastDay =
+    mapsState.status === 'ready' && (mapsState.meta.forecast[selectedForecastDay]?.date ?? today) < today
+      ? firstCurrentDayIndex(mapsState.meta.forecast)
+      : selectedForecastDay
+
   const neededFile =
     mapsState.status === 'ready'
       ? mode === 'historique'
         ? mapsState.meta.rain24h.file
-        : mapsState.meta.forecast[selectedForecastDay]?.file
+        : mapsState.meta.forecast[shownForecastDay]?.file
       : undefined
 
   useEffect(() => {
@@ -250,7 +260,7 @@ export function MapView() {
           <ForecastRainControls
             maps={mapsState}
             image={currentImage}
-            selectedDay={selectedForecastDay}
+            selectedDay={shownForecastDay}
             onSelectDay={setSelectedForecastDay}
             onRetry={handleRetry}
           />

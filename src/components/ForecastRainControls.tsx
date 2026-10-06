@@ -8,7 +8,8 @@ import { useEffect, useRef, useState } from 'react'
 import './ForecastRainControls.css'
 import { RAIN_LEGEND_STOPS } from '../lib/color'
 import { formatRelativeAge, isOlderThanHours } from '../lib/formatRelativeAge'
-import { MODEL_LABELS, STALE_MAPS_HOURS, todayParisKey, tomorrowParisKey } from '../lib/rainMaps'
+import { MODEL_LABELS, STALE_MAPS_HOURS } from '../lib/rainMaps'
+import { useParisToday } from '../lib/useParisToday'
 import type { RainImageState, RainMapsState } from '../types'
 
 const TIME_FORMATTER = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -24,8 +25,8 @@ type Props = {
 
 export function ForecastRainControls({ maps, image, selectedDay, onSelectDay, onRetry }: Props) {
   const [collapsed, setCollapsed] = useState(false)
-  const today = todayParisKey()
-  const tomorrow = tomorrowParisKey()
+  // Tenus à jour (minuit passé sur un onglet ouvert) : voir lib/useParisToday.ts.
+  const { today, tomorrow } = useParisToday()
   // Même logique que RainControls : repliable, mais ne se replie tout seul
   // qu'une fois (pas à chaque nouveau "ready" sinon impossible à rouvrir).
   const autoCollapsedRef = useRef(false)
