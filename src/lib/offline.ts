@@ -20,13 +20,16 @@ export const IGN_PLAN_URL =
 // zones rurales sont bien plus légères que les villes) ; zoom ≤ 12 ≈ 2 300 tuiles, zoom ≤ 13 ≈ 8 500.
 export type OfflineLevel = 'standard' | 'detaille' | 'fin'
 export const LEVELS: Record<OfflineLevel, { label: string; maxZoom: number; approxMo: number; hint: string }> = {
-  standard: { label: 'Standard', maxZoom: 11, approxMo: 15, hint: "zoom jusqu'à la vallée / la ville (≈ 1 min)" },
-  detaille: { label: 'Détaillé', maxZoom: 12, approxMo: 55, hint: "zoom jusqu'au village (≈ 2 min)" },
-  fin: { label: 'Fin', maxZoom: 13, approxMo: 190, hint: "zoom jusqu'aux chemins (≈ 8 min, en Wi-Fi)" },
+  standard: { label: 'Standard', maxZoom: 11, approxMo: 15, hint: "zoom jusqu'à la vallée / la ville (≈ 20 s)" },
+  detaille: { label: 'Détaillé', maxZoom: 12, approxMo: 55, hint: "zoom jusqu'au village (≈ 1 min)" },
+  fin: { label: 'Fin', maxZoom: 13, approxMo: 190, hint: "zoom jusqu'aux chemins (≈ 3 à 4 min, en Wi-Fi)" },
 }
 const MIN_ZOOM = 7
 const AVG_TILE_BYTES = 24 * 1024 // marge au-dessus de la moyenne mesurée (17 Ko), pour le test de place
-const CONCURRENCY = 6 // requêtes en parallèle vers la Géoplateforme : poli pour ~2 000 tuiles
+// Requêtes en parallèle vers la Géoplateforme. Débit mesuré le 06/10/2026 (tuiles de 20 à 90 Ko, le
+// délai de réponse domine) : 6 → 17 tuiles/s, 12 → 31, 24 → 60, 48 → 63 (et un échec). 20 = presque le
+// plafond, sans dépasser ce que fait un navigateur qui affiche une grande carte.
+const CONCURRENCY = 20
 const MAX_TILE_FAILURES_RATIO = 0.01 // au-delà de 1 % de tuiles manquantes, la copie est déclarée incomplète
 
 export type OfflineInfo = {
