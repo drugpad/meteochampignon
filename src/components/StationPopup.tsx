@@ -48,12 +48,27 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
     return <div className={`${rootClassName} station-popup--message station-popup--error`}>{state.message}</div>
   }
 
-  const { station, rainHistory, tempHistory, dailyRain, miniForecast, last24hCoverage, lastObservation } = state.detail
+  const { station, rainHistory, tempHistory, dailyRain, miniForecast, last24hCoverage, lastObservation, upstreamCheck } =
+    state.detail
   const observationLate = lastObservation !== null && isOlderThanHours(lastObservation, 6)
-  // Plus d'un jour sans aucune mesure : ce n'est plus un simple retard « par lots » mais une station à l'arrêt
-  // (cas réel : LUZ SAINT SAUVEUR le 07/10/2026, rien chez Météo-France depuis le 05/10 8 h UTC, tableau
-  // Météociel vide aussi — voir CLAUDE.md).
-  const observationDead = lastObservation !== null && isOlderThanHours(lastObservation, 24)
+  // Cause d'un retard : la collecte vérifie auprès de Météo-France (API par station) ce qu'elle possède pour les
+  // stations sans mesure récente (voir home-assistant/scripts/stations.py, verify_upstream). Trois verdicts :
+  //  - « notre » : Météo-France a des mesures plus récentes que les nôtres -> notre collecte a un trou ;
+  //  - « amont » : Météo-France n'a rien de plus récent -> la station ne transmet plus (ou n'est plus publiée) ;
+  //  - sinon (pas encore vérifié) : on ne prétend rien.
+  const mfLast = upstreamCheck?.mfLast ?? null
+  const verdict: 'notre' | 'amont' | null =
+    !observationLate || !upstreamCheck
+      ? null
+      : mfLast !== null && lastObservation !== null && mfLast > lastObservation
+        ? 'notre'
+        : 'amont'
+  const checkedAtLabel = upstreamCheck
+    ? new Date(upstreamCheck.checkedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    : ''
+  const mfLastLabel = mfLast
+    ? new Date(mfLast).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : null
   // Avertissements calculés sur la couverture réelle des données (voir
   // fetchStationDetail) : ils disparaissent seuls quand les trous sont comblés.
   const incomplete24h = last24hCoverage < COMPLETE_RATIO * 24
@@ -94,12 +109,20 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
       {lastObservation !== null && (
         <div className={observationLate ? 'station-popup__notice' : 'station-popup__altitude'}>
           Dernière mesure reçue : {formatRelativeAge(new Date(lastObservation as string).getTime())}
-          {observationLate && !observationDead && ' — mise à jour en retard (les mesures arrivent par lots)'}
-          {observationDead && (
+          {observationLate && verdict === null && ' — mise à jour en retard (cause pas encore vérifiée)'}
+          {verdict === 'amont' && (
             <>
               {' '}
-              — <b>cette station ne transmet plus</b> : panne probable de la station ou de sa liaison (Météo-France
-              n'a rien publié depuis, ce n'est pas un problème de l'appli).
+              — vérifié à {checkedAtLabel} : <b>Météo-France n'a pas de mesure plus récente</b>
+              {mfLastLabel ? ` (sa dernière : ${mfLastLabel})` : ' (aucune mesure pour cette station)'}. La station ne
+              transmet plus, ou Météo-France ne la publie plus : ce n'est pas un problème de notre collecte.
+            </>
+          )}
+          {verdict === 'notre' && (
+            <>
+              {' '}
+              — vérifié à {checkedAtLabel} : <b>Météo-France a des mesures plus récentes</b> (jusqu'au {mfLastLabel}) que
+              celles reçues. Notre collecte a du retard et va se rattraper.
             </>
           )}
         </div>

@@ -78,6 +78,10 @@ export type StationDetail = {
   dailyRain: { date: string; rain: number; complete: boolean }[]
   last24hCoverage: number // nombre d'heures observées sur les 24 dernières (sur 24)
   lastObservation: string | null // ISO UTC de la dernière mesure connue de cette station
+  // Vérification faite par la collecte auprès de Météo-France (API par station) quand la station n'a plus de
+  // mesure récente : `mfLast` = dernière observation que Météo-France possède (null = aucune), `checkedAt` =
+  // heure de la vérification. Permet de dire si c'est la station ou notre collecte. null = pas de vérification.
+  upstreamCheck: { mfLast: string | null; checkedAt: string } | null
   miniForecast: ForecastDay[] // 5 jours, source Open-Meteo pour ce point
 }
 

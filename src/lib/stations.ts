@@ -47,13 +47,17 @@ export const HISTORY_RAW_URL =
 export const HISTORY_LOCAL_URL = '/station-history.json'
 const HISTORY_SOURCES = [HISTORY_RAW_URL, HISTORY_LOCAL_URL]
 
-async function fetchHistoryFile(): Promise<{ stations?: HistoryByStation }> {
+type UpstreamChecks = Record<string, { mfLast: string | null; checkedAt: string }>
+type HistoryFile = { stations?: HistoryByStation; upstream?: { stations?: UpstreamChecks } }
+type LoadedHistory = { stations: HistoryByStation; upstream: UpstreamChecks }
+
+async function fetchHistoryFile(): Promise<HistoryFile> {
   let lastError: unknown = null
   for (const url of HISTORY_SOURCES) {
     try {
       const res = await fetch(url, { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return (await res.json()) as { stations?: HistoryByStation }
+      return (await res.json()) as HistoryFile
     } catch (err) {
       lastError = err
     }
@@ -72,15 +76,15 @@ type HistoryByStation = Record<string, HistoryPoint[]>
 // permettre un nouvel essai au clic suivant plutôt que de rester bloqué sur
 // une erreur transitoire (ex. déploiement en cours).
 const HISTORY_MAX_AGE_MS = 10 * 60 * 1000
-let historyPromise: Promise<HistoryByStation> | null = null
+let historyPromise: Promise<LoadedHistory> | null = null
 let historyLoadedAt = 0
 
-function loadHistory(): Promise<HistoryByStation> {
+function loadHistory(): Promise<LoadedHistory> {
   if (historyPromise && Date.now() - historyLoadedAt > HISTORY_MAX_AGE_MS) historyPromise = null
   if (!historyPromise) {
     historyLoadedAt = Date.now()
     historyPromise = fetchHistoryFile()
-      .then((data) => data.stations ?? {})
+      .then((data) => ({ stations: data.stations ?? {}, upstream: data.upstream?.stations ?? {} }))
       .catch((err) => {
         historyPromise = null
         throw err
@@ -125,12 +129,12 @@ function expectedObservationsPerDay(now: number): Map<string, number> {
 export async function fetchStationDetail(station: Station): Promise<StationDetail> {
   // La mini prévision est un PLUS : sans elle (hors ligne, Open-Meteo injoignable), l'historique de la
   // station — l'essentiel de l'écran, et la seule partie disponible dans la copie hors ligne — reste affiché.
-  const [historyByStation, miniForecast] = await Promise.all([
+  const [history, miniForecast] = await Promise.all([
     loadHistory(),
     getDailyForecast({ lat: station.lat, lon: station.lon }, 5).catch(() => [] as ForecastDay[]),
   ])
 
-  const points = (historyByStation[station.id] ?? []).slice().sort((a, b) => a.time.localeCompare(b.time))
+  const points = (history.stations[station.id] ?? []).slice().sort((a, b) => a.time.localeCompare(b.time))
   const now = Date.now()
   // 24 dernières HEURES (pas les 24 derniers points : avec un historique
   // clairsemé, 24 points peuvent s'étaler sur plusieurs jours).
@@ -176,5 +180,6 @@ export async function fetchStationDetail(station: Station): Promise<StationDetai
     miniForecast,
     last24hCoverage: last24h.length,
     lastObservation: points.length > 0 ? points[points.length - 1].time : null,
+    upstreamCheck: history.upstream[station.id] ?? null,
   }
 }

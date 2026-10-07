@@ -44,6 +44,7 @@ BRANCH = "master"
 HISTORY_PATH = "public/station-history.json"
 STATIONS_PATH = "src/data/stations-midi-pyrenees.json"
 PAQUET_URL = "https://public-api.meteofrance.fr/public/DPPaquetObs/v2/paquet/stations/horaire"
+STATION_URL = "https://public-api.meteofrance.fr/public/DPObs/v2/station/horaire"  # API PAR STATION (dernière observation)
 SECRETS_FILE = os.environ.get("HA_SECRETS", "/config/secrets.yaml")
 GITHUB_API = os.environ.get("GITHUB_API_BASE", "https://api.github.com")  # surchargé par les tests uniquement
 
@@ -52,6 +53,9 @@ KEEP_HOURS = 240           # fenêtre glissante de l'historique (10 jours)
 PUBLICATION_LAG_MIN = 15   # l'observation de l'heure H est publiée vers H+10 min
 COMPLETE_RATIO = 0.95
 ALWAYS_REFETCH_LAST_HOURS = 3
+STALE_AFTER_HOURS = 3      # sans mesure depuis plus de 3 h : on demande à Météo-France ce qu'elle a
+RECHECK_AFTER_HOURS = 6    # une vérification déjà écrite dans le fichier est réécrite au bout de 6 h
+MAX_UPSTREAM_CHECKS = 15   # appels par passage (limite de l'API : 50 par minute)
 MAX_WRITE_ATTEMPTS = 3
 DRY_RUN = "--dry-run" in sys.argv
 CHECK = "--check" in sys.argv
@@ -194,6 +198,75 @@ def merge(history, collected, now):
     return added
 
 
+def parse_time(iso):
+    return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def stale_stations(history, stations, now):
+    """Stations sans aucune mesure depuis plus de STALE_AFTER_HOURS (ou sans aucun point)."""
+    cutoff = now - timedelta(hours=STALE_AFTER_HOURS)
+    out = []
+    for sid in stations:
+        points = history.get("stations", {}).get(sid) or []
+        if not points or parse_time(max(p["time"] for p in points)) < cutoff:
+            out.append(sid)
+    return out
+
+
+def fetch_station_obs(mf_key, sid):
+    """Observations que Météo-France publie pour CETTE station (API par station), ou None si l'appel échoue."""
+    try:
+        status, body = http(f"{STATION_URL}?id_station={sid}&format=json", {"apikey": mf_key}, timeout=30)
+        data = json.loads(body) if status == 200 else None
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, list) else None
+
+
+def verify_upstream(history, stations, mf_key, now, fetcher=fetch_station_obs, pause=0.7):
+    """Pour chaque station sans mesure récente, demande à Météo-France ce qu'elle possède.
+
+    Permet à l'appli de dire SI C'EST LA STATION OU NOTRE COLLECTE :
+      - Météo-France n'a rien de plus récent que nous  -> la station ne transmet plus (ou n'est plus publiée) ;
+      - Météo-France a des mesures plus récentes       -> c'est NOTRE trou : on les récupère aussitôt.
+    Renvoie (points_a_ajouter, {station: derniere_mesure_de_Meteo-France | None}).
+    """
+    extra, results = {}, {}
+    for i, sid in enumerate(stale_stations(history, stations, now)[:MAX_UPSTREAM_CHECKS]):
+        if i:
+            time.sleep(pause)
+        obs = fetcher(mf_key, sid)
+        if obs is None:
+            continue  # appel échoué : vérification inconnue (on garde l'ancienne s'il y en a une)
+        valid = [o for o in obs if isinstance(o, dict) and o.get("validity_time")]
+        results[sid] = max((o["validity_time"] for o in valid), default=None)
+        extra[sid] = [to_point(o) for o in valid]
+    return extra, results
+
+
+def update_upstream(history, stations, results, now):
+    """Met à jour history["upstream"] (stations encore sans mesure récente). Renvoie True si le contenu change
+    de façon à justifier une écriture (changement de verdict, station revenue, ou vérification vieille de 6 h)."""
+    old = history.get("upstream", {}).get("stations", {}) if isinstance(history.get("upstream"), dict) else {}
+    still = set(stale_stations(history, stations, now))
+    checked_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    new = {}
+    for sid in still:
+        if sid in results:
+            new[sid] = {"mfLast": results[sid], "checkedAt": checked_at}
+        elif sid in old:
+            new[sid] = old[sid]  # vérification impossible ce coup-ci : on garde la précédente (avec son heure)
+    sig = lambda d: {k: v.get("mfLast") for k, v in d.items()}  # noqa: E731
+    due = any((now - parse_time(v["checkedAt"])).total_seconds() > RECHECK_AFTER_HOURS * 3600 for v in old.values() if v.get("checkedAt"))
+    changed = sig(old) != sig(new) or (due and bool(new))
+    if changed:
+        if new:
+            history["upstream"] = {"stations": new}
+        else:
+            history.pop("upstream", None)
+    return changed
+
+
 def check():
     """Test sans écriture. La permission d'écriture est vérifiée par un PUT avec un
     sha volontairement FAUX : avec « Contents : Read and write », GitHub répond
@@ -265,8 +338,18 @@ def main():
             return fail("API Paquet indisponible (aucune heure reçue)", heures_demandees=len(hours))
 
         added = merge(history, collected, now)
-        result = {"ok": True, "heures_demandees": len(hours), "heures_recues": received, "points_ajoutes": added}
-        if added == 0:
+        # Stations muettes : que dit Météo-France ? (et récupération des mesures qui nous manqueraient)
+        extra, upstream_results = verify_upstream(history, stations, mf_key, now)
+        added += merge(history, extra, now)
+        upstream_changed = update_upstream(history, stations, upstream_results, now)
+        result = {
+            "ok": True,
+            "heures_demandees": len(hours),
+            "heures_recues": received,
+            "points_ajoutes": added,
+            "stations_muettes": {sid: v.get("mfLast") for sid, v in history.get("upstream", {}).get("stations", {}).items()},
+        }
+        if added == 0 and not upstream_changed:
             print(json.dumps({**result, "ecrit": False}, ensure_ascii=False))
             return 0
         if DRY_RUN:
