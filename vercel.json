@@ -5,5 +5,5 @@
       "destination": "/index.html"
     }
   ],
-  "ignoreCommand": "git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" HEAD -- . ':(exclude)public/station-history.json'"
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)public/station-history.json' 2>/dev/null; test $? -eq 0"
 }
