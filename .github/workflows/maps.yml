@@ -92,6 +92,9 @@ jobs:
           git init -q -b data
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Pas de déploiement Vercel pour cette branche (la config de master ne s'y applique pas : sans ce
+          # fichier, chaque publication déclenchait un déploiement qui échouait et consommait le quota).
+          printf '{\n  "git": { "deploymentEnabled": false }\n}\n' > vercel.json
           git add -A
           git commit -q -m "Cartes de pluie $(date -u +%Y-%m-%dT%H:%MZ)"
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"

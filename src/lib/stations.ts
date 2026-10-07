@@ -39,7 +39,27 @@ export function meteocielStationUrl(stationId: string): string {
   return `https://www.meteociel.fr/temps-reel/obs_villes.php?code2=${Number(stationId)}`
 }
 
-const HISTORY_URL = '/station-history.json'
+// Source principale : le fichier du dépôt lu directement sur GitHub (cache ~5 min, CORS ouvert), comme les cartes
+// de pluie. Avant, il était servi par le déploiement Vercel, donc chaque commit horaire des stations (HA +
+// GitHub) redéployait tout le site. Repli : le fichier embarqué dans le dernier déploiement (peut dater).
+export const HISTORY_RAW_URL =
+  'https://raw.githubusercontent.com/drugpad/meteochampignon/master/public/station-history.json'
+export const HISTORY_LOCAL_URL = '/station-history.json'
+const HISTORY_SOURCES = [HISTORY_RAW_URL, HISTORY_LOCAL_URL]
+
+async function fetchHistoryFile(): Promise<{ stations?: HistoryByStation }> {
+  let lastError: unknown = null
+  for (const url of HISTORY_SOURCES) {
+    try {
+      const res = await fetch(url, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return (await res.json()) as { stations?: HistoryByStation }
+    } catch (err) {
+      lastError = err
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Historique des stations indisponible.')
+}
 
 type HistoryPoint = { time: string; rr1: number | null; temp: number | null }
 type HistoryByStation = Record<string, HistoryPoint[]>
@@ -59,11 +79,7 @@ function loadHistory(): Promise<HistoryByStation> {
   if (historyPromise && Date.now() - historyLoadedAt > HISTORY_MAX_AGE_MS) historyPromise = null
   if (!historyPromise) {
     historyLoadedAt = Date.now()
-    historyPromise = fetch(HISTORY_URL, { cache: 'no-store' })
-      .then((res) => {
-        if (!res.ok) throw new Error("Historique des stations indisponible (fichier absent).")
-        return res.json() as Promise<{ stations: HistoryByStation }>
-      })
+    historyPromise = fetchHistoryFile()
       .then((data) => data.stations ?? {})
       .catch((err) => {
         historyPromise = null
