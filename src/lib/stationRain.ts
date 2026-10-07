@@ -51,6 +51,10 @@ export function rainReference(totals: Record<string, StationRainTotal>): number 
 
 export type RainBubble = { bg: string; fg: string; label: string; title: string }
 
+// Cumuls pas encore chargés : marqueur neutre SANS chiffre. Sans cela, toutes les stations s'affichaient d'abord
+// avec la bulle grise « – » (= aucune mesure) avant de changer de couleur : un clignotement qui ressemble à de la lenteur.
+export const BUBBLE_LOADING: RainBubble = { bg: '#e5e7eb', fg: '#6b7280', label: '', title: 'Chargement des cumuls de pluie…' }
+
 const frNumber = (v: number) => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
 
 // Couleur et texte de la bulle d'une station. Intensité en racine carrée : la pluie est très « pointue » (beaucoup

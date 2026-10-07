@@ -7,8 +7,8 @@
 import L from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
-import { fetchStationDetail, loadRainTotals, STATIC_STATIONS } from '../lib/stations'
-import { rainBubble, rainReference, type RainBubble, type StationRainTotal } from '../lib/stationRain'
+import { cachedRainTotals, fetchStationDetail, loadRainTotals, STATIC_STATIONS } from '../lib/stations'
+import { BUBBLE_LOADING, rainBubble, rainReference, type RainBubble, type StationRainTotal } from '../lib/stationRain'
 import { useIsMobile } from '../lib/useIsMobile'
 import { StationFullscreen } from './StationFullscreen'
 import { StationPopup } from './StationPopup'
@@ -33,12 +33,15 @@ function stationIcon(zoomClass: ZoomClass, bubble: RainBubble): L.DivIcon {
   if (!icon) {
     const dot = (px: number) =>
       `<div class="station-marker__dot" style="width:${px}px;height:${px}px;background:${bubble.bg}"></div>`
+    const loading = bubble.label === '' // cumuls pas encore chargés : marqueur neutre sans chiffre
     const html =
       zoomClass === 'near'
-        ? '<div class="station-marker__pin">🌧️</div>' + bubbleHtml(bubble, 15)
+        ? '<div class="station-marker__pin">🌧️</div>' + (loading ? '' : bubbleHtml(bubble, 15))
         : zoomClass === 'mid'
-          ? dot(14) + bubbleHtml(bubble, 9)
-          : bubbleHtml(bubble, 0, true)
+          ? dot(14) + (loading ? '' : bubbleHtml(bubble, 9))
+          : loading
+            ? dot(11)
+            : bubbleHtml(bubble, 0, true)
     icon = L.divIcon({ className: 'station-marker', html, iconSize: [28, 28], iconAnchor: [14, 14] })
     iconCache.set(key, icon)
   }
@@ -56,7 +59,8 @@ function useZoomClass(): ZoomClass {
 
 // Cumuls de pluie des 3 derniers jours, rechargés toutes les 10 min tant que la couche est affichée.
 function useRainTotals(): Record<string, StationRainTotal> | null {
-  const [totals, setTotals] = useState<Record<string, StationRainTotal> | null>(null)
+  // Valeur initiale = derniers cumuls connus (mémoire, sinon stockage local) : affichage immédiat, puis mise à jour.
+  const [totals, setTotals] = useState<Record<string, StationRainTotal> | null>(() => cachedRainTotals())
   useEffect(() => {
     let alive = true
     const load = () =>
@@ -153,7 +157,8 @@ export function StationsLayer() {
   const zoomClass = useZoomClass()
   const totals = useRainTotals()
   const reference = useMemo(() => (totals ? rainReference(totals) : 5), [totals])
-  const iconOf = (station: Station) => stationIcon(zoomClass, rainBubble(totals?.[station.id], reference))
+  const iconOf = (station: Station) =>
+    stationIcon(zoomClass, totals === null ? BUBBLE_LOADING : rainBubble(totals[station.id], reference))
   // Les stations les plus arrosées au premier plan : quand les pastilles se chevauchent, ce sont les plus
   // intéressantes qui restent visibles, pas les stations sèches.
   const zOf = (station: Station) => Math.round(totals?.[station.id]?.mm ?? 0)

@@ -96,9 +96,36 @@ function loadHistory(): Promise<LoadedHistory> {
 
 // Cumul de pluie des 72 dernières heures de TOUTES les stations (bulles de la carte, mode Historique) : lit le même
 // fichier que le détail d'une station (une seule requête, mémoïsée).
+//
+// Rapidité d'affichage des bulles (retour utilisateur : « ça met un moment à s'afficher ») : les cumuls calculés sont
+// gardés en mémoire (revenir sur Historique est instantané) ET dans le stockage local du navigateur (au rechargement
+// de la page, les bulles s'affichent aussitôt avec les derniers cumuls connus, puis se mettent à jour).
+const RAIN_TOTALS_KEY = 'mc-rain-totals'
+const RAIN_TOTALS_STORED_MAX_AGE_MS = 12 * 3600 * 1000 // au-delà : trop vieux pour être affiché, même en attendant
+let rainTotalsMemo: Record<string, StationRainTotal> | null = null
+
+export function cachedRainTotals(): Record<string, StationRainTotal> | null {
+  if (rainTotalsMemo) return rainTotalsMemo
+  try {
+    const raw = localStorage.getItem(RAIN_TOTALS_KEY)
+    if (!raw) return null
+    const stored = JSON.parse(raw) as { at: number; totals: Record<string, StationRainTotal> }
+    if (Date.now() - stored.at > RAIN_TOTALS_STORED_MAX_AGE_MS) return null
+    return stored.totals
+  } catch {
+    return null
+  }
+}
+
 export async function loadRainTotals(): Promise<Record<string, StationRainTotal>> {
   const history = await loadHistory()
-  return computeRainTotals(history.stations)
+  rainTotalsMemo = computeRainTotals(history.stations)
+  try {
+    localStorage.setItem(RAIN_TOTALS_KEY, JSON.stringify({ at: Date.now(), totals: rainTotalsMemo }))
+  } catch {
+    // stockage plein ou interdit (navigation privée) : seule l'accélération du rechargement est perdue
+  }
+  return rainTotalsMemo
 }
 
 const HOUR_MS = 3600000

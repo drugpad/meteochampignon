@@ -10,6 +10,7 @@ import { MapContainer, LayersControl, Marker, TileLayer, useMap, useMapEvents } 
 import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
 import { IGN_PLAN_URL, readOfflineInfo } from '../lib/offline'
+import { loadRainTotals } from '../lib/stations'
 import { fetchRainImage, fetchRainMapsMeta, firstCurrentDayIndex } from '../lib/rainMaps'
 import { REGION_BOUNDS } from '../lib/regionOutline'
 import { useIsMobile } from '../lib/useIsMobile'
@@ -147,6 +148,13 @@ export function MapView() {
   const [reloadKey, setReloadKey] = useState(0)
   const [searchTarget, setSearchTarget] = useState<GeocodeResult | null>(null)
   const { today } = useParisToday()
+
+  // Précharge l'historique des stations (≈ 200 Ko compressé) peu après l'ouverture : en passant sur Historique, les
+  // bulles de pluie s'affichent sans attendre le téléchargement. Échec ignoré (réessayé à l'ouverture d'Historique).
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadRainTotals().catch(() => undefined), 1500)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   // Numéro du dernier clic : deux clics rapprochés lancent deux requêtes, et
   // la plus lente (donc souvent la première) ne doit pas écraser la réponse
