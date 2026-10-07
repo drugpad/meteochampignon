@@ -56,6 +56,7 @@ ALWAYS_REFETCH_LAST_HOURS = 3
 STALE_AFTER_HOURS = 3      # sans mesure depuis plus de 3 h : on demande à Météo-France ce qu'elle a
 RECHECK_AFTER_HOURS = 6    # une vérification déjà écrite dans le fichier est réécrite au bout de 6 h
 MAX_UPSTREAM_CHECKS = 15   # appels par passage (limite de l'API : 50 par minute)
+MAX_BACKFILL_CALLS = 25    # heures manquantes rattrapées par passage (une commande HA est coupée à 60 s)
 MAX_WRITE_ATTEMPTS = 3
 DRY_RUN = "--dry-run" in sys.argv
 CHECK = "--check" in sys.argv
@@ -213,10 +214,14 @@ def stale_stations(history, stations, now):
     return out
 
 
-def fetch_station_obs(mf_key, sid):
-    """Observations que Météo-France publie pour CETTE station (API par station), ou None si l'appel échoue."""
+def fetch_station_obs(mf_key, sid, hour=None):
+    """Observations que Météo-France publie pour CETTE station (API par station), ou None si l'appel échoue.
+    Sans `hour` : la plus récente ; avec `hour` (ISO) : celle de cette heure."""
+    url = f"{STATION_URL}?id_station={sid}&format=json"
+    if hour:
+        url += f"&date={urllib.parse.quote(hour)}"
     try:
-        status, body = http(f"{STATION_URL}?id_station={sid}&format=json", {"apikey": mf_key}, timeout=30)
+        status, body = http(url, {"apikey": mf_key}, timeout=20)
         data = json.loads(body) if status == 200 else None
     except (OSError, ValueError):
         return None
@@ -232,6 +237,7 @@ def verify_upstream(history, stations, mf_key, now, fetcher=fetch_station_obs, p
     Renvoie (points_a_ajouter, {station: derniere_mesure_de_Meteo-France | None}).
     """
     extra, results = {}, {}
+    backfill_left = MAX_BACKFILL_CALLS
     for i, sid in enumerate(stale_stations(history, stations, now)[:MAX_UPSTREAM_CHECKS]):
         if i:
             time.sleep(pause)
@@ -239,8 +245,42 @@ def verify_upstream(history, stations, mf_key, now, fetcher=fetch_station_obs, p
         if obs is None:
             continue  # appel échoué : vérification inconnue (on garde l'ancienne s'il y en a une)
         valid = [o for o in obs if isinstance(o, dict) and o.get("validity_time")]
-        results[sid] = max((o["validity_time"] for o in valid), default=None)
-        extra[sid] = [to_point(o) for o in valid]
+        mf_last = max((o["validity_time"] for o in valid), default=None)
+        results[sid] = mf_last
+        latest = [to_point(o) for o in valid]
+        extra[sid] = []
+
+        # Météo-France a des mesures plus récentes que les nôtres : on rattrape les HEURES manquantes une par
+        # une (API par station), de la plus ancienne à la plus récente. Cas réel du 07/10/2026 : trois stations
+        # INRAE (31035001, 34237001, 47038002) absentes du paquet horaire depuis 2 jours mais présentes ici.
+        # La dernière mesure n'est rattachée QU'À LA FIN, une fois le trou comblé : sinon elle ferait « avancer »
+        # la dernière heure connue et le trou du milieu ne serait plus jamais rattrapé aux passages suivants.
+        points = history.get("stations", {}).get(sid) or []
+        our_last = max((p["time"] for p in points), default=None)
+        if not (mf_last and (our_last is None or mf_last > our_last)):
+            extra[sid] = latest
+            continue
+        have = {p["time"] for p in points}
+        start = parse_time(our_last) + timedelta(hours=1) if our_last else now - timedelta(hours=KEEP_HOURS)
+        start = max(start, now - timedelta(hours=KEEP_HOURS)).replace(minute=0, second=0, microsecond=0)
+        complete, t = True, start
+        while t <= parse_time(mf_last):
+            iso = iso_hour(t)
+            t += timedelta(hours=1)
+            if iso in have:
+                continue
+            if backfill_left <= 0:
+                complete = False  # budget épuisé : la suite au prochain passage, là où on s'est arrêté
+                break
+            time.sleep(pause)
+            backfill_left -= 1
+            more = fetcher(mf_key, sid, iso)
+            if more is None:
+                complete = False  # appel échoué : on ne laisse pas de trou, on reprendra ici
+                break
+            extra[sid].extend(to_point(o) for o in more if isinstance(o, dict) and o.get("validity_time"))
+        if complete:
+            extra[sid].extend(latest)
     return extra, results
 
 
