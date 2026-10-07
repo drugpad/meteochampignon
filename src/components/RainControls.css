@@ -8,6 +8,31 @@
   overflow: hidden;
 }
 
+.rain-controls__bubbles {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+  font-size: 11px;
+  color: #444;
+  line-height: 1.3;
+}
+
+.rain-controls__bubble-scale {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, hsl(215 85% 88%), hsl(215 85% 58%), hsl(215 85% 30%));
+}
+
+.rain-controls__bubble-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  color: #666;
+}
+
 .rain-controls__header {
   display: flex;
   align-items: center;

@@ -69,6 +69,36 @@
   justify-content: center;
 }
 
+/* Bulle du cumul de pluie sur 3 jours, à droite de l'icône (couleur posée en ligne : bleu plus ou moins foncé). */
+.station-marker__rain {
+  position: absolute;
+  left: calc(50% + var(--off, 12px));
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 22px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1.5px solid white;
+  border-radius: 9px;
+  font: 700 11px/15px system-ui, sans-serif;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+/* Zoom de départ : la bulle est le marqueur (pas d'icône à côté), centrée sur la station, plus compacte. */
+.station-marker__rain--solo {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 18px;
+  height: 15px;
+  padding: 0 3px;
+  border-width: 1px;
+  font-size: 10px;
+  line-height: 13px;
+}
+
 .station-marker__dot {
   border-radius: 50%;
   background: #2563eb;

@@ -44,6 +44,16 @@ export function RainControls({ maps, image, onRetry }: Props) {
 
       {!collapsed && (
         <div className="rain-controls__body">
+          <div className="rain-controls__bubbles">
+            <b>Bulles : pluie des 3 derniers jours</b>
+            <span className="rain-controls__bubble-scale" aria-hidden="true" />
+            <span className="rain-controls__bubble-labels">
+              <span>moins</span>
+              <span>plus que les autres stations</span>
+            </span>
+            <span>« ≥ » : des mesures manquent, c'est un minimum. « – » : aucune mesure.</span>
+          </div>
+
           {loading && <div className="rain-controls__status">Chargement…</div>}
 
           {error && (

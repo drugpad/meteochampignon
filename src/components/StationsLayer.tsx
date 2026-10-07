@@ -5,40 +5,72 @@
 // plein-écran séparé (StationFullscreen.tsx) — une popup ancrée sur un
 // petit point de carte est peu ergonomique au doigt (retour utilisateur).
 import L from 'leaflet'
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
-import { fetchStationDetail, STATIC_STATIONS } from '../lib/stations'
+import { fetchStationDetail, loadRainTotals, STATIC_STATIONS } from '../lib/stations'
+import { rainBubble, rainReference, type RainBubble, type StationRainTotal } from '../lib/stationRain'
 import { useIsMobile } from '../lib/useIsMobile'
 import { StationFullscreen } from './StationFullscreen'
 import { StationPopup } from './StationPopup'
 import type { Station, StationDetailState } from '../types'
 
-const PIN_ICON = L.divIcon({
-  className: 'station-marker',
-  html: '<div class="station-marker__pin">🌧️</div>',
-  iconSize: [26, 26],
-  iconAnchor: [13, 13],
-})
+// Trois états selon le zoom (239 marqueurs : trop serrés pour tout afficher de loin) :
+//  - far  (< 9)  : petite pastille chiffrée et colorée SEULE (la bulle fait office de marqueur : le chiffre est
+//                  lisible dès le zoom de départ) ;
+//  - mid  (9)    : point + bulle chiffrée ;
+//  - near (≥ 10) : pastille 🌧️ + bulle chiffrée.
+type ZoomClass = 'far' | 'mid' | 'near'
+const zoomClassOf = (zoom: number): ZoomClass => (zoom >= 10 ? 'near' : zoom >= 9 ? 'mid' : 'far')
+
+const bubbleHtml = (b: RainBubble, offsetPx: number, solo = false) =>
+  `<div class="station-marker__rain${solo ? ' station-marker__rain--solo' : ''}" title="${b.title}" style="background:${b.bg};color:${b.fg};--off:${offsetPx}px">${b.label}</div>`
+
+// Les icônes ne dépendent que de (zoom, couleur, texte) : on les réutilise (239 stations, peu de valeurs distinctes).
+const iconCache = new Map<string, L.DivIcon>()
+function stationIcon(zoomClass: ZoomClass, bubble: RainBubble): L.DivIcon {
+  const key = `${zoomClass}|${bubble.bg}|${bubble.label}`
+  let icon = iconCache.get(key)
+  if (!icon) {
+    const dot = (px: number) =>
+      `<div class="station-marker__dot" style="width:${px}px;height:${px}px;background:${bubble.bg}"></div>`
+    const html =
+      zoomClass === 'near'
+        ? '<div class="station-marker__pin">🌧️</div>' + bubbleHtml(bubble, 15)
+        : zoomClass === 'mid'
+          ? dot(14) + bubbleHtml(bubble, 9)
+          : bubbleHtml(bubble, 0, true)
+    icon = L.divIcon({ className: 'station-marker', html, iconSize: [28, 28], iconAnchor: [14, 14] })
+    iconCache.set(key, icon)
+  }
+  return icon
+}
 
 // Au zoom de départ, 239 pastilles de 26 px se recouvrent complètement (surtout sur téléphone) : en
-// dessous du zoom 10, de simples points, plus petits tant qu'on est loin. La zone cliquable reste
-// de 28 px (doigt), seul le point dessiné rétrécit.
-const dotIcon = (px: number) =>
-  L.divIcon({
-    className: 'station-marker',
-    html: `<div class="station-marker__dot" style="width:${px}px;height:${px}px"></div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  })
-const DOT_FAR = dotIcon(9)
-const DOT_MID = dotIcon(14)
-const iconForZoom = (zoom: number) => (zoom >= 10 ? PIN_ICON : zoom >= 9 ? DOT_MID : DOT_FAR)
-
-function useIconForZoom() {
+// dessous du zoom 10, de simples points. La zone cliquable reste de 28 px (doigt), seul le dessin rétrécit.
+function useZoomClass(): ZoomClass {
   const map = useMap()
   const [zoom, setZoom] = useState(() => map.getZoom())
   useMapEvents({ zoomend: () => setZoom(map.getZoom()) })
-  return iconForZoom(zoom)
+  return zoomClassOf(zoom)
+}
+
+// Cumuls de pluie des 3 derniers jours, rechargés toutes les 10 min tant que la couche est affichée.
+function useRainTotals(): Record<string, StationRainTotal> | null {
+  const [totals, setTotals] = useState<Record<string, StationRainTotal> | null>(null)
+  useEffect(() => {
+    let alive = true
+    const load = () =>
+      loadRainTotals()
+        .then((t) => alive && setTotals(t))
+        .catch(() => undefined) // sans historique : bulles grises « – », les marqueurs restent cliquables
+    load()
+    const timer = window.setInterval(load, 10 * 60 * 1000)
+    return () => {
+      alive = false
+      window.clearInterval(timer)
+    }
+  }, [])
+  return totals
 }
 
 // Âge au-delà duquel rouvrir une popup recharge le détail (même seuil que le
@@ -54,7 +86,7 @@ function loadDetail(station: Station, setState: (s: StationDetailState) => void)
 
 // Desktop : popup Leaflet classique, chargement au popupopen (comportement
 // inchangé).
-function StationMarkerDesktop({ station, icon }: { station: Station; icon: L.DivIcon }) {
+function StationMarkerDesktop({ station, icon, zIndexOffset }: { station: Station; icon: L.DivIcon; zIndexOffset: number }) {
   const [state, setState] = useState<StationDetailState>({ status: 'idle' })
   const loadedAtRef = useRef(0)
 
@@ -84,7 +116,7 @@ function StationMarkerDesktop({ station, icon }: { station: Station; icon: L.Div
   // l'ouverture) voit déjà la bonne taille — pas de repositionnement après
   // coup nécessaire.
   return (
-    <Marker position={[station.lat, station.lon]} icon={icon} eventHandlers={{ popupopen: handleOpen }}>
+    <Marker position={[station.lat, station.lon]} icon={icon} zIndexOffset={zIndexOffset} eventHandlers={{ popupopen: handleOpen }}>
       <Popup minWidth={290} maxWidth={310}>
         <StationPopup state={state} />
       </Popup>
@@ -95,11 +127,22 @@ function StationMarkerDesktop({ station, icon }: { station: Station; icon: L.Div
 // Mobile : pas de popup Leaflet, le clic déclenche le chargement et
 // notifie le parent (un seul écran plein-écran partagé, pas un par
 // marqueur — voir StationsLayer).
-function StationMarkerMobile({ station, icon, onOpen }: { station: Station; icon: L.DivIcon; onOpen: (station: Station) => void }) {
+function StationMarkerMobile({
+  station,
+  icon,
+  zIndexOffset,
+  onOpen,
+}: {
+  station: Station
+  icon: L.DivIcon
+  zIndexOffset: number
+  onOpen: (station: Station) => void
+}) {
   return (
     <Marker
       position={[station.lat, station.lon]}
       icon={icon}
+      zIndexOffset={zIndexOffset}
       eventHandlers={{ click: () => onOpen(station) }}
     />
   )
@@ -107,7 +150,13 @@ function StationMarkerMobile({ station, icon, onOpen }: { station: Station; icon
 
 export function StationsLayer() {
   const isMobile = useIsMobile()
-  const icon = useIconForZoom()
+  const zoomClass = useZoomClass()
+  const totals = useRainTotals()
+  const reference = useMemo(() => (totals ? rainReference(totals) : 5), [totals])
+  const iconOf = (station: Station) => stationIcon(zoomClass, rainBubble(totals?.[station.id], reference))
+  // Les stations les plus arrosées au premier plan : quand les pastilles se chevauchent, ce sont les plus
+  // intéressantes qui restent visibles, pas les stations sèches.
+  const zOf = (station: Station) => Math.round(totals?.[station.id]?.mm ?? 0)
   const [mobileSelection, setMobileSelection] = useState<{ station: Station; state: StationDetailState } | null>(null)
 
   const handleMobileOpen = (station: Station) => {
@@ -119,7 +168,7 @@ export function StationsLayer() {
     return (
       <>
         {STATIC_STATIONS.map((station) => (
-          <StationMarkerDesktop key={station.id} station={station} icon={icon} />
+          <StationMarkerDesktop key={station.id} station={station} icon={iconOf(station)} zIndexOffset={zOf(station)} />
         ))}
       </>
     )
@@ -128,7 +177,7 @@ export function StationsLayer() {
   return (
     <>
       {STATIC_STATIONS.map((station) => (
-        <StationMarkerMobile key={station.id} station={station} icon={icon} onOpen={handleMobileOpen} />
+        <StationMarkerMobile key={station.id} station={station} icon={iconOf(station)} zIndexOffset={zOf(station)} onOpen={handleMobileOpen} />
       ))}
       {mobileSelection && (
         <StationFullscreen

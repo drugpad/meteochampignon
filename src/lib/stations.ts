@@ -25,6 +25,7 @@
 // CLAUDE.md "Comptes à créer".
 import stationsData from '../data/stations-midi-pyrenees.json'
 import { getDailyForecast } from './openMeteo'
+import { computeRainTotals, type StationRainTotal } from './stationRain'
 import type { ForecastDay, Station, StationDetail } from '../types'
 
 export const STATIC_STATIONS: Station[] = (
@@ -91,6 +92,13 @@ function loadHistory(): Promise<LoadedHistory> {
       })
   }
   return historyPromise
+}
+
+// Cumul de pluie des 72 dernières heures de TOUTES les stations (bulles de la carte, mode Historique) : lit le même
+// fichier que le détail d'une station (une seule requête, mémoïsée).
+export async function loadRainTotals(): Promise<Record<string, StationRainTotal>> {
+  const history = await loadHistory()
+  return computeRainTotals(history.stations)
 }
 
 const HOUR_MS = 3600000
