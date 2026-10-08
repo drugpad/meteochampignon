@@ -70,6 +70,10 @@ shell_command:
   meteochampignon_stations_ha: "python3 /config/meteochampignon/stations.py"
   meteochampignon_diag: "python3 /config/meteochampignon/check_env.py"
   meteochampignon_stations_test: "python3 /config/meteochampignon/stations.py --check"
+  # Cumuls de pluie 3 jours des stations Infoclimat (réseau StatIC). Historique fourni par l'API
+  # OpenData : recalcul complet à chaque passage (pas d'accumulation), ~8 s.
+  meteochampignon_infoclimat: "python3 /config/meteochampignon/infoclimat.py"
+  meteochampignon_infoclimat_test: "python3 /config/meteochampignon/infoclimat.py --check"
   # Cartes de pluie calculées par Home Assistant. Les commandes « --launch » lancent le
   # travail EN ARRIÈRE-PLAN et rendent la main aussitôt (une commande shell de HA est
   # interrompue au bout de 60 s ; le calcul dure 3 à 5 min).
@@ -356,6 +360,33 @@ automation:
           - action: persistent_notification.dismiss
             data:
               notification_id: meteochampignon_collecte_ha
+
+  - id: meteochampignon_collecter_infoclimat
+    alias: "Météochampignon - collecter Infoclimat (Home Assistant)"
+    description: "Cumuls de pluie 3 jours des stations Infoclimat (réseau StatIC), à :20 et :50. Recalcul complet depuis l'API OpenData (clé meteochampignon_infoclimat_token)."
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: 20
+      - trigger: time_pattern
+        minutes: 50
+    actions:
+      - action: shell_command.meteochampignon_infoclimat
+        response_variable: infoclimat
+        continue_on_error: true
+      - if: "{{ infoclimat is not defined or infoclimat.returncode | int(1) != 0 }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: meteochampignon_infoclimat
+              title: "Météochampignon : la collecte Infoclimat a échoué"
+              message: >
+                {{ infoclimat.stdout if infoclimat is defined else 'Pas de réponse.' }}
+                (clé Infoclimat ou droits GitHub ; voir docs/home-assistant.md)
+        else:
+          - action: persistent_notification.dismiss
+            data:
+              notification_id: meteochampignon_infoclimat
 
   - id: meteochampignon_alerte_probleme
     alias: "Météochampignon - alerte si retard ou échec"
