@@ -31,7 +31,7 @@ type Props = {
 const ROWS: { key: keyof HistoryLayers; label: string; hint: string }[] = [
   { key: 'meteofrance', label: 'Météo-France', hint: 'cumul 3 jours' },
   { key: 'infoclimat', label: 'Infoclimat', hint: 'cumul 3 jours' },
-  { key: 'netatmo', label: 'Netatmo', hint: 'pluie 24 h' },
+  { key: 'netatmo', label: 'Netatmo', hint: 'cumul 3 jours' },
 ]
 
 export function HistoryLayersControl({ value, onChange, disabled }: Props) {
