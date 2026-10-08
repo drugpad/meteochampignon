@@ -19,6 +19,7 @@ import { useMushroomGuide } from '../lib/useMushroomGuide'
 import { ForecastFullscreen } from './ForecastFullscreen'
 import { ForecastPanel } from './ForecastPanel'
 import { ForecastRainControls } from './ForecastRainControls'
+import { BubbleStationsLayer } from './BubbleStationsLayer'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
@@ -279,7 +280,7 @@ export function MapView() {
             <HistoryLayersControl
               value={historyLayers}
               onChange={setLayers}
-              disabled={{ infoclimat: true, netatmo: true }}
+              disabled={{ netatmo: true }}
             />
           </>
         )}
@@ -339,6 +340,7 @@ export function MapView() {
         <RegionOutline />
 
         {mode === 'historique' && historyLayers.meteofrance && <StationsLayer />}
+        {mode === 'historique' && historyLayers.infoclimat && <BubbleStationsLayer network="infoclimat" />}
 
         {mode === 'previsions' && <ForecastCross point={forecastState.status === 'idle' ? null : forecastState.point} />}
 

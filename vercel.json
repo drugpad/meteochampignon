@@ -5,5 +5,5 @@
       "destination": "/index.html"
     }
   ],
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)public/station-history.json' 2>/dev/null; test $? -eq 0"
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)public/station-history.json' ':(exclude)public/infoclimat-stations.json' ':(exclude)public/netatmo-stations.json' 2>/dev/null; test $? -eq 0"
 }
