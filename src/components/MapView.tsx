@@ -280,7 +280,6 @@ export function MapView() {
             <HistoryLayersControl
               value={historyLayers}
               onChange={setLayers}
-              disabled={{ netatmo: true }}
             />
           </>
         )}
@@ -341,6 +340,7 @@ export function MapView() {
 
         {mode === 'historique' && historyLayers.meteofrance && <StationsLayer />}
         {mode === 'historique' && historyLayers.infoclimat && <BubbleStationsLayer network="infoclimat" />}
+        {mode === 'historique' && historyLayers.netatmo && <BubbleStationsLayer network="netatmo" />}
 
         {mode === 'previsions' && <ForecastCross point={forecastState.status === 'idle' ? null : forecastState.point} />}
 

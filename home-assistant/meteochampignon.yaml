@@ -74,6 +74,10 @@ shell_command:
   # OpenData : recalcul complet à chaque passage (pas d'accumulation), ~8 s.
   meteochampignon_infoclimat: "python3 /config/meteochampignon/infoclimat.py"
   meteochampignon_infoclimat_test: "python3 /config/meteochampignon/infoclimat.py --check"
+  # Cumuls Netatmo : pas d'historique chez Netatmo, on accumule rain_60min heure par heure (~2 min, détaché
+  # car une commande shell de HA est coupée à 60 s). Le cumul 3 jours se remplit sur ~3 jours.
+  meteochampignon_netatmo: "python3 /config/meteochampignon/netatmo.py --launch"
+  meteochampignon_netatmo_test: "python3 /config/meteochampignon/netatmo.py --check"
   # Cartes de pluie calculées par Home Assistant. Les commandes « --launch » lancent le
   # travail EN ARRIÈRE-PLAN et rendent la main aussitôt (une commande shell de HA est
   # interrompue au bout de 60 s ; le calcul dure 3 à 5 min).
@@ -387,6 +391,17 @@ automation:
           - action: persistent_notification.dismiss
             data:
               notification_id: meteochampignon_infoclimat
+
+  - id: meteochampignon_collecter_netatmo
+    alias: "Météochampignon - collecter Netatmo (Home Assistant)"
+    description: "Accumule la pluie horaire des stations Netatmo publiques (cumul 3 jours), à :10 de chaque heure. Lancé en arrière-plan (~2 min)."
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: 10
+    actions:
+      - action: shell_command.meteochampignon_netatmo
+        continue_on_error: true
 
   - id: meteochampignon_alerte_probleme
     alias: "Météochampignon - alerte si retard ou échec"
