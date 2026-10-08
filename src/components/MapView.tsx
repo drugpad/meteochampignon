@@ -19,6 +19,7 @@ import { useMushroomGuide } from '../lib/useMushroomGuide'
 import { ForecastFullscreen } from './ForecastFullscreen'
 import { ForecastPanel } from './ForecastPanel'
 import { ForecastRainControls } from './ForecastRainControls'
+import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
 import { OfflinePanel } from './OfflinePanel'
@@ -148,6 +149,17 @@ export function MapView() {
   const [reloadKey, setReloadKey] = useState(0)
   const [searchTarget, setSearchTarget] = useState<GeocodeResult | null>(null)
   const { today } = useParisToday()
+  // Mode Historique : réseaux de stations affichés (cases à cocher). Infoclimat et Netatmo arrivent avec leur
+  // collecte côté serveur (clés d'API à créer) : désactivés tant que les données n'existent pas.
+  const [historyLayers, setHistoryLayers] = useState<HistoryLayers>(loadHistoryLayers)
+  const setLayers = useCallback((v: HistoryLayers) => {
+    setHistoryLayers(v)
+    try {
+      localStorage.setItem('mc-history-layers', JSON.stringify(v))
+    } catch {
+      // mémorisation facultative
+    }
+  }, [])
 
   // Précharge l'historique des stations (≈ 200 Ko compressé) peu après l'ouverture : en passant sur Historique, les
   // bulles de pluie s'affichent sans attendre le téléchargement. Échec ignoré (réessayé à l'ouverture d'Historique).
@@ -262,7 +274,14 @@ export function MapView() {
         </div>
 
         {mode === 'historique' && (
-          <RainControls maps={mapsState} image={currentImage} onRetry={handleRetry} />
+          <>
+            <RainControls maps={mapsState} image={currentImage} onRetry={handleRetry} />
+            <HistoryLayersControl
+              value={historyLayers}
+              onChange={setLayers}
+              disabled={{ infoclimat: true, netatmo: true }}
+            />
+          </>
         )}
         {mode === 'previsions' && (
           <ForecastRainControls
@@ -319,7 +338,7 @@ export function MapView() {
 
         <RegionOutline />
 
-        {mode === 'historique' && <StationsLayer />}
+        {mode === 'historique' && historyLayers.meteofrance && <StationsLayer />}
 
         {mode === 'previsions' && <ForecastCross point={forecastState.status === 'idle' ? null : forecastState.point} />}
 

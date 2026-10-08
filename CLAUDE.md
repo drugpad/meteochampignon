@@ -71,6 +71,14 @@ API `DonneesPubliquesRadar v1` (`lib/meteoFranceRadar.ts`), vérifiée avec un v
 
 **Décision du 16/09/2026** : mis en pause au profit d'un resserrage de la grille Option A (voir plus haut) — bien moins risqué, et Open-Meteo/AROME est déjà proche de la résolution native visée. Option B resterait pertinente si on veut un jour la vraie pluie mesurée (pas un modèle), mais le décodage BUFR + l'alignement géographique représentent un chantier significatif, pas encore chiffré. Si repris un jour : commencer par valider le géoréférencement sur un point connu (ex. Toulouse) avant de brancher quoi que ce soit sur la carte.
 
+### 3.4bis Réseaux de stations (cases à cocher, mode Historique — en cours, oct. 2026)
+
+Panneau « Stations affichées » (`HistoryLayersControl.tsx`, à côté du panneau « Carte de pluie ») : 3 cases qui montrent/masquent des réseaux de stations, chacun avec ses bulles « cumul de pluie » (voir 3.4, `stationRain.ts`). Le recouvrement coloré de pluie 24h reste indépendant (case non concernée). Choix mémorisé dans `localStorage` (`mc-history-layers`).
+- **Case 1 — Météo-France** : opérationnelle (bulles cumul 3 jours, réseau RADOME existant).
+- **Case 2 — Infoclimat** (réseau StatIC) : cumul 3 jours. API OpenData infoclimat.fr/opendata (clé requise, réutilisation « Non-commercial », 7 jours max/requête). **À faire** : compte + clé par l'utilisateur, collecte côté serveur.
+- **Case 3 — Netatmo** : pluie **24 h seulement** (choix utilisateur) — l'API publique `/getpublicdata` (dev.netatmo.com, OAuth2 scope `read_station`, bbox) ne donne que `rain_24h` par station publique, pas d'historique ; seules les stations avec pluviomètre optionnel transmettent la pluie. **À faire** : app Netatmo (client_id/secret/refresh_token) par l'utilisateur, collecte côté serveur.
+Tant que la collecte d'un réseau n'existe pas, sa case est **désactivée (« bientôt »)** : jamais de fausses données. Décision : collecte côté serveur (HA + GitHub) comme Météo-France, pour un vrai cumul 3 jours fiable et hors ligne, clés jamais exposées dans le navigateur.
+
 ### 3.5 Guide des champignons (branche `evolchampi`, 06/10/2026)
 
 Bouton « 🍄 Champignons » à côté de Prévisions/Historique (icône seule sur mobile) → page plein écran (`MushroomGuide.tsx`) : liste de 21 fiches en cartes, puis fiche détaillée (critères, habitat, saison, précautions, **sosies avec leur photo et comment les distinguer**, sources). Navigation branchée sur l'historique du navigateur (`lib/useMushroomGuide.ts`) : le bouton retour du téléphone ramène fiche → liste → carte.
