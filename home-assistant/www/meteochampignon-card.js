@@ -8,7 +8,7 @@
  * Lit les entités du paquet packages/meteochampignon.yaml.
  */
 ;(() => {
-const MC_VERSION = "1.1.1";
+const MC_VERSION = "1.2.0";
 
 const E = {
   probleme: "binary_sensor.meteochampignon_probleme",
@@ -28,6 +28,10 @@ const E = {
   ram: "sensor.meteochampignon_ha_ram",
   charge: "sensor.meteochampignon_ha_charge",
   temp: "sensor.system_monitor_temperature_du_processeur",
+  infoclimatGeneration: "sensor.meteochampignon_infoclimat_generation",
+  infoclimatStations: "sensor.meteochampignon_infoclimat_stations",
+  netatmoGeneration: "sensor.meteochampignon_netatmo_generation",
+  netatmoStations: "sensor.meteochampignon_netatmo_stations",
 };
 const AUTOMATIONS = [
   ["meteochampignon_collecter_stations", "Collecte des stations", "mdi:thermometer", "à :15 et :45"],
@@ -278,6 +282,35 @@ class MeteochampignonCard extends HTMLElement {
       <div class="cols">${this._sysTile(E.cpu, "Processeur (CPU)", "mdi:cpu-64-bit")}${this._sysTile(E.ram, "Mémoire (RAM)", "mdi:memory")}</div></div>`;
   }
 
+  // Tuile d'un réseau de stations (Infoclimat, Netatmo) : fraîcheur + nombre de stations.
+  _networkTile(gen, cnt, label, icon, note) {
+    const g = this._hass.states[gen];
+    const age = valid(g) ? Math.round((Date.now() - new Date(g.state).getTime()) / 60000) : null;
+    const lvl = ageLevel(age);
+    const n = valid(this._hass.states[cnt]) ? this._hass.states[cnt].state : "—";
+    const pct = age === null ? 0 : Math.max(4, Math.min(100, (age / 180) * 100));
+    return `<div class="card">
+      <h2><ha-icon icon="${icon}"></ha-icon>${label}</h2>
+      <div class="age ${lvl}"><span class="v">${fmtAge(age)}</span><span class="l">depuis la mise à jour</span></div>
+      <div class="bar ${lvl}"><i style="width:${pct}%"></i></div>
+      <div class="rows">
+        <div class="row"><span class="k"><ha-icon icon="mdi:map-marker-radius"></ha-icon>Stations</span><b>${esc(n)}</b></div>
+        <div class="row"><span class="k"><ha-icon icon="mdi:update"></ha-icon>Dernière mise à jour</span><b>${esc(fmtWhen(valid(g) ? g.state : null))}</b></div>
+        ${note ? `<div class="row"><span class="k" style="color:var(--secondary-text-color)"><ha-icon icon="mdi:information-outline"></ha-icon>${note}</span></div>` : ""}
+      </div></div>`;
+  }
+
+  _networks() {
+    if (!valid(this._hass.states[E.infoclimatGeneration]) && !valid(this._hass.states[E.netatmoGeneration])) {
+      return "";
+    }
+    return `<div><div class="chips" style="margin-bottom:10px"><span class="chip"><ha-icon icon="mdi:radar"></ha-icon>Autres réseaux (mode Historique)</span></div>
+      <div class="cols">
+        ${this._networkTile(E.infoclimatGeneration, E.infoclimatStations, "Infoclimat", "mdi:weather-pouring", "Cumul 3 jours · collecte à :20 et :50")}
+        ${this._networkTile(E.netatmoGeneration, E.netatmoStations, "Netatmo", "mdi:home-thermometer", "Cumul 3 jours en accumulation (se remplit sur ~3 j) · collecte à :10")}
+      </div></div>`;
+  }
+
   _runRow(entityId) {
     const st = this._hass.states[entityId];
     const key = valid(st) ? st.state : "inconnu";
@@ -361,6 +394,7 @@ class MeteochampignonCard extends HTMLElement {
         <span class="chip info"><ha-icon icon="mdi:cpu-64-bit"></ha-icon>Cartes par ${esc(valid(src) ? SOURCES[src.state] || src.state : "—")}</span>
       </div>
       <div class="cols">${this._panel("cartes")}${this._panel("stations")}</div>
+      ${this._networks()}
       ${this._system()}
       <div class="card"><h2><ha-icon icon="mdi:robot"></ha-icon>Automatisations</h2><div class="auto">${autos}</div></div>
       <div class="card"><h2><ha-icon icon="mdi:gesture-tap-button"></ha-icon>Actions</h2><div class="actions">${actions}</div><div class="links">${links}</div></div>

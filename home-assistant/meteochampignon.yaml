@@ -182,6 +182,32 @@ rest:
         device_class: timestamp
         value_template: "{{ as_datetime(value_json[0].commit.committer.date) }}"
 
+  # --- Réseau Infoclimat (fichier publié public/infoclimat-stations.json) ---
+  - resource: "https://raw.githubusercontent.com/drugpad/meteochampignon/master/public/infoclimat-stations.json"
+    scan_interval: 600
+    sensor:
+      - name: "Meteochampignon infoclimat generation"
+        unique_id: meteochampignon_infoclimat_generation
+        device_class: timestamp
+        value_template: "{{ as_datetime(value_json.generatedAt) }}"
+      - name: "Meteochampignon infoclimat stations"
+        unique_id: meteochampignon_infoclimat_stations
+        unit_of_measurement: "stations"
+        value_template: "{{ value_json.stations | length }}"
+
+  # --- Réseau Netatmo (fichier publié public/netatmo-stations.json) ---
+  - resource: "https://raw.githubusercontent.com/drugpad/meteochampignon/master/public/netatmo-stations.json"
+    scan_interval: 600
+    sensor:
+      - name: "Meteochampignon netatmo generation"
+        unique_id: meteochampignon_netatmo_generation
+        device_class: timestamp
+        value_template: "{{ as_datetime(value_json.generatedAt) }}"
+      - name: "Meteochampignon netatmo stations"
+        unique_id: meteochampignon_netatmo_stations
+        unit_of_measurement: "stations"
+        value_template: "{{ value_json.stations | length }}"
+
 # ----------------------------------------------------------------------------
 # 3) Voyants de problème
 # ----------------------------------------------------------------------------
