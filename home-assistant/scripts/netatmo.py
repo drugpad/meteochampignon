@@ -42,8 +42,8 @@ STATUS = os.path.join(HERE, "netatmo-status.json")
 LAT_MIN, LAT_MAX, LON_MIN, LON_MAX = 42.6, 45.15, -0.4, 3.4
 KEEP_HOURS = 72
 CAP = 380           # on subdivise un quadrant au-delà (plafond réel ~700, marge)
-MAX_DEPTH = 5
-PAUSE = 0.25
+MAX_DEPTH = 6
+PAUSE = 0.35
 LOCK_STALE_SECONDS = 20 * 60
 CHECK = "--check" in sys.argv
 
@@ -118,21 +118,26 @@ def access_token():
 
 
 def getpublicdata(token, s, w, n, e):
+    """(ok, body) : Netatmo renvoie des 429/503 intermittents — on réessaie (sinon une tuile ratée créait un
+    TROU : la zone était prise pour vide et sautée, voir recurse)."""
     q = urllib.parse.urlencode({"lat_ne": n, "lon_ne": e, "lat_sw": s, "lon_sw": w, "filter": "false"})
-    for attempt in range(3):
-        status, body = http("https://api.netatmo.com/api/getpublicdata?" + q, {"Authorization": "Bearer " + token}, timeout=40)
+    for attempt in range(5):
+        try:
+            status, body = http("https://api.netatmo.com/api/getpublicdata?" + q, {"Authorization": "Bearer " + token}, timeout=40)
+        except OSError:
+            status = 0
         if status == 200:
-            return json.loads(body).get("body", [])
-        if status == 429:
-            time.sleep(3 * (attempt + 1))
+            return True, json.loads(body).get("body", [])
+        if status in (0, 429, 500, 502, 503) and attempt < 4:
+            time.sleep(2 * (attempt + 1))
             continue
-        return []
-    return []
+        return False, []
+    return False, []
 
 
 def collect(token):
     """Quadtree adaptatif : {id: {lat, lon, rain}} des stations publiques ayant un pluviomètre."""
-    found, calls = {}, [0]
+    found, calls, fails = {}, [0], [0]
 
     def rain_of(station):
         for m in (station.get("measures") or {}).values():
@@ -140,15 +145,25 @@ def collect(token):
                 return m["rain_60min"]
         return None
 
+    def subdivide(s, w, n, e, depth):
+        mla, mlo = (s + n) / 2, (w + e) / 2
+        recurse(s, w, mla, mlo, depth + 1)
+        recurse(s, mlo, mla, e, depth + 1)
+        recurse(mla, w, n, mlo, depth + 1)
+        recurse(mla, mlo, n, e, depth + 1)
+
     def recurse(s, w, n, e, depth):
         calls[0] += 1
-        body = getpublicdata(token, s, w, n, e)
+        ok, body = getpublicdata(token, s, w, n, e)
+        if not ok:
+            # Tuile indisponible (503…) : surtout NE PAS l'abandonner (ce serait un trou). On tente en plus petit.
+            if depth < MAX_DEPTH:
+                subdivide(s, w, n, e, depth)
+            else:
+                fails[0] += 1
+            return
         if len(body) >= CAP and depth < MAX_DEPTH:
-            mla, mlo = (s + n) / 2, (w + e) / 2
-            recurse(s, w, mla, mlo, depth + 1)
-            recurse(s, mlo, mla, e, depth + 1)
-            recurse(mla, w, n, mlo, depth + 1)
-            recurse(mla, mlo, n, e, depth + 1)
+            subdivide(s, w, n, e, depth)
             return
         for st in body:
             sid = st.get("_id")
@@ -159,7 +174,8 @@ def collect(token):
         time.sleep(PAUSE)
 
     recurse(LAT_MIN, LON_MIN, LAT_MAX, LON_MAX, 0)
-    log(f"{calls[0]} appels, {len(found)} stations avec pluviomètre")
+    log(f"{calls[0]} appels, {len(found)} stations avec pluviomètre, {fails[0]} tuiles en échec")
+    collect.last_fails = fails[0]
     return found
 
 
@@ -259,7 +275,7 @@ def run():
         hist = accumulate(found, now)
         payload = totals(hist, now)
         publish(payload, read_secret("github_dispatch_auth"))
-        res = {"ok": True, "stations": len(payload["stations"]), "duree_s": round(time.time() - started)}
+        res = {"ok": True, "stations": len(payload["stations"]), "tuiles_echec": getattr(collect, "last_fails", 0), "duree_s": round(time.time() - started)}
         log(f"publié : {res}")
         json.dump(res, open(STATUS, "w", encoding="utf-8"), ensure_ascii=False)
         return 0
