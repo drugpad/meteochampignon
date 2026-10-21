@@ -66,8 +66,6 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(request, self.location.origin + '/index.html'))
-  } else if (url.pathname === '/station-history.json') {
-    event.respondWith(networkFirst(request))
   } else if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/champignons/')) {
     event.respondWith(cacheFirst(request))
   } else {

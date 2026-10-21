@@ -22,7 +22,9 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 REPO = "drugpad/meteochampignon"
-BRANCH = "master"
+# Données sur la branche « live » (jamais déployée par Vercel) : sur master, chaque écriture redéployait
+# le site, ~100 fois par jour, soit toute la limite quotidienne du compte Vercel (constaté le 21/10/2026).
+BRANCH = "live"
 OUTPUT_PATH = "public/infoclimat-stations.json"
 STATIONS_URL = "https://www.infoclimat.fr/opendata/stations_xhr.php"
 OPENDATA_URL = "https://www.infoclimat.fr/opendata/"

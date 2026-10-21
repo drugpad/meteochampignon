@@ -34,6 +34,9 @@ concurrency:
   group: station-history
   cancel-in-progress: false
 
+env:
+  HISTORY_FILE: ${{ github.workspace }}/live/public/station-history.json
+
 jobs:
   refresh:
     runs-on: ubuntu-24.04
@@ -42,6 +45,13 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+
+      # L'historique vit sur la branche « live », que Vercel ne déploie jamais : sur master, chaque commit de
+      # données redéployait le site (~100 fois par jour, toute la limite quotidienne du compte Vercel).
+      - uses: actions/checkout@v6
+        with:
+          ref: live
+          path: live
 
       - uses: actions/setup-node@v6
         with:
@@ -54,7 +64,7 @@ jobs:
         run: node scripts/fetch-station-history.mjs
 
       # `always()` : un run interrompu garde ce qu'il a déjà collecté. À chaque
-      # tentative, on repart de la dernière version de master (reset) puis on
+      # tentative, on repart de la dernière version de la branche live (reset) puis on
       # refait la fusion — pas de `git rebase` : le fichier d'historique tient
       # sur une seule ligne, donc toute modification concurrente (rattrapage
       # manuel, autre run) provoquait un conflit et la perte des points de
@@ -64,16 +74,17 @@ jobs:
         env:
           HISTORY_TMP: ${{ runner.temp }}/history-new-points.json
         run: |
+          cd live
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           for i in 1 2 3 4 5; do
-            git fetch origin master
-            git reset --hard origin/master
-            node scripts/merge-station-history.mjs
+            git fetch origin live
+            git reset --hard origin/live
+            (cd .. && node scripts/merge-station-history.mjs)
             git add public/station-history.json
             git diff --staged --quiet && echo "Rien à commit" && exit 0
             git commit -m "Accumuler l'historique des stations"
-            git push && exit 0
+            git push origin HEAD:live && exit 0
             echo "Push rejeté, nouvelle tentative ($i/5)…"
           done
           exit 1

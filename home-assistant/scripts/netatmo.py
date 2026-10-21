@@ -28,7 +28,9 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 REPO = "drugpad/meteochampignon"
-BRANCH = "master"
+# Données sur la branche « live » (jamais déployée par Vercel) : sur master, chaque écriture redéployait
+# le site, ~100 fois par jour, soit toute la limite quotidienne du compte Vercel (constaté le 21/10/2026).
+BRANCH = "live"
 OUTPUT_PATH = "public/netatmo-stations.json"
 SECRETS_FILE = os.environ.get("HA_SECRETS", "/config/secrets.yaml")
 GITHUB_API = os.environ.get("GITHUB_API_BASE", "https://api.github.com")

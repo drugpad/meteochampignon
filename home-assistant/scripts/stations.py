@@ -40,7 +40,10 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 REPO = "drugpad/meteochampignon"
-BRANCH = "master"
+# Données sur la branche « live » (jamais déployée par Vercel) : sur master, chaque écriture redéployait
+# le site, ~100 fois par jour, soit toute la limite quotidienne du compte Vercel (constaté le 21/10/2026).
+BRANCH = "live"
+CODE_BRANCH = "master"  # liste des stations : fichier du code, resté sur master
 HISTORY_PATH = "public/station-history.json"
 STATIONS_PATH = "src/data/stations-midi-pyrenees.json"
 PAQUET_URL = "https://public-api.meteofrance.fr/public/DPPaquetObs/v2/paquet/stations/horaire"
@@ -117,7 +120,7 @@ def to_point(obs):
 
 def load_stations(auth):
     status, body = http(
-        f"{GITHUB_API}/repos/{REPO}/contents/{STATIONS_PATH}?ref={BRANCH}", gh_headers(auth, raw=True)
+        f"{GITHUB_API}/repos/{REPO}/contents/{STATIONS_PATH}?ref={CODE_BRANCH}", gh_headers(auth, raw=True)
     )
     if status != 200:
         raise RuntimeError(f"liste des stations illisible (HTTP {status})")

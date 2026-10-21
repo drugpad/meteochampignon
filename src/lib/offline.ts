@@ -8,7 +8,7 @@
 // d'usage des tuiles OSM interdit le téléchargement en masse pour un usage hors ligne.
 import { PHOTOS } from '../data/champignonPhotos'
 import { fetchRainMapsMeta, rainMapsUrls } from './rainMaps'
-import { HISTORY_LOCAL_URL, HISTORY_RAW_URL } from './stations'
+import { HISTORY_FALLBACK_URL, HISTORY_RAW_URL } from './stations'
 import { REGION_BOUNDS } from './regionOutline'
 
 export const OFFLINE_CACHE = 'mc-offline-v1' // même nom que dans public/sw.js
@@ -345,8 +345,8 @@ export async function downloadOffline(
         size = await store(cache, url, fresh ? { cache: 'no-store' } : undefined)
       } catch (err) {
         if (url !== HISTORY_RAW_URL) throw err
-        // GitHub injoignable : le fichier du déploiement fait l'affaire, enregistré sous l'URL que l'appli demandera.
-        const res = await fetch(abs(HISTORY_LOCAL_URL), { cache: 'no-store' })
+        // GitHub injoignable : la copie jsDelivr fait l'affaire, enregistrée sous l'URL que l'appli demandera.
+        const res = await fetch(HISTORY_FALLBACK_URL, { cache: 'no-store' })
         if (!res.ok) throw err
         size = (await res.clone().arrayBuffer()).byteLength
         await cache.put(HISTORY_RAW_URL, res)

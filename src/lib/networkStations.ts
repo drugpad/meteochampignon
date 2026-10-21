@@ -1,12 +1,13 @@
 // Chargement des cumuls de pluie d'un réseau de stations (Infoclimat, Netatmo) : un fichier JSON préparé côté
 // serveur (Home Assistant), de la forme { generatedAt, stations: [{id,name,lat,lon,mm,hours}] }. Même source que
-// l'historique Météo-France : lu sur raw.githubusercontent (cache ~5 min), repli sur le fichier du déploiement.
+// l'historique Météo-France : branche « live » lue sur raw.githubusercontent (cache ~5 min), repli jsDelivr.
 import type { StationRainTotal } from './stationRain'
 
 export type NetworkStation = { id: string; name: string; lat: number; lon: number } & StationRainTotal
 export type NetworkData = { generatedAt: string; stations: NetworkStation[] }
 
-const RAW = 'https://raw.githubusercontent.com/drugpad/meteochampignon/master/public'
+const RAW = 'https://raw.githubusercontent.com/drugpad/meteochampignon/live/public'
+const JSDELIVR = 'https://cdn.jsdelivr.net/gh/drugpad/meteochampignon@live/public'
 
 export type NetworkId = 'infoclimat' | 'netatmo'
 const FILE: Record<NetworkId, string> = {
@@ -32,7 +33,7 @@ export function cachedNetwork(network: NetworkId): NetworkData | null {
 export async function loadNetwork(network: NetworkId): Promise<NetworkData> {
   const file = FILE[network]
   let data: NetworkData | null = null
-  for (const url of [`${RAW}/${file}`, `/${file}`]) {
+  for (const url of [`${RAW}/${file}`, `${JSDELIVR}/${file}`]) {
     try {
       const res = await fetch(url, { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)

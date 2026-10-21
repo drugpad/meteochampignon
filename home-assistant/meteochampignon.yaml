@@ -169,7 +169,7 @@ rest:
 
   # --- Dernière donnée de stations réellement enregistrée (dernier commit
   #     du fichier d'historique : il n'y a de commit que s'il y a du neuf) ---
-  - resource: "https://api.github.com/repos/drugpad/meteochampignon/commits?path=public/station-history.json&per_page=1"
+  - resource: "https://api.github.com/repos/drugpad/meteochampignon/commits?sha=live&path=public/station-history.json&per_page=1"
     scan_interval: 300
     headers:
       Authorization: !secret github_dispatch_auth
@@ -183,7 +183,7 @@ rest:
         value_template: "{{ as_datetime(value_json[0].commit.committer.date) }}"
 
   # --- Réseau Infoclimat (fichier publié public/infoclimat-stations.json) ---
-  - resource: "https://raw.githubusercontent.com/drugpad/meteochampignon/master/public/infoclimat-stations.json"
+  - resource: "https://raw.githubusercontent.com/drugpad/meteochampignon/live/public/infoclimat-stations.json"
     scan_interval: 600
     sensor:
       - name: "Meteochampignon infoclimat generation"
@@ -196,7 +196,7 @@ rest:
         value_template: "{{ value_json.stations | length }}"
 
   # --- Réseau Netatmo (fichier publié public/netatmo-stations.json) ---
-  - resource: "https://raw.githubusercontent.com/drugpad/meteochampignon/master/public/netatmo-stations.json"
+  - resource: "https://raw.githubusercontent.com/drugpad/meteochampignon/live/public/netatmo-stations.json"
     scan_interval: 600
     sensor:
       - name: "Meteochampignon netatmo generation"

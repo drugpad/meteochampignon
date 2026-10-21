@@ -20,6 +20,9 @@ concurrency:
   group: station-history
   cancel-in-progress: false
 
+env:
+  HISTORY_FILE: ${{ github.workspace }}/live/public/station-history.json
+
 jobs:
   backfill:
     runs-on: ubuntu-24.04
@@ -31,6 +34,13 @@ jobs:
         slice: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v6
+
+      # L'historique vit sur la branche « live », que Vercel ne déploie jamais : sur master, chaque commit de
+      # données redéployait le site (~100 fois par jour, toute la limite quotidienne du compte Vercel).
+      - uses: actions/checkout@v6
+        with:
+          ref: live
+          path: live
 
       - uses: actions/setup-node@v6
         with:
@@ -46,23 +56,24 @@ jobs:
 
       # `always()` : même un run interrompu (timeout…) garde ce qu'il a déjà
       # tiré. Le fichier d'historique est repris à neuf à chaque tentative
-      # (reset sur origin/master) : le job horaire pousse en parallèle et un
+      # (reset sur origin/live) : le job horaire pousse en parallèle et un
       # rebase d'un JSON sur une seule ligne échouerait systématiquement.
       - name: Fusionner et committer
         if: always()
         env:
           BACKFILL_TMP: ${{ runner.temp }}/backfill-points.json
         run: |
+          cd live
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           for i in 1 2 3 4 5; do
-            git fetch origin master
-            git reset --hard origin/master
-            node scripts/merge-station-history.mjs "$BACKFILL_TMP"
+            git fetch origin live
+            git reset --hard origin/live
+            (cd .. && node scripts/merge-station-history.mjs "$BACKFILL_TMP")
             git add public/station-history.json
             git diff --staged --quiet && echo "Rien à commit" && exit 0
             git commit -m "Rattraper l'historique des stations (tranche ${{ matrix.slice }})"
-            git push && exit 0
+            git push origin HEAD:live && exit 0
             echo "Push rejeté, nouvelle tentative ($i/5)…"
           done
           exit 1

@@ -40,13 +40,15 @@ export function meteocielStationUrl(stationId: string): string {
   return `https://www.meteociel.fr/temps-reel/obs_villes.php?code2=${Number(stationId)}`
 }
 
-// Source principale : le fichier du dépôt lu directement sur GitHub (cache ~5 min, CORS ouvert), comme les cartes
-// de pluie. Avant, il était servi par le déploiement Vercel, donc chaque commit horaire des stations (HA +
-// GitHub) redéployait tout le site. Repli : le fichier embarqué dans le dernier déploiement (peut dater).
+// Source : le fichier lu directement sur GitHub (cache ~5 min, CORS ouvert), comme les cartes de pluie, sur la
+// branche « live » que Vercel ne déploie jamais. Sur master, chaque écriture (HA + GitHub, ~100 par jour avec
+// Infoclimat et Netatmo) redéployait le site et épuisait la limite quotidienne de déploiements du compte Vercel.
+// Repli : jsDelivr (cache plus long, l'âge réel des données reste affiché).
 export const HISTORY_RAW_URL =
-  'https://raw.githubusercontent.com/drugpad/meteochampignon/master/public/station-history.json'
-export const HISTORY_LOCAL_URL = '/station-history.json'
-const HISTORY_SOURCES = [HISTORY_RAW_URL, HISTORY_LOCAL_URL]
+  'https://raw.githubusercontent.com/drugpad/meteochampignon/live/public/station-history.json'
+export const HISTORY_FALLBACK_URL =
+  'https://cdn.jsdelivr.net/gh/drugpad/meteochampignon@live/public/station-history.json'
+const HISTORY_SOURCES = [HISTORY_RAW_URL, HISTORY_FALLBACK_URL]
 
 type UpstreamChecks = Record<string, { mfLast: string | null; checkedAt: string }>
 type HistoryFile = { stations?: HistoryByStation; upstream?: { stations?: UpstreamChecks } }

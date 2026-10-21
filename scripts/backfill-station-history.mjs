@@ -19,7 +19,7 @@ import { mergeStationHistory } from './merge-station-history.mjs'
 
 const DPOBS_BASE_URL = 'https://public-api.meteofrance.fr/public/DPObs/v2'
 const RETENTION_DAYS = 4 // l'API garde ~J-4 00:00 UTC
-const OUTPUT_PATH = new URL('../public/station-history.json', import.meta.url)
+const OUTPUT_PATH = process.env.HISTORY_FILE ?? new URL('../public/station-history.json', import.meta.url) // branche « live »
 const STATIONS_PATH = new URL('../src/data/stations-midi-pyrenees.json', import.meta.url)
 const TMP_PATH = process.env.BACKFILL_TMP ?? 'backfill-points.json'
 
