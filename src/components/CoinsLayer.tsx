@@ -8,9 +8,10 @@ import type { NamedSpot } from './CoinsControls'
 const rankIcon = (n: number) =>
   L.divIcon({ className: '', html: `<div class="coins-rank-marker">${n}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] })
 
-type Props = { result: CoinsResult; spots: NamedSpot[]; onSelectSpot: (s: NamedSpot) => void }
+// hideFromZoom : la carte à 250 m s'efface à partir de ce zoom (les tuiles à 20 m prennent le relais).
+type Props = { result: CoinsResult; spots: NamedSpot[]; onSelectSpot: (s: NamedSpot) => void; hideFromZoom?: number }
 
-export function CoinsLayer({ result, spots, onSelectSpot }: Props) {
+export function CoinsLayer({ result, spots, onSelectSpot, hideFromZoom }: Props) {
   const map = useMap()
   const overlayRef = useRef<L.ImageOverlay | null>(null)
 
@@ -25,6 +26,15 @@ export function CoinsLayer({ result, spots, onSelectSpot }: Props) {
       overlayRef.current = L.imageOverlay(url, bounds, { opacity: 0.85, interactive: false, className: 'coins-overlay' }).addTo(map)
     }
   }, [result, map])
+
+  useEffect(() => {
+    const update = () => overlayRef.current?.setOpacity(hideFromZoom !== undefined && map.getZoom() >= hideFromZoom ? 0 : 0.85)
+    update()
+    map.on('zoomend', update)
+    return () => {
+      map.off('zoomend', update)
+    }
+  }, [map, hideFromZoom, result])
 
   useEffect(
     () => () => {

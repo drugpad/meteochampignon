@@ -21,9 +21,10 @@ import { ForecastPanel } from './ForecastPanel'
 import { ForecastRainControls } from './ForecastRainControls'
 import { BubbleStationsLayer } from './BubbleStationsLayer'
 import { CoinsControls, type NamedSpot } from './CoinsControls'
+import { CoinsFineLayer } from './CoinsFineLayer'
 import { CoinsLayer } from './CoinsLayer'
 import { CoinsSpotCard } from './CoinsSpotCard'
-import { computeCoins, describeSpot, isSpecies, loadPousseMeta, topSpots, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
+import { computeCoins, describeSpot, FINE_MIN_ZOOM, isSpecies, loadFineMeta, loadPousseMeta, topSpots, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
 import { reverseCity } from '../lib/geocoding'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import { LocateControl } from './LocateControl'
@@ -244,6 +245,12 @@ export function MapView() {
   const [coinsError, setCoinsError] = useState<string | null>(null)
   const [coinsReload, setCoinsReload] = useState(0)
   const [spots, setSpots] = useState<NamedSpot[]>([])
+  // Espèces présentes dans les tuiles d'habitat à 20 m (null tant qu'elles ne sont pas publiées).
+  const [fineSpecies, setFineSpecies] = useState<Species[] | null>(null)
+  useEffect(() => {
+    if (mode === 'coins') void loadFineMeta().then((m) => setFineSpecies(m?.species ?? null))
+  }, [mode])
+  const fineIndex = fineSpecies ? fineSpecies.indexOf(coinsSpecies) : -1
   const [spot, setSpot] = useState<{ lat: number; lon: number; name: string | null; detail: SpotDetail | null; loading: boolean } | null>(null)
 
   useEffect(() => {
@@ -534,7 +541,11 @@ export function MapView() {
             result={coinsResult}
             spots={spots}
             onSelectSpot={(s) => openSpot(s.lat, s.lon, s.name)}
+            hideFromZoom={fineIndex >= 0 ? FINE_MIN_ZOOM : undefined}
           />
+        )}
+        {mode === 'coins' && coinsResult && coinsStatus === 'ready' && fineIndex >= 0 && (
+          <CoinsFineLayer result={coinsResult} speciesIndex={fineIndex} />
         )}
         {mode === 'coins' && spot && <ForecastCross point={{ lat: spot.lat, lon: spot.lon }} />}
 

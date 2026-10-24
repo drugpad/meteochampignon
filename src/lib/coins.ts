@@ -124,7 +124,16 @@ function loadPousseInfo(file: string): Promise<Rgb> {
 
 // --------------------------------------------------------------------------------------------------
 // Score combiné sur la grille de l'habitat : habitat x météo (interpolation bilinéaire de la météo).
-export type CoinsResult = { score: Float32Array; width: number; height: number; bounds: Bounds; day: PousseDay; meta: PousseMeta }
+export type CoinsResult = {
+  score: Float32Array
+  width: number
+  height: number
+  bounds: Bounds
+  day: PousseDay
+  meta: PousseMeta
+  species: Species
+  pousse: Grid // météo de pousse de l'espèce (~1 km), réutilisée par les tuiles à 20 m
+}
 
 export async function computeCoins(sp: Species, dayIndex: number): Promise<CoinsResult> {
   const [hmeta, meta] = await Promise.all([loadHabitatMeta(), loadPousseMeta()])
@@ -154,7 +163,7 @@ export async function computeCoins(sp: Species, dayIndex: number): Promise<Coins
       score[r * width + c] = (h / 255) * (p / 255)
     }
   }
-  return { score, width, height, bounds: hmeta.bounds, day, meta }
+  return { score, width, height, bounds: hmeta.bounds, day, meta, species: sp, pousse: pou }
 }
 
 // Palette : transparent sous 0,12, puis jaune -> orange -> rouge -> violet foncé.
@@ -174,7 +183,7 @@ export const COINS_LEGEND = [
   { label: 'Excellent', color: 'rgb(110,1,90)' },
 ]
 
-function colorOf(v: number): [number, number, number, number] {
+export function colorOf(v: number): [number, number, number, number] {
   if (v < STOPS[0][0]) return [0, 0, 0, 0]
   for (let i = 1; i < STOPS.length; i++) {
     if (v <= STOPS[i][0]) {
@@ -282,7 +291,10 @@ export async function describeSpot(res: CoinsResult, sp: Species, lat: number, l
     loadPousseInfo(res.day.info),
   ])
   const i = row * width + col
-  const habitat = hab.values[i] / 255
+  // Habitat à 20 m du point exact quand les tuiles fines existent (cohérent avec les couleurs affichées en
+  // zoomant), sinon celui de la case de 250 m.
+  const fine = await sampleFineHabitat(sp, lat, lon)
+  const habitat = fine ?? hab.values[i] / 255
   const group = hmeta.groups[info.rgba[i * 4]] ?? 'aucun'
   const phRaw = info.rgba[i * 4 + 1]
   const altitude = info.rgba[i * 4 + 2] * 10
@@ -312,10 +324,10 @@ export async function describeSpot(res: CoinsResult, sp: Species, lat: number, l
   if (temp5 < 6) reasons.push('Trop froid ces derniers jours.')
   else if (temp5 > 24) reasons.push('Trop chaud ces derniers jours.')
   if (rain15 < 10 && since !== 255) reasons.push('Sol qui s’assèche (peu de pluie ces 15 jours).')
-  if (reasons.length === 0 && res.score[i] >= 0.35) reasons.push('Bon milieu, pluie suffisante au bon moment et températures douces.')
+  if (reasons.length === 0 && (fine !== null ? habitat * pousse : res.score[i]) >= 0.35) reasons.push('Bon milieu, pluie suffisante au bon moment et températures douces.')
 
   return {
-    score: res.score[i],
+    score: fine !== null ? habitat * pousseAt(res, lat, lon) : res.score[i],
     habitat,
     pousse,
     trees: GROUP_LABELS[group] ?? group,
@@ -326,4 +338,73 @@ export async function describeSpot(res: CoinsResult, sp: Species, lat: number, l
     temp5,
     reasons,
   }
+}
+
+// --------------------------------------------------------------------------------------------------
+// Habitat à 20 m : tuiles Web Mercator (zooms 10 à 13) de scripts/build-habitat-fine.py, publiées sur la
+// branche orpheline « habitat ». Une tuile RGB contient les 7 espèces : 3 bits chacune (8 niveaux).
+export const FINE_TILES_URL: string =
+  import.meta.env.VITE_HABITAT_TILES_URL ?? 'https://raw.githubusercontent.com/drugpad/meteochampignon/habitat'
+export const FINE_MIN_ZOOM = 10
+export const FINE_MAX_ZOOM = 13
+
+let fineMeta: Promise<{ species: Species[] } | null> | null = null
+export function loadFineMeta(): Promise<{ species: Species[] } | null> {
+  fineMeta ??= fetch(`${FINE_TILES_URL}/habitat-tiles.json`)
+    .then((r) => (r.ok ? (r.json() as Promise<{ species: Species[] }>) : null))
+    .catch(() => null)
+  return fineMeta
+}
+
+const fineTiles = new Map<string, Promise<Rgb | null>>()
+export function loadFineTile(z: number, x: number, y: number): Promise<Rgb | null> {
+  const key = `${z}/${x}/${y}`
+  if (!fineTiles.has(key)) {
+    // 404 = pas d'habitat dans cette tuile (hors région) : tuile vide, pas une erreur.
+    const p = fetchPixels(`${FINE_TILES_URL}/${key}.png`).catch(() => null)
+    fineTiles.set(key, p)
+    if (fineTiles.size > 400) fineTiles.delete(fineTiles.keys().next().value!) // mémoire bornée
+  }
+  return fineTiles.get(key)!
+}
+
+export const fineLevel = (rgba: Uint8ClampedArray, i: number, speciesIndex: number): number => {
+  const v = (rgba[i * 4] << 16) | (rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2]
+  return (v >> (3 * speciesIndex)) & 7
+}
+
+// Habitat à 20 m d'un point (0-1), ou null si les tuiles fines sont indisponibles.
+export async function sampleFineHabitat(sp: Species, lat: number, lon: number): Promise<number | null> {
+  const meta = await loadFineMeta()
+  const idx = meta?.species.indexOf(sp) ?? -1
+  if (idx < 0) return null
+  const z = FINE_MAX_ZOOM
+  const n = 2 ** z
+  const fx = ((lon + 180) / 360) * n
+  const fy = ((1 - Math.asinh(Math.tan((lat * Math.PI) / 180)) / Math.PI) / 2) * n
+  const tile = await loadFineTile(z, Math.floor(fx), Math.floor(fy))
+  if (!tile) return 0
+  const px = Math.min(255, Math.floor((fx % 1) * 256))
+  const py = Math.min(255, Math.floor((fy % 1) * 256))
+  return fineLevel(tile.rgba, py * 256 + px, idx) / 7
+}
+
+// Météo de pousse (0-1) à un point, interpolée comme pour la carte.
+export function pousseAt(res: CoinsResult, lat: number, lon: number): number {
+  const b = res.bounds
+  const g = res.pousse
+  const x = Math.min(Math.max(((lon - b.lonMin) / (b.lonMax - b.lonMin)) * g.width - 0.5, 0), g.width - 1)
+  const y = Math.min(Math.max(((b.latMax - lat) / (b.latMax - b.latMin)) * g.height - 0.5, 0), g.height - 1)
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const x1 = Math.min(x0 + 1, g.width - 1)
+  const y1 = Math.min(y0 + 1, g.height - 1)
+  const wx = x - x0
+  const wy = y - y0
+  const v = g.values
+  return (
+    ((v[y0 * g.width + x0] * (1 - wx) + v[y0 * g.width + x1] * wx) * (1 - wy) +
+      (v[y1 * g.width + x0] * (1 - wx) + v[y1 * g.width + x1] * wx) * wy) /
+    255
+  )
 }
