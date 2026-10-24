@@ -202,7 +202,7 @@ export function colorOf(v: number): [number, number, number, number] {
 // voile et un trait sur leur bord. Hors saison, la carte montre ainsi toujours où chercher ; la couleur de
 // pousse (jaune -> violet) se pose par-dessus quand la météo s'y prête.
 export const ZONE_THRESHOLD = 0.5
-export const ZONE_FILL: [number, number, number, number] = [120, 53, 15, 34]
+export const ZONE_FILL: [number, number, number, number] = [120, 53, 15, 48]
 export const ZONE_EDGE: [number, number, number, number] = [92, 40, 10, 215]
 
 // Peint une grille (score + habitat, même taille) : voile de zone, couleur de pousse, puis contour.

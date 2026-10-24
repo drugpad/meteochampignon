@@ -1,5 +1,6 @@
 // Mode « Coins » : choix de l'espèce et du jour, légende, palmarès des meilleurs secteurs (voir lib/coins.ts).
-import { useEffect, useRef, useState } from 'react'
+import { usePanelCollapse } from '../lib/usePanelCollapse'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { COINS_LEGEND, SPECIES, scoreLabel, type PousseMeta, type Species } from '../lib/coins'
 import { formatRelativeAge } from '../lib/formatRelativeAge'
 import { useParisToday } from '../lib/useParisToday'
@@ -24,6 +25,8 @@ type Props = {
 
 export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, status, error, onRetry, spots, onSelectSpot }: Props) {
   const [collapsed, setCollapsed] = useState(false)
+  // Mobile : replié quand on touche la carte ou qu'une fiche s'ouvre (lib/usePanelCollapse.ts).
+  usePanelCollapse(useCallback(() => setCollapsed(true), []))
   const [showTop, setShowTop] = useState(false)
   // Sur mobile, le panneau se replie une fois les coins calculés (une seule fois, sinon impossible de le
   // rouvrir) : il cachait la moitié de la carte.

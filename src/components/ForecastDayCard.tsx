@@ -24,7 +24,11 @@ export function ForecastDayCard({ day }: { day: ForecastDay }) {
   const divergent = disagreeing(day)
   return (
     <div className="forecast-day">
-      <div className="forecast-day__date">{WEEKDAY_FORMATTER.format(new Date(day.date))}</div>
+      <div className="forecast-day__date">
+        {WEEKDAY_FORMATTER.format(new Date(day.date))}
+        {/* Description du temps : affichée seulement sur l'écran plein-écran mobile (ForecastFullscreen.css). */}
+        <span className="forecast-day__label">{label}</span>
+      </div>
       <div className="forecast-day__emoji" title={label}>
         {emoji}
       </div>
@@ -32,7 +36,7 @@ export function ForecastDayCard({ day }: { day: ForecastDay }) {
         <span className="forecast-day__max">{Math.round(day.tempMax)}°</span>
         <span className="forecast-day__min">{Math.round(day.tempMin)}°</span>
       </div>
-      <div className="forecast-day__precip">
+      <div className={day.precipitationSum >= 0.5 ? 'forecast-day__precip forecast-day__precip--wet' : 'forecast-day__precip'}>
         💧 {day.precipitationSum.toFixed(1)}mm
         {day.precipitationProbabilityMax !== null && ` (${day.precipitationProbabilityMax}%)`}
       </div>

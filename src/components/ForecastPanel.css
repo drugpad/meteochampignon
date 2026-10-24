@@ -190,3 +190,8 @@
     margin-top: 0;
   }
 }
+
+/* Description du temps : seulement sur l'écran plein-écran mobile. */
+.forecast-day__label {
+  display: none;
+}

@@ -4,7 +4,8 @@
 // Historique), dupliqué plutôt que partagé : les deux évoluent pour des
 // raisons différentes (l'un un jour sélectionné parmi 7, l'autre une seule
 // valeur 24h) et le partage aurait forcé une abstraction prématurée.
-import { useEffect, useRef, useState } from 'react'
+import { usePanelCollapse } from '../lib/usePanelCollapse'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './ForecastRainControls.css'
 import { RAIN_LEGEND_STOPS } from '../lib/color'
 import { formatRelativeAge, isOlderThanHours } from '../lib/formatRelativeAge'
@@ -25,6 +26,8 @@ type Props = {
 
 export function ForecastRainControls({ maps, image, selectedDay, onSelectDay, onRetry }: Props) {
   const [collapsed, setCollapsed] = useState(false)
+  // Mobile : replié quand on touche la carte ou qu'une fiche s'ouvre (lib/usePanelCollapse.ts).
+  usePanelCollapse(useCallback(() => setCollapsed(true), []))
   // Tenus à jour (minuit passé sur un onglet ouvert) : voir lib/useParisToday.ts.
   const { today, tomorrow } = useParisToday()
   // Même logique que RainControls : repliable, mais ne se replie tout seul

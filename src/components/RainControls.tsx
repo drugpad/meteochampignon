@@ -3,7 +3,8 @@
 // période couverte, légende. Repliable (retour utilisateur : reste "en
 // grand" et gêne la carte sinon) — replié une fois la carte chargée, pour ne
 // pas s'imposer une fois qu'il n'y a plus rien à faire dessus.
-import { useEffect, useRef, useState } from 'react'
+import { usePanelCollapse } from '../lib/usePanelCollapse'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './RainControls.css'
 import { RAIN_LEGEND_STOPS } from '../lib/color'
 import { formatRelativeAge, isOlderThanHours } from '../lib/formatRelativeAge'
@@ -21,6 +22,8 @@ type Props = {
 
 export function RainControls({ maps, image, onRetry }: Props) {
   const [collapsed, setCollapsed] = useState(false)
+  // Mobile : replié quand on touche la carte ou qu'une fiche s'ouvre (lib/usePanelCollapse.ts).
+  usePanelCollapse(useCallback(() => setCollapsed(true), []))
   // Se replie tout seul dès que la carte est prête, une seule fois (pas à
   // chaque nouveau "ready", sinon impossible de le rouvrir).
   const autoCollapsedRef = useRef(false)

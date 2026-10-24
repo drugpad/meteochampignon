@@ -404,3 +404,32 @@
     white-space: normal;
   }
 }
+
+/* Mobile : un tiroir (fiche d'un coin) est ouvert en bas : les commandes du bas (GPS, fonds, mentions)
+   remontent au-dessus de lui au lieu d'être cachées (--sheet-h posé par CoinsSpotCard). */
+@media (max-width: 640px) {
+  .mc-sheet-open .leaflet-bottom {
+    bottom: var(--sheet-h, 0px);
+  }
+}
+
+/* Mobile : textes des panneaux plus grands (11 px était dur à lire en extérieur). */
+@media (max-width: 640px) {
+  .map-view .rain-controls__body,
+  .map-view .forecast-rain-controls__body,
+  .map-view .history-layers,
+  .map-view .coins__body {
+    font-size: 13px;
+  }
+
+  .map-view .coins__note,
+  .map-view .coins__hint,
+  .map-view .coins__legend-labels,
+  .map-view .coins__zone-legend,
+  .map-view .rain-controls__bubbles,
+  .map-view .history-layers__hint,
+  .map-view .forecast-rain-controls__status,
+  .map-view .rain-controls__status {
+    font-size: 12px;
+  }
+}

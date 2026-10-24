@@ -26,9 +26,22 @@ type Props = {
   view: Exclude<GuideView, null>
   onOpenSpecies: (id: string) => void
   onBack: () => void
+  // Fiche d'une espèce suivie par le mode « Coins » : bouton « Où la chercher en ce moment ».
+  onShowCoins?: (guideId: string) => void
 }
 
-export function MushroomGuide({ view, onOpenSpecies, onBack }: Props) {
+// Espèces du guide calculées par le mode « Coins » (lib/coins.ts).
+export const GUIDE_TO_COINS: Record<string, string> = {
+  'cepe-d-ete': 'cepe_ete',
+  'cepe-bronze': 'cepe_bronze',
+  'cepe-de-bordeaux': 'cepe_bordeaux',
+  'cepe-des-pins': 'cepe_pins',
+  girolle: 'girolle',
+  'lepiote-elevee': 'coulemelle',
+  'trompette-de-la-mort': 'trompette',
+}
+
+export function MushroomGuide({ view, onOpenSpecies, onBack, onShowCoins }: Props) {
   const species = view === 'list' ? undefined : SPECIES.find((s) => s.id === view)
 
   return createPortal(
@@ -46,7 +59,7 @@ export function MushroomGuide({ view, onOpenSpecies, onBack }: Props) {
       </div>
       {species && (
         <div className="guide__body" key={species.id}>
-          <SpeciesSheet species={species} />
+          <SpeciesSheet species={species} onShowCoins={onShowCoins} />
         </div>
       )}
     </div>,
@@ -237,7 +250,7 @@ function ConfusionCard({ species: s, confusion }: { species: Species; confusion:
   )
 }
 
-function SpeciesSheet({ species: s }: { species: Species }) {
+function SpeciesSheet({ species: s, onShowCoins }: { species: Species; onShowCoins?: (guideId: string) => void }) {
   const sources = [
     { label: `Wikipédia : ${s.latin}`, url: s.wiki },
     ...s.confusions.flatMap(({ with: key }) => {
@@ -258,6 +271,12 @@ function SpeciesSheet({ species: s }: { species: Species }) {
         </div>
         <EdibilityTag edibility={s.edibility} />
       </div>
+
+      {onShowCoins && GUIDE_TO_COINS[s.id] && (
+        <button type="button" className="guide-coins" onClick={() => onShowCoins(s.id)}>
+          🎯 Où le chercher en ce moment
+        </button>
+      )}
 
       <div className="guide-key">
         <span className="guide-key__label">🔑 Critère clé</span> {s.key}

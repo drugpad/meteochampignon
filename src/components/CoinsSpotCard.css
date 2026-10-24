@@ -23,9 +23,50 @@
   gap: 8px;
 }
 
+.spot-card__head-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .spot-card__title {
   font-weight: 700;
   font-size: 15px;
+}
+
+/* Poignée du tiroir (mobile seulement). */
+.spot-card__handle {
+  display: none;
+}
+
+.spot-card__compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.spot-card__more {
+  flex: none;
+  border: none;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 6px 10px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .spot-card__sub,
@@ -52,11 +93,13 @@
 }
 
 .spot-card__badge {
+  display: inline-block;
   background: #b45309;
   color: white;
-  border-radius: 10px;
-  padding: 3px 10px;
+  border-radius: 8px;
+  padding: 1px 8px;
   font-weight: 700;
+  font-size: 12px;
 }
 
 .spot-card__facts,
@@ -98,13 +141,43 @@
   margin: 8px 0 0;
 }
 
+/* Mobile : tiroir posé en bas de l'écran, pleine largeur, poignée en haut. Replié : ~110 px, la carte reste
+   visible ; déplié : jusqu'à 70 % de la hauteur, défilable. */
 @media (max-width: 640px) {
   .spot-card {
-    left: 8px;
-    right: 68px;
+    left: 0;
+    right: 0;
+    bottom: 0;
     width: auto;
     transform: none;
-    bottom: 26px;
+    max-height: 70dvh;
+    padding: 4px 16px calc(14px + env(safe-area-inset-bottom));
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -4px 18px rgba(15, 23, 42, 0.22);
+    z-index: 1100;
+  }
+
+  .spot-card__handle {
+    display: block;
+    width: 44px;
+    height: 18px;
+    margin: 0 auto 4px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .spot-card__handle::before {
+    content: '';
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    top: 7px;
+    height: 4px;
+    border-radius: 2px;
+    background: #d1d5db;
   }
 }
 

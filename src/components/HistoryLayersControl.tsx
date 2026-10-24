@@ -4,7 +4,8 @@
 // Case 1 (Météo-France) : opérationnelle. Cases 2 (Infoclimat) et 3 (Netatmo) : branchées dès que la collecte
 // côté serveur de ces réseaux est en place (clés d'API à créer, voir docs). Tant que c'est le cas, elles sont
 // désactivées avec la mention « bientôt », pour ne jamais afficher de fausses données.
-import { useState } from 'react'
+import { usePanelCollapse } from '../lib/usePanelCollapse'
+import { useCallback, useState } from 'react'
 import './HistoryLayersControl.css'
 
 export type HistoryLayers = { meteofrance: boolean; infoclimat: boolean; netatmo: boolean }
@@ -40,6 +41,8 @@ const START_COLLAPSED = typeof window !== 'undefined' && window.matchMedia('(max
 
 export function HistoryLayersControl({ value, onChange, disabled }: Props) {
   const [collapsed, setCollapsed] = useState(START_COLLAPSED)
+  // Mobile : replié quand on touche la carte ou qu'une fiche s'ouvre (lib/usePanelCollapse.ts).
+  usePanelCollapse(useCallback(() => setCollapsed(true), []))
   const shown = ROWS.filter(({ key }) => value[key] && !disabled?.[key]).length
   return (
     <div className={collapsed ? 'history-layers history-layers--collapsed' : 'history-layers'}>

@@ -28,10 +28,11 @@ import { computeCoins, describeSpot, FINE_MIN_ZOOM, isSpecies, loadFineMeta, loa
 import { reverseCity } from '../lib/geocoding'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import { LocateControl } from './LocateControl'
+import { collapsePanels } from '../lib/usePanelCollapse'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
 import { OfflinePanel } from './OfflinePanel'
-import { MushroomGuide } from './MushroomGuide'
+import { GUIDE_TO_COINS, MushroomGuide } from './MushroomGuide'
 import { RainControls } from './RainControls'
 import { RainOverlay } from './RainOverlay'
 import { RegionOutline } from './RegionOutline'
@@ -116,6 +117,12 @@ const FORECAST_CROSS_ICON = L.divIcon({
 function ForecastCross({ point }: { point: { lat: number; lon: number } | null }) {
   if (!point) return null
   return <Marker position={[point.lat, point.lon]} icon={FORECAST_CROSS_ICON} interactive={false} keyboard={false} zIndexOffset={1000} />
+}
+
+// Mobile : toucher la carte replie les panneaux du haut (un seul panneau à la fois, voir usePanelCollapse).
+function TapCollapse() {
+  useMapEvents({ click: () => collapsePanels() })
+  return null
 }
 
 function ClickHandler({ enabled, onClick }: { enabled: boolean; onClick: (lat: number, lon: number) => void }) {
@@ -293,6 +300,14 @@ export function MapView() {
   const openSpot = useCallback(
     (lat: number, lon: number, knownName: string | null = null) => {
       if (!coinsResult) return
+      collapsePanels()
+      // Mobile : la fiche occupe le bas de l'écran ; si l'endroit touché tombe dessous (ou sous les
+      // commandes du haut), on recentre la carte dessus pour qu'il reste visible.
+      if (map && window.matchMedia('(max-width: 640px)').matches) {
+        const pt = map.latLngToContainerPoint([lat, lon])
+        const h = map.getSize().y
+        if (pt.y > h - 230 || pt.y < 190) map.panTo([lat, lon])
+      }
       setSpot({ lat, lon, name: knownName, detail: null, loading: true, series: null })
       void describeSpot(coinsResult, coinsSpecies, lat, lon).then(async (detail) => {
         setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, detail, loading: false } : s))
@@ -303,7 +318,7 @@ export function MapView() {
       })
       if (!knownName) void reverseCity(lat, lon).then((name) => setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, name } : s)))
     },
-    [coinsResult, coinsSpecies],
+    [coinsResult, coinsSpecies, map],
   )
   // Espèce ou jour changés : la fiche ouverte n'est plus valable.
   useEffect(() => setSpot(null), [coinsSpecies, coinsDay, mode])
@@ -411,7 +426,21 @@ export function MapView() {
 
   return (
     <div className="map-view">
-      {guide.view && <MushroomGuide view={guide.view} onOpenSpecies={guide.openSpecies} onBack={guide.back} />}
+      {guide.view && (
+        <MushroomGuide
+          view={guide.view}
+          onOpenSpecies={guide.openSpecies}
+          onBack={guide.back}
+          onShowCoins={(id) => {
+            // Guide -> mode Coins sur l'espèce : on referme le guide (retour dans l'historique : fiche puis liste).
+            const sp = GUIDE_TO_COINS[id]
+            if (!isSpecies(sp)) return
+            setCoinsSpecies(sp)
+            setMode('coins')
+            window.history.go(-2)
+          }}
+        />
+      )}
       <div className="floating-controls">
         <div className="floating-controls__row">
           <ModeSwitch mode={mode} onChange={setMode} />
@@ -469,6 +498,7 @@ export function MapView() {
         <RecenterOnSelect target={searchTarget} />
         <InvalidateSizeOnResize />
         <BaseLayerTracker onChange={setBaseLayer} />
+        <TapCollapse />
         <DataAttribution />
 
         <LayersControl position="bottomright">

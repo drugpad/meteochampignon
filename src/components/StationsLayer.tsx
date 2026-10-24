@@ -6,7 +6,7 @@
 // petit point de carte est peu ergonomique au doigt (retour utilisateur).
 import L from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Marker, Popup } from 'react-leaflet'
+import { Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import { cachedRainTotals, fetchStationDetail, loadRainTotals, STATIC_STATIONS } from '../lib/stations'
 import { BUBBLE_LOADING, rainBubble, rainReference, type StationRainTotal } from '../lib/stationRain'
 import { stationIcon, useZoomClass } from '../lib/stationBubbleIcon'
@@ -110,6 +110,27 @@ function StationMarkerMobile({
   )
 }
 
+// Allègement au dézoom (comme les réseaux Infoclimat/Netatmo) : en vue régionale, 239 bulles chiffrées se
+// chevauchaient en un tapis illisible ; on garde UNE station par case (la plus arrosée), case d'autant plus
+// petite qu'on zoome. Au zoom 11 et plus, toutes les stations.
+function useThinnedStations(totals: Record<string, StationRainTotal> | null): Station[] {
+  const map = useMap()
+  const [zoom, setZoom] = useState(() => map.getZoom())
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) })
+  return useMemo(() => {
+    if (zoom >= 11) return STATIC_STATIONS
+    // Case ≈ largeur d'une bulle à l'écran (26 px), convertie en degrés au zoom courant.
+    const cell = 26 / ((256 * 2 ** zoom) / 360)
+    const best = new Map<string, Station>()
+    for (const s of STATIC_STATIONS) {
+      const key = `${Math.round(s.lat / cell)}|${Math.round(s.lon / cell)}`
+      const cur = best.get(key)
+      if (!cur || (totals?.[s.id]?.mm ?? -1) > (totals?.[cur.id]?.mm ?? -1)) best.set(key, s)
+    }
+    return [...best.values()]
+  }, [zoom, totals])
+}
+
 export function StationsLayer() {
   const isMobile = useIsMobile()
   const zoomClass = useZoomClass()
@@ -121,6 +142,7 @@ export function StationsLayer() {
   // intéressantes qui restent visibles, pas les stations sèches.
   const zOf = (station: Station) => Math.round(totals?.[station.id]?.mm ?? 0)
   const [mobileSelection, setMobileSelection] = useState<{ station: Station; state: StationDetailState } | null>(null)
+  const shown = useThinnedStations(totals)
 
   const handleMobileOpen = (station: Station) => {
     setMobileSelection({ station, state: { status: 'loading', station } })
@@ -130,7 +152,7 @@ export function StationsLayer() {
   if (!isMobile) {
     return (
       <>
-        {STATIC_STATIONS.map((station) => (
+        {shown.map((station) => (
           <StationMarkerDesktop key={station.id} station={station} icon={iconOf(station)} zIndexOffset={zOf(station)} />
         ))}
       </>
@@ -139,7 +161,7 @@ export function StationsLayer() {
 
   return (
     <>
-      {STATIC_STATIONS.map((station) => (
+      {shown.map((station) => (
         <StationMarkerMobile key={station.id} station={station} icon={iconOf(station)} zIndexOffset={zOf(station)} onOpen={handleMobileOpen} />
       ))}
       {mobileSelection && (

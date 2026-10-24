@@ -357,6 +357,21 @@
   font-size: 14px;
 }
 
+.guide-coins {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 11px;
+  border: none;
+  border-radius: 12px;
+  background: #b45309;
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
 .guide-key {
   margin-top: 12px;
   padding: 10px 12px;
