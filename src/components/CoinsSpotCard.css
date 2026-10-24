@@ -1,0 +1,109 @@
+.spot-card {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: min(380px, calc(100vw - 24px));
+  max-height: 55dvh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background: white;
+  color: #1f2937;
+  border-radius: 14px;
+  box-shadow: 0 2px 14px rgba(15, 23, 42, 0.25);
+  font: 13px/1.4 system-ui, sans-serif;
+}
+
+.spot-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.spot-card__title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.spot-card__sub,
+.spot-card__muted {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.spot-card__close {
+  border: none;
+  background: none;
+  font-size: 24px;
+  line-height: 1;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.spot-card__score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.spot-card__badge {
+  background: #b45309;
+  color: white;
+  border-radius: 10px;
+  padding: 3px 10px;
+  font-weight: 700;
+}
+
+.spot-card__facts,
+.spot-card__reasons {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spot-card__facts li {
+  margin: 3px 0;
+}
+
+.spot-card__reasons {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #7c2d12;
+}
+
+.spot-card__reasons li + li {
+  margin-top: 4px;
+}
+
+.spot-card__nav {
+  display: block;
+  margin-top: 10px;
+  padding: 9px;
+  border-radius: 10px;
+  background: #2563eb;
+  color: white;
+  text-align: center;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.spot-card__warn {
+  margin: 8px 0 0;
+}
+
+@media (max-width: 640px) {
+  .spot-card {
+    left: 8px;
+    right: 68px;
+    width: auto;
+    transform: none;
+    bottom: 26px;
+  }
+}

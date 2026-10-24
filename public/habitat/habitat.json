@@ -1,0 +1,38 @@
+{
+ "bounds": {
+  "latMin": 42.595,
+  "latMax": 45.155,
+  "lonMin": -0.405,
+  "lonMax": 3.405
+ },
+ "rows": 1024,
+ "cols": 1524,
+ "groups": [
+  "aucun",
+  "chene",
+  "chene_vert",
+  "hetre",
+  "chataignier",
+  "feuillus",
+  "robinier",
+  "peuplier",
+  "mixte",
+  "pins",
+  "sapin_epicea",
+  "autres_conif",
+  "lande",
+  "herbe"
+ ],
+ "species": [
+  "cepe",
+  "girolle",
+  "coulemelle",
+  "trompette"
+ ],
+ "info": {
+  "r": "groupe d'essences dominant (index de groups, 0 = aucun)",
+  "g": "pH x 25",
+  "b": "altitude / 10 m"
+ },
+ "sources": "BD Forêt V2 (IGN, Etalab 2.0), Copernicus DEM GLO-90, SoilGrids 2.0 (ISRIC, CC BY 4.0), ESA WorldCover 2021 (CC BY 4.0)"
+}

@@ -78,3 +78,23 @@ export async function searchAddress(query: string): Promise<GeocodeResult[]> {
     }
   })
 }
+
+// Commune qui contient un point (API officielle geo.api.gouv.fr, découpage administratif) : nomme les coins du
+// palmarès des champignons. Le géocodeur d'adresses de l'IGN ne trouvait rien en pleine forêt, loin des
+// maisons. null si rien trouvé ou si le service ne répond pas (le coin reste affiché sans nom).
+const cityCache = new Map<string, string | null>()
+export async function reverseCity(lat: number, lon: number): Promise<string | null> {
+  const key = `${lat.toFixed(3)},${lon.toFixed(3)}`
+  if (cityCache.has(key)) return cityCache.get(key)!
+  try {
+    const res = await fetch(`https://geo.api.gouv.fr/communes?lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}&fields=nom,codeDepartement&format=json`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = (await res.json()) as { nom?: string; codeDepartement?: string }[]
+    const c = data[0]
+    const city = c?.nom ? `${c.nom}${c.codeDepartement ? ` (${c.codeDepartement})` : ''}` : null
+    cityCache.set(key, city)
+    return city
+  } catch {
+    return null
+  }
+}

@@ -3,7 +3,8 @@
 export type Point = { lat: number; lon: number }
 
 // « carte » : le fond de carte seul (sentiers, GPS), sans couche météo.
-export type AppMode = 'carte' | 'previsions' | 'historique'
+// « coins » : endroits propices aux champignons (habitat x météo de pousse).
+export type AppMode = 'carte' | 'previsions' | 'historique' | 'coins'
 
 // Un jour de prévision (module Prévisions 7 jours, Open-Meteo best_match).
 export type ForecastDay = {

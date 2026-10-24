@@ -46,8 +46,8 @@ jobs:
     # une nouvelle image peut casser les roues binaires (omfiles, scipy). À
     # relever volontairement, après un essai manuel (workflow_dispatch).
     runs-on: ubuntu-24.04
-    # ~3 min en local, marge large pour le réseau S3.
-    timeout-minutes: 15
+    # ~3 min en local pour les cartes, + quelques minutes pour la pousse (historique météo) ; marge pour S3.
+    timeout-minutes: 25
     steps:
       - name: Garde-fou d'âge
         id: guard
@@ -80,7 +80,19 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         env:
           OUT_DIR: ${{ runner.temp }}/maps-out
+          WORK_DIR: ${{ runner.temp }}/maps-work
         run: python scripts/build-rain-maps.py
+
+      # Pousse des champignons (mode « Coins » de l'appli) : historique météo jour par jour + score par
+      # espèce. Un échec ici ne bloque PAS la publication des cartes de pluie ; le script republie de
+      # toute façon l'historique relu avant de calculer (sinon il disparaîtrait de la branche data).
+      - name: Calculer la pousse des champignons
+        if: steps.guard.outputs.skip != 'true'
+        continue-on-error: true
+        env:
+          OUT_DIR: ${{ runner.temp }}/maps-out
+          WORK_DIR: ${{ runner.temp }}/maps-work
+        run: python scripts/build-pousse.py
 
       - name: Publier sur la branche data (écrasée)
         if: steps.guard.outputs.skip != 'true'

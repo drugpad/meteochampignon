@@ -10,6 +10,7 @@ const MODES: { key: AppMode; icon: string; label: string }[] = [
   { key: 'carte', icon: '🗺️', label: 'Carte' },
   { key: 'previsions', icon: '☀️', label: 'Prévisions' },
   { key: 'historique', icon: '🕓', label: 'Historique' },
+  { key: 'coins', icon: '🎯', label: 'Coins' },
 ]
 
 export function ModeSwitch({ mode, onChange }: Props) {
@@ -24,7 +25,7 @@ export function ModeSwitch({ mode, onChange }: Props) {
           className={mode === key ? 'mode-switch__btn mode-switch__btn--active' : 'mode-switch__btn'}
           onClick={() => onChange(key)}
         >
-          {icon} {label}
+          <span className="mode-switch__icon">{icon}</span> <span className="mode-switch__label">{label}</span>
         </button>
       ))}
     </div>

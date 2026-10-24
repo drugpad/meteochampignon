@@ -45,6 +45,7 @@ from PIL import Image
 from scipy.interpolate import RegularGridInterpolator
 
 OUT_DIR = os.environ.get("OUT_DIR", "maps-out")
+WORK_DIR = os.environ.get("WORK_DIR", "maps-work")  # fichiers de travail non publiés (pluie non plafonnée)
 BUCKET = "openmeteo"
 S3_HTTP = "https://openmeteo.s3.amazonaws.com"
 
@@ -91,8 +92,8 @@ class Model:
         ref = ref or self.ref
         return f"{BUCKET}/data_spatial/{self.name}/{ref:%Y/%m/%d}/{ref:%H}00Z/{valid:%Y-%m-%dT%H}00.om"
 
-    def reader(self, valid, ref=None):
-        return OmFileReader.from_fsspec(fs, self.path(valid, ref)).get_child_by_name("precipitation")
+    def reader(self, valid, ref=None, var="precipitation"):
+        return OmFileReader.from_fsspec(fs, self.path(valid, ref)).get_child_by_name(var)
 
     def window_indices(self, margin=1):
         i0 = int(np.floor((LAT_MIN - self.s0) / self.dy)) - margin
@@ -101,13 +102,16 @@ class Model:
         j1 = int(np.ceil((LON_MAX - self.w0) / self.dx)) + 1 + margin
         return i0, i1, j0, j1
 
-    def read(self, valid, ref=None, retries=3):
-        """Fenêtre de précipitation (mm) ; None si le fichier n'existe pas."""
+    def read(self, valid, ref=None, retries=3, var="precipitation"):
+        """Fenêtre d'une variable (précipitation en mm par défaut ; temperature_2m en °C pour la pousse des
+        champignons, scripts/build-pousse.py) ; None si le fichier n'existe pas."""
         i0, i1, j0, j1 = self.window_indices()
         for attempt in range(retries):
             try:
-                arr = self.reader(valid, ref).read_array((slice(i0, i1), slice(j0, j1)))
-                return np.nan_to_num(np.asarray(arr, dtype=np.float32), nan=0.0).clip(min=0)
+                arr = np.asarray(self.reader(valid, ref, var).read_array((slice(i0, i1), slice(j0, j1))), dtype=np.float32)
+                if var != "precipitation":
+                    return arr
+                return np.nan_to_num(arr, nan=0.0).clip(min=0)
             except FileNotFoundError:
                 return None
             except Exception as err:  # réseau / fichier en cours d'écriture
@@ -166,6 +170,15 @@ class Arome:
     def prefetch(self, times):
         with ThreadPoolExecutor(THREADS) as ex:
             list(ex.map(self.hour, times))
+
+
+def to_target_grid_raw(coarse, model, rows, cols):
+    """Interpolation bilinéaire d'un champ du modèle vers la grille de sortie (valeurs négatives gardées :
+    températures)."""
+    lats, lons = model.coords()
+    f = RegularGridInterpolator((lats, lons), coarse, method="linear", bounds_error=False, fill_value=None)
+    tl, tn = np.meshgrid(target_lats(rows), target_lons(cols), indexing="ij")
+    return f(np.stack([tl.ravel(), tn.ravel()], axis=-1)).reshape(rows, cols).astype(np.float32)
 
 
 def to_target_grid(coarse, model, rows, cols):
@@ -336,6 +349,9 @@ def main():
 
         fname = f"forecast-day{k}.png"
         save_png(field, f"{OUT_DIR}/{fname}")
+        # Champ NON plafonné (les PNG s'arrêtent à 25,5 mm) pour la pousse des champignons (build-pousse.py).
+        os.makedirs(WORK_DIR, exist_ok=True)
+        np.save(f"{WORK_DIR}/rain-{d.isoformat()}.npy", field.astype(np.float32))
         forecast.append({
             "date": d.isoformat(), "file": fname, "model": model_name,
             "resolutionKm": res_km, "run": run.strftime("%Y-%m-%dT%H:%MZ"),

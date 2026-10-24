@@ -69,15 +69,42 @@ export async function fetchRainImage(meta: RainMapsMeta, file: string): Promise<
   } catch {
     throw new Error(UNAVAILABLE)
   }
+  const { width, height, rgba } = bitmapPixels(bitmap)
+  const levels = new Uint8ClampedArray(width * height)
+  for (let i = 0; i < levels.length; i++) levels[i] = rgba[i * 4]
+  return { width, height, levels, mmPerLevel: meta.encoding.mmPerLevel }
+}
+
+// Pixels RGBA bruts d'une image de données.
+export function bitmapPixels(bitmap: ImageBitmap): { width: number; height: number; rgba: Uint8ClampedArray } {
   const canvas = document.createElement('canvas')
   canvas.width = bitmap.width
   canvas.height = bitmap.height
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!
   ctx.drawImage(bitmap, 0, 0)
-  const rgba = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data
-  const levels = new Uint8ClampedArray(bitmap.width * bitmap.height)
-  for (let i = 0; i < levels.length; i++) levels[i] = rgba[i * 4]
-  return { width: bitmap.width, height: bitmap.height, levels, mmPerLevel: meta.encoding.mmPerLevel }
+  return { width: bitmap.width, height: bitmap.height, rgba: ctx.getImageData(0, 0, bitmap.width, bitmap.height).data }
+}
+
+// Image de données (PNG) depuis une URL : pixels RGBA, sans correction de couleur.
+export async function fetchPixels(url: string): Promise<{ width: number; height: number; rgba: Uint8ClampedArray }> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return bitmapPixels(await createImageBitmap(await res.blob(), { colorSpaceConversion: 'none' }))
+}
+
+// Autre fichier JSON publié sur la branche data (ex. pousse.json) : mêmes sources et même ordre de repli
+// que maps.json. Renvoie aussi la source qui a répondu, pour y lire les images associées.
+export async function fetchDataJson<T>(file: string): Promise<{ data: T; base: string }> {
+  for (const base of [activeBase, ...BASES.filter((b) => b !== activeBase)]) {
+    try {
+      const res = await fetch(`${base}/${file}`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return { data: (await res.json()) as T, base }
+    } catch {
+      // source suivante
+    }
+  }
+  throw new Error(`${file} indisponible`)
 }
 
 const PARIS_DAY_FORMATTER = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }) // yyyy-mm-dd

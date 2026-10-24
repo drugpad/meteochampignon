@@ -20,6 +20,11 @@ import { ForecastFullscreen } from './ForecastFullscreen'
 import { ForecastPanel } from './ForecastPanel'
 import { ForecastRainControls } from './ForecastRainControls'
 import { BubbleStationsLayer } from './BubbleStationsLayer'
+import { CoinsControls, type NamedSpot } from './CoinsControls'
+import { CoinsLayer } from './CoinsLayer'
+import { CoinsSpotCard } from './CoinsSpotCard'
+import { computeCoins, describeSpot, loadPousseMeta, topSpots, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
+import { reverseCity } from '../lib/geocoding'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import { LocateControl } from './LocateControl'
 import './MapView.css'
@@ -168,7 +173,7 @@ export function MapView() {
   const [mode, setModeState] = useState<AppMode>(() => {
     try {
       const saved = localStorage.getItem('mc-mode')
-      if (saved === 'carte' || saved === 'previsions' || saved === 'historique') return saved
+      if (saved === 'carte' || saved === 'previsions' || saved === 'historique' || saved === 'coins') return saved
     } catch {
       // stockage indisponible
     }
@@ -213,6 +218,77 @@ export function MapView() {
       // mémorisation facultative
     }
   }, [])
+
+  // ---- Mode « Coins » : habitat x météo de pousse (lib/coins.ts). ----
+  const [coinsSpecies, setCoinsSpeciesState] = useState<Species>(() => {
+    try {
+      const saved = localStorage.getItem('mc-coins-species')
+      if (saved === 'cepe' || saved === 'girolle' || saved === 'coulemelle' || saved === 'trompette') return saved
+    } catch {
+      // stockage indisponible
+    }
+    return 'cepe'
+  })
+  const setCoinsSpecies = useCallback((sp: Species) => {
+    setCoinsSpeciesState(sp)
+    try {
+      localStorage.setItem('mc-coins-species', sp)
+    } catch {
+      // mémorisation facultative
+    }
+  }, [])
+  const [coinsDay, setCoinsDay] = useState(0)
+  const [pousseMeta, setPousseMeta] = useState<PousseMeta | null>(null)
+  const [coinsResult, setCoinsResult] = useState<CoinsResult | null>(null)
+  const [coinsStatus, setCoinsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [coinsError, setCoinsError] = useState<string | null>(null)
+  const [coinsReload, setCoinsReload] = useState(0)
+  const [spots, setSpots] = useState<NamedSpot[]>([])
+  const [spot, setSpot] = useState<{ lat: number; lon: number; name: string | null; detail: SpotDetail | null; loading: boolean } | null>(null)
+
+  useEffect(() => {
+    if (mode !== 'coins') return
+    let cancelled = false
+    setCoinsStatus('loading')
+    loadPousseMeta(coinsReload > 0)
+      .then(async (meta) => {
+        if (cancelled) return
+        setPousseMeta(meta)
+        const first = meta.days.findIndex((d) => d.date >= today)
+        const index = coinsDay < meta.days.length && meta.days[coinsDay].date >= today ? coinsDay : Math.max(0, first)
+        const res = await computeCoins(coinsSpecies, index)
+        if (cancelled) return
+        setCoinsResult(res)
+        setCoinsStatus('ready')
+        const top = topSpots(res)
+        setSpots(top.map((t) => ({ ...t, name: null })))
+        // Noms des communes après coup (le palmarès s'affiche sans attendre le géocodeur).
+        const named = await Promise.all(top.map(async (t) => ({ ...t, name: await reverseCity(t.lat, t.lon) })))
+        if (!cancelled) setSpots(named)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setCoinsStatus('error')
+        setCoinsError('Coins indisponibles pour le moment (calcul météo pas encore publié ?). Réessaie dans un instant.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mode, coinsSpecies, coinsDay, coinsReload, today])
+
+  const openSpot = useCallback(
+    (lat: number, lon: number, knownName: string | null = null) => {
+      if (!coinsResult) return
+      setSpot({ lat, lon, name: knownName, detail: null, loading: true })
+      void describeSpot(coinsResult, coinsSpecies, lat, lon).then((detail) =>
+        setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, detail, loading: false } : s)),
+      )
+      if (!knownName) void reverseCity(lat, lon).then((name) => setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, name } : s)))
+    },
+    [coinsResult, coinsSpecies],
+  )
+  // Espèce ou jour changés : la fiche ouverte n'est plus valable.
+  useEffect(() => setSpot(null), [coinsSpecies, coinsDay, mode])
 
   // Précharge l'historique des stations (≈ 200 Ko compressé) peu après l'ouverture : en passant sur Historique, les
   // bulles de pluie s'affichent sans attendre le téléchargement. Échec ignoré (réessayé à l'ouverture d'Historique).
@@ -334,6 +410,23 @@ export function MapView() {
             <HistoryLayersControl value={historyLayers} onChange={setLayers} />
           </div>
         )}
+        {mode === 'coins' && (
+          <CoinsControls
+            species={coinsSpecies}
+            onSpecies={setCoinsSpecies}
+            dayIndex={pousseMeta && coinsResult ? pousseMeta.days.indexOf(coinsResult.day) : coinsDay}
+            onDay={setCoinsDay}
+            meta={pousseMeta}
+            status={coinsStatus}
+            error={coinsError}
+            onRetry={() => setCoinsReload((k) => k + 1)}
+            spots={spots}
+            onSelectSpot={(s) => {
+              map?.flyTo([s.lat, s.lon], Math.max(map.getZoom(), 13))
+              openSpot(s.lat, s.lon, s.name)
+            }}
+          />
+        )}
         {mode === 'previsions' && (
           <ForecastRainControls
             maps={mapsState}
@@ -354,6 +447,7 @@ export function MapView() {
         style={{ height: '100%', width: '100%' }}
       >
         <ClickHandler enabled={mode === 'previsions'} onClick={handleMapClick} />
+        <ClickHandler enabled={mode === 'coins'} onClick={(lat, lon) => openSpot(lat, lon)} />
         <RecenterOnSelect target={searchTarget} />
         <InvalidateSizeOnResize />
         <BaseLayerTracker onChange={setBaseLayer} />
@@ -435,6 +529,15 @@ export function MapView() {
         {mode === 'historique' && historyLayers.infoclimat && <BubbleStationsLayer network="infoclimat" />}
         {mode === 'historique' && historyLayers.netatmo && <BubbleStationsLayer network="netatmo" />}
 
+        {mode === 'coins' && coinsResult && coinsStatus === 'ready' && (
+          <CoinsLayer
+            result={coinsResult}
+            spots={spots}
+            onSelectSpot={(s) => openSpot(s.lat, s.lon, s.name)}
+          />
+        )}
+        {mode === 'coins' && spot && <ForecastCross point={{ lat: spot.lat, lon: spot.lon }} />}
+
         {mode === 'previsions' && <ForecastCross point={forecastState.status === 'idle' ? null : forecastState.point} />}
 
         {mapsState.status === 'ready' && currentImage.status === 'ready' && (
@@ -442,6 +545,17 @@ export function MapView() {
         )}
       </MapContainer>
 
+      {mode === 'coins' && spot && (
+        <CoinsSpotCard
+          species={coinsSpecies}
+          lat={spot.lat}
+          lon={spot.lon}
+          name={spot.name}
+          detail={spot.detail}
+          loading={spot.loading}
+          onClose={() => setSpot(null)}
+        />
+      )}
       {mode === 'previsions' && isMobile && forecastState.status !== 'idle' && (
         <ForecastFullscreen state={forecastState} onClose={() => setForecastState({ status: 'idle' })} />
       )}
