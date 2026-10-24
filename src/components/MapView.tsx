@@ -21,6 +21,7 @@ import { ForecastPanel } from './ForecastPanel'
 import { ForecastRainControls } from './ForecastRainControls'
 import { BubbleStationsLayer } from './BubbleStationsLayer'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
+import { LocateControl } from './LocateControl'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
 import { OfflinePanel } from './OfflinePanel'
@@ -50,13 +51,15 @@ function handleTileError(event: L.TileErrorEvent) {
   const retryIndex = tile._retryCount ?? 0
   if (retryIndex >= TILE_RETRY_DELAYS_MS.length) return
   tile._retryCount = retryIndex + 1
-  const baseSrc = tile.src.replace(/&_retry=\d+$/, '')
+  const baseSrc = tile.src.replace(/[?&]_retry=\d+$/, '')
+  // URL sans paramètres (OSM, OpenTopoMap) : « ? », sinon « & » (WMTS IGN).
+  const separator = baseSrc.includes('?') ? '&' : '?'
   // + un peu de délai aléatoire (jusqu'à 500ms) : plusieurs tuiles échouent
   // souvent ensemble (même rafale à l'origine du dépassement de débit), les
   // relancer toutes exactement au même instant recréerait la même rafale.
   const jitterMs = Math.random() * 500
   window.setTimeout(() => {
-    tile.src = `${baseSrc}&_retry=${Date.now()}`
+    tile.src = `${baseSrc}${separator}_retry=${Date.now()}`
   }, TILE_RETRY_DELAYS_MS[retryIndex] + jitterMs)
 }
 
@@ -65,11 +68,24 @@ function handleTileError(event: L.TileErrorEvent) {
 const DATA_ATTRIBUTION =
   'Météo : <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0), <a href="https://meteofrance.fr/">Météo-France</a>'
 
+// Sur mobile, les mentions (obligatoires) tiennent sur une ligne tronquée : un appui les déplie en entier
+// (les liens ne sont actifs qu'une fois dépliées), un autre appui les replie.
 function DataAttribution() {
   const map = useMap()
   useEffect(() => {
     map.attributionControl.addAttribution(DATA_ATTRIBUTION)
+    const container = map.attributionControl.getContainer()
+    const toggle = (e: MouseEvent) => {
+      if (!container || !window.matchMedia('(max-width: 640px)').matches) return
+      const expanded = container.classList.contains('attribution--expanded')
+      if (!expanded || !(e.target as HTMLElement).closest('a')) {
+        e.preventDefault()
+        container.classList.toggle('attribution--expanded')
+      }
+    }
+    container?.addEventListener('click', toggle)
     return () => {
+      container?.removeEventListener('click', toggle)
       map.attributionControl.removeAttribution(DATA_ATTRIBUTION)
     }
   }, [map])
@@ -275,13 +291,10 @@ export function MapView() {
         </div>
 
         {mode === 'historique' && (
-          <>
+          <div className="floating-controls__row floating-controls__panels">
             <RainControls maps={mapsState} image={currentImage} onRetry={handleRetry} />
-            <HistoryLayersControl
-              value={historyLayers}
-              onChange={setLayers}
-            />
-          </>
+            <HistoryLayersControl value={historyLayers} onChange={setLayers} />
+          </div>
         )}
         {mode === 'previsions' && (
           <ForecastRainControls
@@ -306,7 +319,7 @@ export function MapView() {
         <InvalidateSizeOnResize />
         <DataAttribution />
 
-        <LayersControl position="bottomleft">
+        <LayersControl position="bottomright">
           <LayersControl.BaseLayer checked={!START_OFFLINE} name="Plan">
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -325,6 +338,17 @@ export function MapView() {
               eventHandlers={{ tileerror: handleTileError }}
             />
           </LayersControl.BaseLayer>
+          {/* Topo : sentiers, pistes et courbes de niveau (données OSM). Pas d'équivalent IGN ouvert : le
+              SCAN 25 exige une clé, le Plan IGN ne montre les sentiers qu'à fort zoom. */}
+          <LayersControl.BaseLayer name="Topo (sentiers)">
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, SRTM | style &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC BY-SA)'
+              url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+              subdomains="abc"
+              maxNativeZoom={17}
+              eventHandlers={{ tileerror: handleTileError }}
+            />
+          </LayersControl.BaseLayer>
           <LayersControl.BaseLayer name="Satellite">
             <TileLayer
               attribution='&copy; <a href="https://www.ign.fr">IGN</a> - Géoplateforme'
@@ -334,7 +358,18 @@ export function MapView() {
               eventHandlers={{ tileerror: handleTileError }}
             />
           </LayersControl.BaseLayer>
+          {/* Itinéraires de randonnée balisés (GR, PR…), transparents : superposables à n'importe quel fond. */}
+          <LayersControl.Overlay name="Sentiers balisés">
+            <TileLayer
+              attribution='Sentiers : &copy; <a href="https://hiking.waymarkedtrails.org">Waymarked Trails</a> (CC BY-SA)'
+              url="https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png"
+              maxNativeZoom={17}
+              opacity={0.8}
+              zIndex={5}
+            />
+          </LayersControl.Overlay>
         </LayersControl>
+        <LocateControl />
 
         <RegionOutline />
 

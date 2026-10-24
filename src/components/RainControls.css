@@ -136,3 +136,17 @@
   display: inline-block;
 }
 
+
+.rain-controls__short {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .rain-controls__long {
+    display: none;
+  }
+
+  .rain-controls__short {
+    display: inline;
+  }
+}

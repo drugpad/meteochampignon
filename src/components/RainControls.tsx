@@ -38,7 +38,10 @@ export function RainControls({ maps, image, onRetry }: Props) {
   return (
     <div className={collapsed ? 'rain-controls rain-controls--collapsed' : 'rain-controls'}>
       <button type="button" className="rain-controls__header" onClick={() => setCollapsed((c) => !c)}>
-        <span>🌧️ Carte de pluie — cumul 24h</span>
+        <span>
+          🌧️ <span className="rain-controls__long">Carte de pluie — cumul 24h</span>
+          <span className="rain-controls__short">Pluie 24 h</span>
+        </span>
         <span className="rain-controls__chevron">{collapsed ? '▸' : '▾'}</span>
       </button>
 

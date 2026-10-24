@@ -1,0 +1,51 @@
+.locate-control {
+  position: relative;
+}
+
+.locate-control__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: white;
+  color: #374151;
+  cursor: pointer;
+}
+
+.locate-control--active .locate-control__button {
+  color: #2563eb;
+}
+
+/* Suivi en cours : icône pleine bleue ; en attente du premier point : pulsation. */
+.locate-control--following .locate-control__button {
+  background: #2563eb;
+  color: white;
+}
+
+.locate-control--waiting .locate-control__button {
+  animation: locate-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes locate-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.locate-control__message {
+  display: none;
+  position: absolute;
+  right: calc(100% + 8px);
+  bottom: 0;
+  width: 230px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #1f2937;
+  color: white;
+  font: 12px/1.35 system-ui, sans-serif;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}

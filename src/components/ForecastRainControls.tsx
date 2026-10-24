@@ -40,11 +40,17 @@ export function ForecastRainControls({ maps, image, selectedDay, onSelectDay, on
 
   const error = maps.status === 'error' ? maps.message : image.status === 'error' ? image.message : null
   const day = maps.status === 'ready' ? maps.meta.forecast[selectedDay] : undefined
+  const dayLabel = (date: string) =>
+    date === today ? 'Auj.' : date === tomorrow ? 'Dem.' : DAY_FORMATTER.format(new Date(date))
 
   return (
     <div className={collapsed ? 'forecast-rain-controls forecast-rain-controls--collapsed' : 'forecast-rain-controls'}>
       <button type="button" className="forecast-rain-controls__header" onClick={() => setCollapsed((c) => !c)}>
-        <span>🌦️ Pluie prévue ({maps.status === 'ready' ? maps.meta.forecast.length : 7}j)</span>
+        <span>
+          🌦️ Pluie prévue
+          {/* Replié, le jour affiché reste visible (sinon on ne sait pas quelle journée la carte montre). */}
+          {collapsed && day ? <span className="forecast-rain-controls__current"> · {dayLabel(day.date)}</span> : ` (${maps.status === 'ready' ? maps.meta.forecast.length : 7}j)`}
+        </span>
         <span className="forecast-rain-controls__chevron">{collapsed ? '▸' : '▾'}</span>
       </button>
 
@@ -89,7 +95,7 @@ export function ForecastRainControls({ maps, image, selectedDay, onSelectDay, on
                       }
                       onClick={() => onSelectDay(i)}
                     >
-                      {d.date === today ? 'Auj.' : d.date === tomorrow ? 'Dem.' : DAY_FORMATTER.format(new Date(d.date))}
+                      {dayLabel(d.date)}
                     </button>
                   ),
                 )}

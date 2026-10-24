@@ -141,3 +141,241 @@
     line-height: 1.3;
   }
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Habillage commun des commandes flottantes : coins arrondis, ombres douces, cibles tactiles.
+   Boutons ronds de la carte (GPS, fonds) empilés en bas à droite, au-dessus des mentions.
+   --------------------------------------------------------------------------------------------- */
+:root {
+  --ui-shadow: 0 2px 10px rgba(15, 23, 42, 0.16), 0 1px 2px rgba(15, 23, 42, 0.12);
+  --ui-radius: 14px;
+}
+
+.map-view .mode-switch,
+.map-view .guide-open,
+.map-view .offline__open,
+.map-view .search-bar input,
+.map-view .rain-controls,
+.map-view .forecast-rain-controls,
+.map-view .history-layers {
+  box-shadow: var(--ui-shadow);
+  border-radius: var(--ui-radius);
+}
+
+.map-view .mode-switch__btn {
+  border-radius: 10px;
+}
+
+.map-view .floating-controls__panels {
+  align-items: flex-start;
+}
+
+/* Boutons ronds empilés (GPS au-dessus, fonds de carte en dessous). */
+.leaflet-touch .leaflet-bar.locate-control,
+.leaflet-touch .leaflet-control-layers,
+.leaflet-bar.locate-control,
+.leaflet-control-layers {
+  border: none;
+  border-radius: 50%;
+  box-shadow: var(--ui-shadow);
+  background: white;
+  overflow: hidden;
+}
+
+.locate-control {
+  overflow: visible !important;
+}
+
+.locate-control__button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+}
+
+.leaflet-control-layers-toggle,
+.leaflet-touch .leaflet-control-layers-toggle {
+  width: 48px;
+  height: 48px;
+  background-size: 22px 22px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M12 3 2 8l10 5 10-5-10-5Z'/%3E%3Cpath d='m2 13 10 5 10-5'/%3E%3Cpath d='m2 17.5 10 5 10-5' opacity='.5'/%3E%3C/svg%3E");
+}
+
+/* Liste des fonds dépliée : carte arrondie, lignes hautes et faciles à toucher. */
+.leaflet-control-layers-expanded,
+.leaflet-touch .leaflet-control-layers-expanded {
+  border-radius: var(--ui-radius);
+  padding: 8px 6px;
+  min-width: 190px;
+  font: 14px/1.2 system-ui, sans-serif;
+  color: #1f2937;
+}
+
+.leaflet-control-layers-expanded label {
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.leaflet-control-layers-expanded label > span,
+.leaflet-control-layers-expanded label > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.leaflet-control-layers-expanded input {
+  margin: 0;
+  width: 17px;
+  height: 17px;
+  accent-color: #2563eb;
+}
+
+.leaflet-control-layers-separator {
+  margin: 4px 6px;
+  border-top-color: #e5e7eb;
+}
+
+.leaflet-right .leaflet-control {
+  margin-right: 12px;
+}
+
+.leaflet-bottom .leaflet-control.locate-control,
+.leaflet-bottom .leaflet-control-layers {
+  margin-bottom: 10px;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Mobile : ligne 1 = recherche, ligne 2 = Prévisions/Historique à gauche + 🍄 📥 à droite,
+   ligne 3 = panneaux repliés en « puces » (un panneau déplié prend toute la ligne).
+   --------------------------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .map-view .floating-controls__row .search-bar {
+    order: -1;
+    flex-basis: 100%;
+  }
+
+  .map-view .search-bar input {
+    height: 44px;
+    padding: 0 14px 0 40px;
+    border: none;
+    border-radius: 22px;
+    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E") no-repeat 14px center / 18px;
+  }
+
+  .map-view .search-bar input:focus {
+    box-shadow: var(--ui-shadow), 0 0 0 2px #2563eb;
+  }
+
+  .map-view .mode-switch {
+    margin-right: auto;
+    height: 44px;
+    box-sizing: border-box;
+    border-radius: 22px;
+    padding: 3px;
+  }
+
+  .map-view .mode-switch__btn {
+    border-radius: 19px;
+    padding: 0 12px;
+    font-size: 14px;
+  }
+
+  .map-view .guide-open,
+  .map-view .offline__open {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 20px;
+    line-height: 44px;
+    text-align: center;
+  }
+
+  .map-view .offline__label {
+    display: none;
+  }
+
+  /* Carte « hors ligne » : centrée sous les commandes plutôt qu'accrochée au bouton (qui est à droite). */
+  .map-view .offline__card {
+    position: fixed;
+    top: 112px;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-height: calc(100dvh - 130px);
+  }
+
+  .map-view .rain-controls,
+  .map-view .forecast-rain-controls,
+  .map-view .history-layers {
+    width: auto;
+    border-radius: 20px;
+  }
+
+  .map-view .rain-controls--collapsed,
+  .map-view .forecast-rain-controls--collapsed,
+  .map-view .history-layers--collapsed {
+    border-radius: 20px;
+  }
+
+  .map-view .rain-controls__header,
+  .map-view .forecast-rain-controls__header {
+    min-height: 40px;
+    gap: 10px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+
+  .map-view .history-layers--collapsed {
+    padding: 0 14px;
+  }
+
+  .map-view .history-layers--collapsed .history-layers__title {
+    min-height: 40px;
+    gap: 10px;
+    padding: 0;
+    font-size: 13px;
+  }
+
+  /* Un panneau déplié prend toute la largeur (les autres puces passent à la ligne). */
+  .map-view .rain-controls:not(.rain-controls--collapsed),
+  .map-view .forecast-rain-controls:not(.forecast-rain-controls--collapsed),
+  .map-view .history-layers:not(.history-layers--collapsed) {
+    flex-basis: 100%;
+    max-width: 360px;
+    border-radius: var(--ui-radius);
+    max-height: calc(100dvh - 260px);
+    overflow-y: auto;
+  }
+
+  .map-view .forecast-rain-controls__days {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .map-view .forecast-rain-controls__day {
+    padding: 8px 2px;
+    font-size: 12px;
+  }
+
+  .map-view .forecast-rain-controls__current {
+    color: #2563eb;
+  }
+
+  .leaflet-right .leaflet-control {
+    margin-right: 8px;
+  }
+
+  /* Mentions obligatoires : une ligne tronquée, un appui pour tout afficher. */
+  .leaflet-control-attribution {
+    max-width: calc(100vw - 16px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-radius: 6px 0 0 0;
+    cursor: pointer;
+  }
+
+  .leaflet-control-attribution.attribution--expanded {
+    white-space: normal;
+  }
+}
