@@ -1,5 +1,7 @@
 // Fiche d'un endroit en mode « Coins » : note, milieu, météo, et pourquoi c'est (ou non) un bon coin.
-import { SPECIES, scoreLabel, type Species, type SpotDetail } from '../lib/coins'
+import { SPECIES, scoreLabel, type SeriesPoint, type Species, type SpotDetail } from '../lib/coins'
+import { useParisToday } from '../lib/useParisToday'
+import { PotentialChart } from './PotentialChart'
 import './CoinsSpotCard.css'
 
 type Props = {
@@ -9,10 +11,12 @@ type Props = {
   name: string | null
   detail: SpotDetail | null
   loading: boolean
+  series: SeriesPoint[] | null
   onClose: () => void
 }
 
-export function CoinsSpotCard({ species, lat, lon, name, detail, loading, onClose }: Props) {
+export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series, onClose }: Props) {
+  const { today } = useParisToday()
   const sp = SPECIES.find((s) => s.key === species)!
   const nav = `https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(5)},${lon.toFixed(5)}`
   return (
@@ -54,6 +58,7 @@ export function CoinsSpotCard({ species, lat, lon, name, detail, loading, onClos
               🌡️ <b>Températures</b> : {detail.temp5.toFixed(0)} °C en moyenne ces 5 jours
             </li>
           </ul>
+          {series && <PotentialChart series={series} today={today} />}
           {detail.reasons.length > 0 && (
             <ul className="spot-card__reasons">
               {detail.reasons.map((r) => (

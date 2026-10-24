@@ -21,7 +21,8 @@ export const isSpecies = (v: unknown): v is Species => SPECIES.some((s) => s.key
 
 type Bounds = { latMin: number; latMax: number; lonMin: number; lonMax: number }
 type HabitatMeta = { bounds: Bounds; rows: number; cols: number; groups: string[]; species: Species[] }
-export type PousseDay = { date: string; files: Record<Species, string>; info: string; tempModel: string }
+// reliable = false : jours 8 à 15 (modèle AIFS seul), seulement pour la courbe de la fiche, en pointillés.
+export type PousseDay = { date: string; files: Record<Species, string>; info: string; tempModel: string; reliable?: boolean }
 export type PousseMeta = {
   generatedAt: string
   bounds: Bounds
@@ -440,4 +441,18 @@ export function pousseAt(res: CoinsResult, lat: number, lon: number): number {
       (v[y1 * g.width + x0] * (1 - wx) + v[y1 * g.width + x1] * wx) * wy) /
     255
   )
+}
+
+// --------------------------------------------------------------------------------------------------
+// Courbe de potentiel d'un endroit : habitat (fixe) x météo de pousse de chaque jour publié (jusqu'à 15).
+export type SeriesPoint = { date: string; value: number; reliable: boolean }
+
+export async function potentialSeries(res: CoinsResult, sp: Species, lat: number, lon: number, habitat: number): Promise<SeriesPoint[]> {
+  const days = res.meta.days.filter((d) => d.files[sp])
+  const grids = await Promise.all(days.map((d) => loadPousse(d.files[sp]).catch(() => null)))
+  return days.flatMap((d, k) => {
+    const g = grids[k]
+    if (!g) return []
+    return [{ date: d.date, value: habitat * pousseAt({ ...res, pousse: g }, lat, lon), reliable: d.reliable !== false }]
+  })
 }

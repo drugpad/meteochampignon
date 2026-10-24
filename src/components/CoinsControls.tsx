@@ -75,7 +75,8 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
           {meta && (
             <div className="coins__days">
               {meta.days.map((d, i) =>
-                d.date < today ? null : (
+                // Jours 8 à 15 (AIFS seul, peu fiables) : seulement dans la courbe de la fiche, pas en carte.
+                d.date < today || d.reliable === false ? null : (
                   <button
                     key={d.date}
                     type="button"

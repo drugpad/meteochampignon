@@ -24,7 +24,7 @@ import { CoinsControls, type NamedSpot } from './CoinsControls'
 import { CoinsFineLayer } from './CoinsFineLayer'
 import { CoinsLayer } from './CoinsLayer'
 import { CoinsSpotCard } from './CoinsSpotCard'
-import { computeCoins, describeSpot, FINE_MIN_ZOOM, isSpecies, loadFineMeta, loadPousseMeta, topSpots, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
+import { computeCoins, describeSpot, FINE_MIN_ZOOM, isSpecies, loadFineMeta, loadPousseMeta, potentialSeries, type SeriesPoint, topSpots, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
 import { reverseCity } from '../lib/geocoding'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import { LocateControl } from './LocateControl'
@@ -251,7 +251,14 @@ export function MapView() {
     if (mode === 'coins') void loadFineMeta().then((m) => setFineSpecies(m?.species ?? null))
   }, [mode])
   const fineIndex = fineSpecies ? fineSpecies.indexOf(coinsSpecies) : -1
-  const [spot, setSpot] = useState<{ lat: number; lon: number; name: string | null; detail: SpotDetail | null; loading: boolean } | null>(null)
+  const [spot, setSpot] = useState<{
+    lat: number
+    lon: number
+    name: string | null
+    detail: SpotDetail | null
+    loading: boolean
+    series: SeriesPoint[] | null
+  } | null>(null)
 
   useEffect(() => {
     if (mode !== 'coins') return
@@ -286,10 +293,14 @@ export function MapView() {
   const openSpot = useCallback(
     (lat: number, lon: number, knownName: string | null = null) => {
       if (!coinsResult) return
-      setSpot({ lat, lon, name: knownName, detail: null, loading: true })
-      void describeSpot(coinsResult, coinsSpecies, lat, lon).then((detail) =>
-        setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, detail, loading: false } : s)),
-      )
+      setSpot({ lat, lon, name: knownName, detail: null, loading: true, series: null })
+      void describeSpot(coinsResult, coinsSpecies, lat, lon).then(async (detail) => {
+        setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, detail, loading: false } : s))
+        // Courbe sur 15 jours : même habitat que la fiche, météo de pousse de chaque jour publié.
+        if (!detail) return
+        const series = await potentialSeries(coinsResult, coinsSpecies, lat, lon, detail.habitat)
+        setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, series } : s))
+      })
       if (!knownName) void reverseCity(lat, lon).then((name) => setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, name } : s)))
     },
     [coinsResult, coinsSpecies],
@@ -564,6 +575,7 @@ export function MapView() {
           name={spot.name}
           detail={spot.detail}
           loading={spot.loading}
+          series={spot.series}
           onClose={() => setSpot(null)}
         />
       )}

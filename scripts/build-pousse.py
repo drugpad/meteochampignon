@@ -41,6 +41,7 @@ OUT_DIR, WORK_DIR = rm.OUT_DIR, rm.WORK_DIR
 REPO = os.environ.get("GITHUB_REPOSITORY", "drugpad/meteochampignon")
 ARCHIVE_URL = os.environ.get("WEATHER_ARCHIVE_URL", f"https://raw.githubusercontent.com/{REPO}/data/weather")
 KEEP_DAYS = 40
+LONG_DAYS = 15  # courbe de potentiel : aujourd'hui + 14 jours
 HISTORY_DAYS = 35  # profondeur utilisée par le modèle de pousse
 log = rm.log
 
@@ -456,6 +457,19 @@ def main():
         forecast_days.append((d, np.load(path)))
     if not forecast_days:
         raise RuntimeError("pas de pluie prévue laissée par build-rain-maps.py")
+    # Jours 8 à 15 : modèle d'IA d'ECMWF (AIFS, 15 jours d'échéance, maille de 25 km), pour la courbe de
+    # potentiel de la fiche d'un endroit. Prévision peu fiable au-delà d'une semaine : marquée « reliable »
+    # = false dans pousse.json, tracée en pointillés dans l'appli. Les cartes et les jours cliquables restent
+    # limités aux 7 premiers jours.
+    aifs = rm.load_model("ecmwf_aifs025_single") if len(forecast_days) == 7 else None
+    while aifs is not None and len(forecast_days) < LONG_DAYS:
+        d = today + timedelta(days=len(forecast_days))
+        _, start, end = rm.paris_day_bounds(d, 0)
+        field = rm.stepped_field(aifs, start, end, rows, cols)
+        if field is None:
+            break
+        forecast_days.append((d, field))
+    log(f"jours prévus : {len(forecast_days)} (dont {max(0, len(forecast_days) - 7)} avec AIFS seul)")
 
     coarse = {}
     bias = {}
@@ -537,7 +551,7 @@ def main():
             files[sp] = fname
         info = f"pousse-info-d{len(out_days)}.png"
         save_png(info_layer(series, timeline, k), f"{OUT_DIR}/{info}")
-        out_days.append({"date": d.isoformat(), "files": files, "info": info, "tempModel": temps[d][2]})
+        out_days.append({"date": d.isoformat(), "files": files, "info": info, "tempModel": temps[d][2], "reliable": len(out_days) < 7})
         log(f"{d} : " + ", ".join(f"{sp} {np.asarray(Image.open(f'{OUT_DIR}/{files[sp]}')).mean() / 255:.3f}" for sp in SPECIES))
 
     missing_now = [d.isoformat() for d in timeline[:HISTORY_DAYS] if d not in archive]

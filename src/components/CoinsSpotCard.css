@@ -107,3 +107,29 @@
     bottom: 26px;
   }
 }
+
+.potential {
+  margin: 10px 0 0;
+}
+
+.potential figcaption {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.potential__best {
+  font-weight: 500;
+  color: #b45309;
+}
+
+.potential__band,
+.potential__tick,
+.potential__note {
+  font: 10px system-ui, sans-serif;
+  fill: #6b7280;
+}
+
+.potential__note {
+  font-style: italic;
+}
