@@ -5,7 +5,7 @@
 import { Bar, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import './StationPopup.css'
 import { formatRelativeAge, isOlderThanHours } from '../lib/formatRelativeAge'
-import { COMPLETE_RATIO, meteocielStationUrl } from '../lib/stations'
+import { COMPLETE_RATIO, meteocielStationUrl, prettyStationName } from '../lib/stations'
 import { weatherCodeInfo } from '../lib/weatherCode'
 import type { StationDetailState } from '../types'
 
@@ -101,7 +101,7 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
     <div className={rootClassName}>
       {variant === 'popup' && (
         <>
-          <div className="station-popup__title">{station.name}</div>
+          <div className="station-popup__title">{prettyStationName(station.name)}</div>
           {station.altitude !== undefined && <div className="station-popup__altitude">{station.altitude} m d'altitude</div>}
         </>
       )}

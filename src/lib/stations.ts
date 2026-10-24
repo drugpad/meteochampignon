@@ -220,3 +220,11 @@ export async function fetchStationDetail(station: Station): Promise<StationDetai
     upstreamCheck: history.upstream[station.id] ?? null,
   }
 }
+
+// « PRADINAS_SAPC » -> « Pradinas Sapc » : les noms Météo-France sont en capitales avec des soulignés.
+export function prettyStationName(name: string): string {
+  return name
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/(^|[\s'-])(\p{L})/gu, (_m, sep: string, c: string) => sep + c.toUpperCase())
+}
