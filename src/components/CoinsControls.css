@@ -42,11 +42,31 @@
   overflow-y: auto;
 }
 
+.coins__group-title {
+  margin: 2px 0 4px;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .coins__chips {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 6px;
   margin-bottom: 8px;
+}
+
+.coins__chips--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.coins__hint {
+  margin: -2px 0 10px;
+  color: #92400e;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .coins__chip,

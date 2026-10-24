@@ -23,11 +23,26 @@ CACHE = os.path.join(ROOT, ".cache-habitat")
 OUT = os.path.join(ROOT, "public", "habitat")
 LAT_MIN, LAT_MAX, LON_MIN, LON_MAX = 42.595, 45.155, -0.405, 3.405
 
-# Arbres hôtes (mycorhiziens) : poids par groupe d'essences de la BD Forêt.
+# Arbres hôtes (mycorhiziens) : poids par groupe d'essences de la BD Forêt. Les quatre cèpes sont séparés
+# (retour utilisateur : « ce ne sont pas du tout les mêmes zones ») : cèpe d'été et cèpe bronzé, de chaleur,
+# sous chênes et châtaigniers de plaine et de coteaux ; cèpe de Bordeaux, ubiquiste et frais, jusqu'en
+# montagne ; cèpe des pins, sous conifères, surtout en altitude.
 HOSTS = {
-    "cepe": {  # Boletus edulis / aestivalis / aereus / pinophilus
-        "chene": 1, "chataignier": 1, "hetre": 1, "mixte": 0.8, "feuillus": 0.7, "sapin_epicea": 0.7,
-        "pins": 0.6, "chene_vert": 0.5, "autres_conif": 0.3, "lande": 0.15, "robinier": 0.1, "peuplier": 0.05,
+    "cepe_ete": {  # Boletus reticulatus (= aestivalis)
+        "chene": 1, "chataignier": 0.9, "hetre": 0.8, "feuillus": 0.75, "mixte": 0.5, "chene_vert": 0.4,
+        "lande": 0.1, "robinier": 0.1, "pins": 0.05, "sapin_epicea": 0.05, "autres_conif": 0.05, "peuplier": 0.05,
+    },
+    "cepe_bronze": {  # Boletus aereus (tête de nègre)
+        "chene": 1, "chataignier": 1, "chene_vert": 0.8, "feuillus": 0.7, "mixte": 0.4, "hetre": 0.3,
+        "pins": 0.1, "lande": 0.1, "robinier": 0.05,
+    },
+    "cepe_bordeaux": {  # Boletus edulis
+        "hetre": 1, "sapin_epicea": 1, "chene": 0.9, "chataignier": 0.9, "mixte": 0.9, "feuillus": 0.65,
+        "pins": 0.5, "autres_conif": 0.5, "chene_vert": 0.3, "lande": 0.1, "robinier": 0.05, "peuplier": 0.05,
+    },
+    "cepe_pins": {  # Boletus pinophilus
+        "pins": 1, "sapin_epicea": 0.9, "mixte": 0.7, "autres_conif": 0.6, "hetre": 0.5, "lande": 0.3,
+        "chataignier": 0.3, "chene": 0.3, "feuillus": 0.2,
     },
     "girolle": {  # Cantharellus cibarius
         "hetre": 1, "chene": 0.9, "chataignier": 0.9, "sapin_epicea": 0.9, "mixte": 0.85, "feuillus": 0.65,
@@ -41,19 +56,25 @@ HOSTS = {
 
 # Courbes (points (x, facteur), interpolation linéaire, constantes au-delà).
 PH = {
-    "cepe": [(3.5, 0.6), (4.5, 1), (6.0, 1), (6.8, 0.6), (7.5, 0.35), (8.5, 0.3)],  # sols acides à neutres
+    "cepe_ete": [(4.0, 0.7), (5.0, 1), (7.2, 1), (8.0, 0.7)],  # tolère les sols calcaires
+    "cepe_bronze": [(4.0, 0.9), (4.5, 1), (6.0, 1), (6.8, 0.5), (7.5, 0.2)],  # sols acides, chauds
+    "cepe_bordeaux": [(3.5, 0.7), (4.2, 1), (5.8, 1), (6.6, 0.5), (7.5, 0.25)],  # acidophile
+    "cepe_pins": [(3.5, 0.9), (4.2, 1), (5.5, 1), (6.3, 0.4), (7.0, 0.1)],  # très acidophile
     "girolle": [(3.5, 0.8), (4.2, 1), (5.8, 1), (6.5, 0.5), (7.3, 0.2), (8.5, 0.15)],  # nettement acidophile
     "trompette": [(3.5, 0.4), (4.5, 0.65), (5.3, 1), (7.5, 1), (8.5, 0.8)],  # argilo-calcaire, neutre
     "coulemelle": [(3.5, 1), (8.5, 1)],  # indifférente
 }
 ALT = {
-    "cepe": [(0, 0.85), (300, 1), (1300, 1), (1700, 0.4), (2000, 0)],
+    "cepe_ete": [(0, 1), (800, 1), (1100, 0.5), (1400, 0)],  # plaine et coteaux
+    "cepe_bronze": [(0, 1), (500, 1), (800, 0.4), (1000, 0)],  # thermophile, basse altitude
+    "cepe_bordeaux": [(0, 0.6), (300, 0.8), (600, 1), (1600, 1), (1900, 0.4), (2100, 0)],  # plutôt frais
+    "cepe_pins": [(0, 0.5), (400, 0.7), (800, 1), (2000, 1), (2300, 0.3)],  # montagne surtout
     "girolle": [(0, 0.85), (300, 1), (1500, 1), (1900, 0.3), (2100, 0)],
     "trompette": [(0, 0.9), (300, 1), (1200, 1), (1500, 0.4), (1800, 0)],
     "coulemelle": [(0, 1), (1200, 1), (1700, 0.3), (2000, 0)],
 }
 SLOPE = [(0, 1), (30, 1), (40, 0.6), (55, 0.2)]  # falaises et éboulis : peu de sol
-SPECIES = ["cepe", "girolle", "coulemelle", "trompette"]
+SPECIES = ["cepe_ete", "cepe_bronze", "cepe_bordeaux", "cepe_pins", "girolle", "coulemelle", "trompette"]
 
 
 def curve(x, pts):

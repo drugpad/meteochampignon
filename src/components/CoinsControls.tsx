@@ -51,20 +51,26 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
 
       {!collapsed && (
         <div className="coins__body">
-          <div className="coins__chips" role="radiogroup" aria-label="Espèce">
-            {SPECIES.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                role="radio"
-                aria-checked={s.key === species}
-                className={s.key === species ? 'coins__chip coins__chip--on' : 'coins__chip'}
-                onClick={() => onSpecies(s.key)}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+          {(['cepe', 'autre'] as const).map((group) => (
+            <div key={group} className="coins__group" role="radiogroup" aria-label={group === 'cepe' ? 'Cèpes' : 'Autres espèces'}>
+              <div className="coins__group-title">{group === 'cepe' ? 'Cèpes' : 'Autres'}</div>
+              <div className={group === 'cepe' ? 'coins__chips' : 'coins__chips coins__chips--3'}>
+                {SPECIES.filter((s) => s.group === group).map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={s.key === species}
+                    className={s.key === species ? 'coins__chip coins__chip--on' : 'coins__chip'}
+                    onClick={() => onSpecies(s.key)}
+                  >
+                    {s.short}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <p className="coins__hint">{sp.hint}</p>
 
           {meta && (
             <div className="coins__days">

@@ -6,13 +6,18 @@
 // (~250 m) ; la météo (~1 km) est interpolée sur la grille de l'habitat.
 import { fetchDataJson, fetchPixels } from './rainMaps'
 
-export type Species = 'cepe' | 'girolle' | 'coulemelle' | 'trompette'
-export const SPECIES: { key: Species; label: string; emoji: string }[] = [
-  { key: 'cepe', label: 'Cèpe', emoji: '🟤' },
-  { key: 'girolle', label: 'Girolle', emoji: '🟡' },
-  { key: 'coulemelle', label: 'Coulemelle', emoji: '⚪' },
-  { key: 'trompette', label: 'Trompette', emoji: '⚫' },
+// Les quatre cèpes sont séparés : ils ne poussent ni aux mêmes endroits ni à la même saison.
+export type Species = 'cepe_ete' | 'cepe_bronze' | 'cepe_bordeaux' | 'cepe_pins' | 'girolle' | 'coulemelle' | 'trompette'
+export const SPECIES: { key: Species; label: string; short: string; group: 'cepe' | 'autre'; hint: string }[] = [
+  { key: 'cepe_ete', label: "Cèpe d'été", short: "d'été", group: 'cepe', hint: 'chênes, châtaigniers ; juin-septembre, chaleur' },
+  { key: 'cepe_bronze', label: 'Cèpe bronzé', short: 'bronzé', group: 'cepe', hint: 'tête de nègre ; chênes, coteaux chauds ; été-début automne' },
+  { key: 'cepe_bordeaux', label: 'Cèpe de Bordeaux', short: 'de Bordeaux', group: 'cepe', hint: 'feuillus et sapins, jusqu’en montagne ; automne, fraîcheur' },
+  { key: 'cepe_pins', label: 'Cèpe des pins', short: 'des pins', group: 'cepe', hint: 'pins, sapins, surtout en altitude ; automne' },
+  { key: 'girolle', label: 'Girolle', short: 'Girolle', group: 'autre', hint: 'feuillus et conifères, sol acide' },
+  { key: 'coulemelle', label: 'Coulemelle', short: 'Coulemelle', group: 'autre', hint: 'prairies, lisières, clairières' },
+  { key: 'trompette', label: 'Trompette', short: 'Trompette', group: 'autre', hint: 'hêtres et chênes, sol argileux' },
 ]
+export const isSpecies = (v: unknown): v is Species => SPECIES.some((s) => s.key === v)
 
 type Bounds = { latMin: number; latMax: number; lonMin: number; lonMax: number }
 type HabitatMeta = { bounds: Bounds; rows: number; cols: number; groups: string[]; species: Species[] }
@@ -124,6 +129,8 @@ export type CoinsResult = { score: Float32Array; width: number; height: number; 
 export async function computeCoins(sp: Species, dayIndex: number): Promise<CoinsResult> {
   const [hmeta, meta] = await Promise.all([loadHabitatMeta(), loadPousseMeta()])
   const day = meta.days[Math.min(dayIndex, meta.days.length - 1)]
+  // Espèce ajoutée dans l'appli mais pas encore calculée côté serveur (entre deux publications).
+  if (!day.files[sp]) throw new Error('espèce pas encore calculée')
   const [hab, pou] = await Promise.all([loadHabitat(sp), loadPousse(day.files[sp])])
   const { width, height } = hab
   const score = new Float32Array(width * height)

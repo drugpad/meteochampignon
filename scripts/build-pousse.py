@@ -204,6 +204,8 @@ def backfill_open_meteo(dates, rows, cols):
             f"&start_date={start}&end_date={end}&daily=precipitation_sum,temperature_2m_mean,temperature_2m_min"
             "&models=meteofrance_seamless&timezone=Europe%2FParis"
         )
+        # Nouvel essai sur « trop de requêtes » (429) ET sur coupure réseau / délai dépassé : le 24/10/2026, le
+        # premier run sur GitHub a échoué sur « handshake operation timed out », sans nouvel essai.
         for attempt in range(4):
             try:
                 data = json.loads(fetch(url, timeout=120))
@@ -213,6 +215,11 @@ def backfill_open_meteo(dates, rows, cols):
                     raise
                 log("  Open-Meteo : trop de requêtes, pause de 65 s")
                 time.sleep(65)
+            except (urllib.error.URLError, TimeoutError, OSError) as err:
+                if attempt == 3:
+                    raise
+                log(f"  Open-Meteo injoignable ({err}), nouvel essai dans 20 s")
+                time.sleep(20)
         data = data if isinstance(data, list) else [data]
         for j, loc in enumerate(data):
             dd = loc["daily"]
@@ -313,8 +320,16 @@ SPECIES = {
     # seuil : pluie sur 3 jours qui déclenche une pousse (mm) ; dd : degrés-jours (base 4 °C) depuis
     # l'épisode -> début, pic, fin de la fenêtre de pousse ; temp : courbe de la température moyenne des
     # 5 derniers jours ; saison : facteur par mois (janvier -> décembre).
-    "cepe": {"seuil": 30, "dd": (90, 140, 260), "temp": [(4, 0), (8, 0.5), (12, 1), (20, 1), (24, 0.6), (28, 0.2)],
-             "saison": [0, 0, 0, 0, 0.25, 0.4, 0.5, 0.6, 1, 1, 0.6, 0.15]},
+    # Cèpes de chaleur : sortent vite après un orage par temps chaud, de juin à septembre.
+    "cepe_ete": {"seuil": 25, "dd": (60, 100, 190), "temp": [(10, 0), (14, 0.6), (17, 1), (26, 1), (30, 0.5)],
+                 "saison": [0, 0, 0, 0, 0.4, 0.9, 1, 1, 0.8, 0.3, 0.05, 0]},
+    "cepe_bronze": {"seuil": 25, "dd": (70, 115, 210), "temp": [(10, 0), (14, 0.6), (17, 1), (25, 1), (29, 0.5)],
+                    "saison": [0, 0, 0, 0, 0.1, 0.4, 0.8, 1, 1, 0.6, 0.15, 0]},
+    # Cèpes d'automne : il leur faut de la fraîcheur (nuits qui rafraîchissent), septembre à novembre.
+    "cepe_bordeaux": {"seuil": 30, "dd": (90, 140, 260), "temp": [(4, 0), (7, 0.5), (10, 1), (17, 1), (21, 0.5), (25, 0.15)],
+                      "saison": [0, 0, 0, 0, 0.1, 0.2, 0.2, 0.4, 0.9, 1, 0.7, 0.15]},
+    "cepe_pins": {"seuil": 30, "dd": (90, 140, 260), "temp": [(4, 0), (7, 0.5), (10, 1), (18, 1), (22, 0.5)],
+                  "saison": [0, 0, 0, 0, 0.1, 0.3, 0.5, 0.6, 1, 1, 0.5, 0.1]},
     "girolle": {"seuil": 20, "dd": (100, 180, 380), "temp": [(6, 0), (10, 0.6), (14, 1), (22, 1), (26, 0.5)],
                 "saison": [0, 0, 0, 0, 0.3, 0.8, 1, 1, 1, 0.8, 0.4, 0.1]},
     "coulemelle": {"seuil": 15, "dd": (70, 120, 240), "temp": [(6, 0), (10, 0.6), (13, 1), (22, 1), (26, 0.5)],

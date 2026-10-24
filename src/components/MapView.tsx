@@ -23,7 +23,7 @@ import { BubbleStationsLayer } from './BubbleStationsLayer'
 import { CoinsControls, type NamedSpot } from './CoinsControls'
 import { CoinsLayer } from './CoinsLayer'
 import { CoinsSpotCard } from './CoinsSpotCard'
-import { computeCoins, describeSpot, loadPousseMeta, topSpots, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
+import { computeCoins, describeSpot, isSpecies, loadPousseMeta, topSpots, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
 import { reverseCity } from '../lib/geocoding'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import { LocateControl } from './LocateControl'
@@ -223,11 +223,11 @@ export function MapView() {
   const [coinsSpecies, setCoinsSpeciesState] = useState<Species>(() => {
     try {
       const saved = localStorage.getItem('mc-coins-species')
-      if (saved === 'cepe' || saved === 'girolle' || saved === 'coulemelle' || saved === 'trompette') return saved
+      if (isSpecies(saved)) return saved
     } catch {
       // stockage indisponible
     }
-    return 'cepe'
+    return 'cepe_bordeaux'
   })
   const setCoinsSpecies = useCallback((sp: Species) => {
     setCoinsSpeciesState(sp)

@@ -24,7 +24,10 @@
   "herbe"
  ],
  "species": [
-  "cepe",
+  "cepe_ete",
+  "cepe_bronze",
+  "cepe_bordeaux",
+  "cepe_pins",
   "girolle",
   "coulemelle",
   "trompette"
