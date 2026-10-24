@@ -142,6 +142,24 @@
   margin: 2px 0 10px;
 }
 
+.coins__zone-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 10px;
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.coins__zone-swatch {
+  flex: none;
+  width: 22px;
+  height: 12px;
+  border: 2px solid rgba(92, 40, 10, 0.85);
+  background: rgba(120, 53, 15, 0.13);
+  border-radius: 3px;
+}
+
 .coins__top-toggle {
   width: 100%;
   border: none;

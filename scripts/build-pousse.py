@@ -323,8 +323,10 @@ SPECIES = {
     # Cèpes de chaleur : sortent vite après un orage par temps chaud, de juin à septembre.
     "cepe_ete": {"seuil": 25, "dd": (60, 100, 190), "temp": [(10, 0), (14, 0.6), (17, 1), (26, 1), (30, 0.5)],
                  "saison": [0, 0, 0, 0, 0.4, 0.9, 1, 1, 0.8, 0.3, 0.05, 0]},
-    "cepe_bronze": {"seuil": 25, "dd": (70, 115, 210), "temp": [(10, 0), (14, 0.6), (17, 1), (25, 1), (29, 0.5)],
-                    "saison": [0, 0, 0, 0, 0.1, 0.4, 0.8, 1, 1, 0.6, 0.15, 0]},
+    # Assoupli le 24/10/2026 : la tête de nègre donne encore un peu en octobre, voire début novembre les
+    # automnes doux, dans les coteaux (1re version : éteinte sous 10 °C et octobre réduit de moitié).
+    "cepe_bronze": {"seuil": 25, "dd": (70, 115, 210), "temp": [(8, 0), (11, 0.5), (15, 1), (25, 1), (29, 0.5)],
+                    "saison": [0, 0, 0, 0, 0.1, 0.4, 0.8, 1, 1, 0.9, 0.35, 0.05]},
     # Cèpes d'automne : il leur faut de la fraîcheur (nuits qui rafraîchissent), septembre à novembre.
     "cepe_bordeaux": {"seuil": 30, "dd": (90, 140, 260), "temp": [(4, 0), (7, 0.5), (10, 1), (17, 1), (21, 0.5), (25, 0.15)],
                       "saison": [0, 0, 0, 0, 0.1, 0.2, 0.2, 0.4, 0.9, 1, 0.7, 0.15]},

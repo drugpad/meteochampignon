@@ -133,6 +133,7 @@ export type CoinsResult = {
   meta: PousseMeta
   species: Species
   pousse: Grid // météo de pousse de l'espèce (~1 km), réutilisée par les tuiles à 20 m
+  habitat: Grid // habitat de l'espèce (250 m), pour le contour des zones favorables
 }
 
 export async function computeCoins(sp: Species, dayIndex: number): Promise<CoinsResult> {
@@ -163,7 +164,7 @@ export async function computeCoins(sp: Species, dayIndex: number): Promise<Coins
       score[r * width + c] = (h / 255) * (p / 255)
     }
   }
-  return { score, width, height, bounds: hmeta.bounds, day, meta, species: sp, pousse: pou }
+  return { score, width, height, bounds: hmeta.bounds, day, meta, species: sp, pousse: pou, habitat: hab }
 }
 
 // Palette : transparent sous 0,12, puis jaune -> orange -> rouge -> violet foncé.
@@ -196,21 +197,53 @@ export function colorOf(v: number): [number, number, number, number] {
   return STOPS[STOPS.length - 1][1]
 }
 
+// Zones où le MILIEU convient à l'espèce (habitat ≥ 50 %), dessinées quelle que soit la météo : un léger
+// voile et un trait sur leur bord. Hors saison, la carte montre ainsi toujours où chercher ; la couleur de
+// pousse (jaune -> violet) se pose par-dessus quand la météo s'y prête.
+export const ZONE_THRESHOLD = 0.5
+export const ZONE_FILL: [number, number, number, number] = [120, 53, 15, 34]
+export const ZONE_EDGE: [number, number, number, number] = [92, 40, 10, 215]
+
+// Peint une grille (score + habitat, même taille) : voile de zone, couleur de pousse, puis contour.
+export function paintZones(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  scoreAt: (i: number) => number,
+  goodAt: (i: number) => boolean,
+): void {
+  for (let r = 0; r < height; r++) {
+    for (let c = 0; c < width; c++) {
+      const i = r * width + c
+      const good = goodAt(i)
+      let px: [number, number, number, number] = [0, 0, 0, 0]
+      if (good) px = ZONE_FILL
+      const v = scoreAt(i)
+      if (v >= STOPS[0][0]) px = colorOf(v)
+      // Bord de zone : case favorable dont un voisin (gauche, droite, haut, bas) ne l'est pas.
+      if (
+        good &&
+        ((c > 0 && !goodAt(i - 1)) || (c < width - 1 && !goodAt(i + 1)) || (r > 0 && !goodAt(i - width)) || (r < height - 1 && !goodAt(i + width)))
+      ) {
+        px = ZONE_EDGE
+      }
+      if (px[3] === 0) continue
+      data[i * 4] = px[0]
+      data[i * 4 + 1] = px[1]
+      data[i * 4 + 2] = px[2]
+      data[i * 4 + 3] = px[3]
+    }
+  }
+}
+
 export function renderCoins(res: CoinsResult): string {
   const canvas = document.createElement('canvas')
   canvas.width = res.width
   canvas.height = res.height
   const ctx = canvas.getContext('2d')!
   const img = ctx.createImageData(res.width, res.height)
-  for (let i = 0; i < res.score.length; i++) {
-    const v = res.score[i]
-    if (v < STOPS[0][0]) continue
-    const [r, g, b, a] = colorOf(v)
-    img.data[i * 4] = r
-    img.data[i * 4 + 1] = g
-    img.data[i * 4 + 2] = b
-    img.data[i * 4 + 3] = a
-  }
+  const threshold = ZONE_THRESHOLD * 255
+  paintZones(img.data, res.width, res.height, (i) => res.score[i], (i) => res.habitat.values[i] >= threshold)
   ctx.putImageData(img, 0, 0)
   return canvas.toDataURL()
 }

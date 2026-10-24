@@ -4,7 +4,7 @@
 import L from 'leaflet'
 import { useEffect, useRef } from 'react'
 import { useMap } from 'react-leaflet'
-import { colorOf, FINE_MAX_ZOOM, FINE_MIN_ZOOM, fineLevel, loadFineTile, type CoinsResult } from '../lib/coins'
+import { FINE_MAX_ZOOM, FINE_MIN_ZOOM, fineLevel, loadFineTile, paintZones, type CoinsResult } from '../lib/coins'
 
 type Props = { result: CoinsResult; speciesIndex: number }
 
@@ -45,6 +45,8 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
         gy[i] = Math.min(Math.max(((b.latMax - lat) / (b.latMax - b.latMin)) * g.height - 0.5, 0), g.height - 1)
       }
       const v = g.values
+      const score = new Float32Array(256 * 256)
+      const levels = new Uint8Array(256 * 256)
       for (let r = 0; r < 256; r++) {
         const y0 = Math.floor(gy[r])
         const y1 = Math.min(y0 + 1, g.height - 1)
@@ -52,6 +54,7 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
         for (let c = 0; c < 256; c++) {
           const i = r * 256 + c
           const level = fineLevel(rgba, i, idx)
+          levels[i] = level
           if (level === 0) continue
           const x0 = Math.floor(gx[c])
           const x1 = Math.min(x0 + 1, g.width - 1)
@@ -60,14 +63,11 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
             ((v[y0 * g.width + x0] * (1 - wx) + v[y0 * g.width + x1] * wx) * (1 - wy) +
               (v[y1 * g.width + x0] * (1 - wx) + v[y1 * g.width + x1] * wx) * wy) /
             255
-          const [cr, cg, cb, ca] = colorOf((level / 7) * p)
-          if (ca === 0) continue
-          img.data[i * 4] = cr
-          img.data[i * 4 + 1] = cg
-          img.data[i * 4 + 2] = cb
-          img.data[i * 4 + 3] = ca
+          score[i] = (level / 7) * p
         }
       }
+      // Zone favorable = habitat ≥ 4/7 (≥ 50 %) : voile + contour, couleur de pousse par-dessus.
+      paintZones(img.data, 256, 256, (i) => score[i], (i) => levels[i] >= 4)
       ctx.putImageData(img, 0, 0)
     }
 

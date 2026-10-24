@@ -108,6 +108,10 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
             <span>possible</span>
             <span>excellent</span>
           </div>
+          <div className="coins__zone-legend">
+            <span className="coins__zone-swatch" aria-hidden="true" />
+            Milieu favorable à l'espèce (quelle que soit la météo)
+          </div>
 
           {status === 'ready' && (
             <button type="button" className="coins__top-toggle" onClick={() => setShowTop((v) => !v)} aria-expanded={showTop}>
