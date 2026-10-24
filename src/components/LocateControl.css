@@ -49,3 +49,30 @@
   font: 12px/1.35 system-ui, sans-serif;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
+
+/* Position : point bleu cerclé de blanc + cône de direction (tourné en JS selon la boussole). */
+.locate-position {
+  pointer-events: none;
+}
+
+.locate-position__beam {
+  display: none;
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  transition: transform 0.15s linear;
+}
+
+.locate-position__dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 3px solid white;
+  box-sizing: border-box;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4);
+}
