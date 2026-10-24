@@ -2,7 +2,8 @@
 
 export type Point = { lat: number; lon: number }
 
-export type AppMode = 'previsions' | 'historique'
+// « carte » : le fond de carte seul (sentiers, GPS), sans couche météo.
+export type AppMode = 'carte' | 'previsions' | 'historique'
 
 // Un jour de prévision (module Prévisions 7 jours, Open-Meteo best_match).
 export type ForecastDay = {

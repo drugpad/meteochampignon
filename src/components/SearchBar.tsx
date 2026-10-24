@@ -87,7 +87,7 @@ export function SearchBar({ onSelect }: SearchBarProps) {
     <div className="search-bar" ref={containerRef}>
       <input
         type="text"
-        placeholder="Rechercher une ville ou une adresse…"
+        placeholder="Rechercher un lieu…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => visibleResults.length > 0 && query !== selectedLabelRef.current && setIsOpen(true)}

@@ -4,7 +4,10 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
   canInstall,
   deleteOffline,
+  deleteZone,
   downloadOffline,
+  downloadZone,
+  estimateZoneMo,
   isIos,
   isOnline,
   isStandalone,
@@ -12,7 +15,13 @@ import {
   offlineSupported,
   promptInstall,
   readOfflineInfo,
+  readZones,
   subscribe,
+  ZONE_MAX_TILES,
+  ZONE_MAX_ZOOM,
+  zoneTileUrls,
+  type OfflineZone,
+  type ZoneBounds,
   type OfflineInfo,
   type OfflineLevel,
   type OfflineProgress,
@@ -23,7 +32,15 @@ const formatMo = (bytes: number) => `${Math.max(1, Math.round(bytes / 1048576))}
 const formatWhen = (iso: string) =>
   new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 
-export function OfflinePanel() {
+type Props = {
+  // Emprise affichée à l'écran (zone détaillée à enregistrer) et recentrage sur une zone enregistrée.
+  getViewBounds: () => ZoneBounds | null
+  onShowZone: (zone: OfflineZone) => void
+  // Nouvelle zone ou zone supprimée : la carte met à jour ses couches hors ligne.
+  onZonesChange: (zones: OfflineZone[]) => void
+}
+
+export function OfflinePanel({ getViewBounds, onShowZone, onZonesChange }: Props) {
   const online = useSyncExternalStore(subscribe, isOnline)
   const installable = useSyncExternalStore(subscribe, canInstall)
   const [open, setOpen] = useState(false)
@@ -31,6 +48,14 @@ export function OfflinePanel() {
   const [info, setInfo] = useState<OfflineInfo | null>(() => readOfflineInfo())
   const [progress, setProgress] = useState<OfflineProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [zones, setZones] = useState<OfflineZone[]>(() => readZones())
+  // Taille de la zone affichée, recalculée à chaque ouverture du panneau (la carte a pu bouger).
+  const [viewTiles, setViewTiles] = useState(0)
+  useEffect(() => {
+    if (!open) return
+    const b = getViewBounds()
+    setViewTiles(b ? zoneTileUrls(b).length : 0)
+  }, [open, getViewBounds])
   const abortRef = useRef<AbortController | null>(null)
   const running = progress !== null
 
@@ -58,6 +83,36 @@ export function OfflinePanel() {
   const remove = async () => {
     await deleteOffline()
     setInfo(null)
+    setZones([])
+    onZonesChange([])
+  }
+
+  const startZone = async () => {
+    const bounds = getViewBounds()
+    if (!bounds) return
+    setError(null)
+    const controller = new AbortController()
+    abortRef.current = controller
+    setProgress({ done: 0, total: 1, stage: 'Préparation' })
+    const name = `Zone du ${new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}`
+    try {
+      await downloadZone(bounds, name, setProgress, controller.signal)
+      const next = readZones()
+      setZones(next)
+      onZonesChange(next)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setProgress(null)
+      abortRef.current = null
+    }
+  }
+
+  const removeZone = async (id: string) => {
+    await deleteZone(id)
+    const next = readZones()
+    setZones(next)
+    onZonesChange(next)
   }
 
   const pct = progress ? Math.min(100, Math.round((progress.done / progress.total) * 100)) : 0
@@ -133,6 +188,50 @@ export function OfflinePanel() {
               )}
 
               {error && <p className="offline__note offline__note--error">{error}</p>}
+
+              <div className="offline__zones">
+                <strong>🥾 Zone détaillée (sentiers)</strong>
+                <p className="offline__note">
+                  Enregistre <b>la zone affichée à l'écran</b> jusqu'au zoom {ZONE_MAX_ZOOM}, où le Plan IGN montre les
+                  chemins et sentiers. Cadre d'abord la carte sur ton coin (une forêt, un massif). Les fonds Topo et
+                  « Sentiers balisés » ne sont pas enregistrables (serveurs bénévoles).
+                </p>
+                {!info && <p className="offline__note offline__note--warn">Enregistre d'abord la copie ci-dessus : sans elle, l'appli ne démarre pas sans réseau.</p>}
+                {!running && (
+                  <button
+                    type="button"
+                    className="offline__secondary"
+                    onClick={startZone}
+                    disabled={!online || !info || viewTiles === 0 || viewTiles > ZONE_MAX_TILES}
+                  >
+                    {viewTiles > ZONE_MAX_TILES
+                      ? 'Zone trop grande : zoome davantage'
+                      : `Enregistrer la zone affichée (~${estimateZoneMo(viewTiles)} Mo)`}
+                  </button>
+                )}
+                {zones.map((z) => (
+                  <div key={z.id} className="offline__zone">
+                    <span>
+                      ✓ {z.name} — {formatMo(z.bytes)}
+                    </span>
+                    <span>
+                      <button
+                        type="button"
+                        className="offline__link"
+                        onClick={() => {
+                          setOpen(false)
+                          onShowZone(z)
+                        }}
+                      >
+                        Voir
+                      </button>{' '}
+                      <button type="button" className="offline__link" onClick={() => void removeZone(z.id)}>
+                        Supprimer
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
 
               {info && !running && (
                 <div className="offline__saved">

@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MapContainer, LayersControl, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
-import { IGN_PLAN_URL, readOfflineInfo } from '../lib/offline'
+import { IGN_PLAN_URL, readOfflineInfo, readZones, ZONE_MAX_ZOOM, type OfflineZone, type ZoneBounds } from '../lib/offline'
 import { loadRainTotals } from '../lib/stations'
 import { fetchRainImage, fetchRainMapsMeta, firstCurrentDayIndex } from '../lib/rainMaps'
 import { REGION_BOUNDS } from '../lib/regionOutline'
@@ -154,10 +154,34 @@ function InvalidateSizeOnResize() {
 // Sans réseau au démarrage, on ouvre directement le fond enregistré (le Plan OSM ne s'afficherait pas).
 const START_OFFLINE = typeof navigator !== 'undefined' && !navigator.onLine
 const OFFLINE_INFO = readOfflineInfo()
+const IGN_LAYER_NAME = 'Plan IGN (hors ligne)'
+
+// Retient le fond actif (les zones détaillées hors ligne ne se superposent qu'au Plan IGN).
+function BaseLayerTracker({ onChange }: { onChange: (name: string) => void }) {
+  useMapEvents({ baselayerchange: (e) => onChange(e.name) })
+  return null
+}
 
 export function MapView() {
   const isMobile = useIsMobile()
-  const [mode, setMode] = useState<AppMode>('previsions')
+  // Dernier mode choisi, retrouvé à la réouverture (ex. rester sur « Carte » en randonnée).
+  const [mode, setModeState] = useState<AppMode>(() => {
+    try {
+      const saved = localStorage.getItem('mc-mode')
+      if (saved === 'carte' || saved === 'previsions' || saved === 'historique') return saved
+    } catch {
+      // stockage indisponible
+    }
+    return 'previsions'
+  })
+  const setMode = useCallback((m: AppMode) => {
+    setModeState(m)
+    try {
+      localStorage.setItem('mc-mode', m)
+    } catch {
+      // mémorisation facultative
+    }
+  }, [])
   const guide = useMushroomGuide()
   const [forecastState, setForecastState] = useState<ForecastState>({ status: 'idle' })
   const [mapsState, setMapsState] = useState<RainMapsState>({ status: 'loading' })
@@ -165,6 +189,18 @@ export function MapView() {
   const [selectedForecastDay, setSelectedForecastDay] = useState(0)
   const [reloadKey, setReloadKey] = useState(0)
   const [searchTarget, setSearchTarget] = useState<GeocodeResult | null>(null)
+  const [map, setMap] = useState<L.Map | null>(null)
+  const [zones, setZones] = useState<OfflineZone[]>(readZones)
+  const [baseLayer, setBaseLayer] = useState(START_OFFLINE ? IGN_LAYER_NAME : 'Plan')
+  const getViewBounds = useCallback((): ZoneBounds | null => {
+    if (!map) return null
+    const b = map.getBounds()
+    return { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }
+  }, [map])
+  const showZone = useCallback(
+    (z: OfflineZone) => map?.flyToBounds([[z.bounds.south, z.bounds.west], [z.bounds.north, z.bounds.east]]),
+    [map],
+  )
   const { today } = useParisToday()
   // Mode Historique : réseaux de stations affichés (cases à cocher). Infoclimat et Netatmo arrivent avec leur
   // collecte côté serveur (clés d'API à créer) : désactivés tant que les données n'existent pas.
@@ -256,7 +292,9 @@ export function MapView() {
     mapsState.status === 'ready'
       ? mode === 'historique'
         ? mapsState.meta.rain24h.file
-        : mapsState.meta.forecast[shownForecastDay]?.file
+        : mode === 'previsions'
+          ? mapsState.meta.forecast[shownForecastDay]?.file
+          : undefined
       : undefined
 
   useEffect(() => {
@@ -286,7 +324,7 @@ export function MapView() {
           <button type="button" className="guide-open" onClick={guide.open} aria-label="Champignons">
             🍄<span className="guide-open__label"> Champignons</span>
           </button>
-          <OfflinePanel />
+          <OfflinePanel getViewBounds={getViewBounds} onShowZone={showZone} onZonesChange={setZones} />
           <SearchBar onSelect={setSearchTarget} />
         </div>
 
@@ -308,6 +346,7 @@ export function MapView() {
       </div>
 
       <MapContainer
+        ref={setMap}
         bounds={REGION_BOUNDS}
         maxBounds={REGION_BOUNDS.pad(0.25)}
         maxBoundsViscosity={1}
@@ -317,6 +356,7 @@ export function MapView() {
         <ClickHandler enabled={mode === 'previsions'} onClick={handleMapClick} />
         <RecenterOnSelect target={searchTarget} />
         <InvalidateSizeOnResize />
+        <BaseLayerTracker onChange={setBaseLayer} />
         <DataAttribution />
 
         <LayersControl position="bottomright">
@@ -329,7 +369,7 @@ export function MapView() {
           </LayersControl.BaseLayer>
           {/* Plan IGN : seul fond enregistrable pour le hors ligne (OSM l'interdit, voir lib/offline.ts).
               Hors ligne, les zooms au-delà de la copie sont agrandis plutôt que laissés vides. */}
-          <LayersControl.BaseLayer checked={START_OFFLINE} name="Plan IGN (hors ligne)">
+          <LayersControl.BaseLayer checked={START_OFFLINE} name={IGN_LAYER_NAME}>
             <TileLayer
               attribution='&copy; <a href="https://www.ign.fr">IGN</a> - Géoplateforme'
               url={IGN_PLAN_URL}
@@ -371,7 +411,25 @@ export function MapView() {
         </LayersControl>
         <LocateControl />
 
-        <RegionOutline />
+        {/* Hors ligne au démarrage, le Plan IGN s'arrête au zoom de la copie de la région ; les zones détaillées
+            (sentiers) prennent le relais au-dessus, chacune limitée à son emprise. En ligne, inutile : le Plan
+            IGN monte déjà jusqu'au zoom 18 (et relit ces mêmes tuiles dans la copie). */}
+        {START_OFFLINE &&
+          baseLayer === IGN_LAYER_NAME &&
+          zones.map((z) => (
+            <TileLayer
+              key={z.id}
+              url={IGN_PLAN_URL}
+              bounds={[[z.bounds.south, z.bounds.west], [z.bounds.north, z.bounds.east]]}
+              minZoom={(OFFLINE_INFO?.maxZoom ?? 12) + 1}
+              maxNativeZoom={ZONE_MAX_ZOOM}
+              crossOrigin="anonymous"
+              zIndex={2}
+            />
+          ))}
+
+        {/* Mode Carte : le fond seul, sans le contour coloré de la région. */}
+        {mode !== 'carte' && <RegionOutline />}
 
         {mode === 'historique' && historyLayers.meteofrance && <StationsLayer />}
         {mode === 'historique' && historyLayers.infoclimat && <BubbleStationsLayer network="infoclimat" />}

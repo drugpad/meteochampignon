@@ -73,6 +73,7 @@ function writeOfflineInfo(info: OfflineInfo | null) {
 export async function deleteOffline(): Promise<void> {
   if (typeof caches !== 'undefined') await caches.delete(OFFLINE_CACHE)
   writeOfflineInfo(null)
+  writeZones([]) // les zones vivent dans le même cache
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -372,6 +373,118 @@ export async function downloadOffline(
   }
   writeOfflineInfo(info)
   return info
+}
+
+// ---------------------------------------------------------------------------------------------
+// Zones détaillées (sentiers) : la copie de la région s'arrête au zoom 11-13 ; pour marcher sur les chemins
+// il faut le zoom 15-16, où le Plan IGN dessine sentiers et pistes. Sur toute la région ce serait des
+// centaines de milliers de tuiles : on enregistre donc la ZONE AFFICHÉE à l'écran (une forêt, un massif).
+// Mêmes tuiles Plan IGN, même cache : le service worker les relit sans rien changer.
+// (OpenTopoMap et les sentiers balisés Waymarked Trails ne sont PAS enregistrés : leurs serveurs, tenus par
+// des bénévoles, demandent d'éviter les téléchargements en masse.)
+const ZONES_KEY = 'mc-offline-zones'
+export const ZONE_MIN_ZOOM = 12
+export const ZONE_MAX_ZOOM = 16
+export const ZONE_MAX_TILES = 3000 // ~150 Mo ; au-delà : zoomer davantage (zone trop grande)
+const ZONE_AVG_TILE_BYTES = 45 * 1024 // tuiles de fort zoom plus légères (16-80 Ko mesurés)
+
+export type ZoneBounds = { south: number; west: number; north: number; east: number }
+export type OfflineZone = { id: string; name: string; bounds: ZoneBounds; savedAt: string; files: number; bytes: number }
+
+export function readZones(): OfflineZone[] {
+  try {
+    const raw = localStorage.getItem(ZONES_KEY)
+    return raw ? (JSON.parse(raw) as OfflineZone[]) : []
+  } catch {
+    return []
+  }
+}
+
+function writeZones(zones: OfflineZone[]) {
+  try {
+    localStorage.setItem(ZONES_KEY, JSON.stringify(zones))
+  } catch {
+    // récapitulatif indisponible : les tuiles restent dans le cache
+  }
+}
+
+export function zoneTileUrls(b: ZoneBounds): string[] {
+  const urls: string[] = []
+  for (let z = ZONE_MIN_ZOOM; z <= ZONE_MAX_ZOOM; z++) {
+    for (let x = lonToX(b.west, z); x <= lonToX(b.east, z); x++) {
+      for (let y = latToY(b.north, z); y <= latToY(b.south, z); y++) {
+        urls.push(IGN_PLAN_URL.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y)))
+      }
+    }
+  }
+  return urls
+}
+
+export const estimateZoneMo = (tiles: number) => Math.max(1, Math.round((tiles * ZONE_AVG_TILE_BYTES) / 1048576))
+
+export async function downloadZone(
+  bounds: ZoneBounds,
+  name: string,
+  onProgress: (p: OfflineProgress) => void,
+  signal: AbortSignal,
+): Promise<OfflineZone> {
+  if (!offlineSupported()) throw new Error("Ce navigateur ne permet pas l'enregistrement hors ligne.")
+  const tiles = zoneTileUrls(bounds)
+  if (tiles.length > ZONE_MAX_TILES) throw new Error("Zone trop grande : zoome davantage sur la carte avant d'enregistrer.")
+  const cache = await caches.open(OFFLINE_CACHE)
+  let bytes = 0
+  let files = 0
+  let done = 0
+  let failures = 0
+  const RETRY_WAIT_MS = [300, 1000]
+  const stage = 'Zone détaillée (sentiers)'
+  onProgress({ done, total: tiles.length, stage })
+  await runPool(
+    tiles,
+    async (url) => {
+      if (await cache.match(url, { ignoreVary: true })) {
+        files++
+      } else {
+        for (let attempt = 0; attempt <= RETRY_WAIT_MS.length; attempt++) {
+          try {
+            // jamais « bytes += await … » : la valeur de bytes serait lue AVANT l'attente et des additions se perdraient
+            const size = await store(cache, url, { mode: 'cors' }, TILE_TIMEOUT_MS)
+            bytes += size
+            files++
+            break
+          } catch (err) {
+            if ((err instanceof HttpError && err.status === 404) || signal.aborted) break
+            if (attempt === RETRY_WAIT_MS.length) failures++
+            else await new Promise((r) => setTimeout(r, RETRY_WAIT_MS[attempt]))
+          }
+        }
+      }
+      done++
+      if (done % 10 === 0) onProgress({ done: Math.min(done, tiles.length - 1), total: tiles.length, stage })
+    },
+    signal,
+  )
+  if (signal.aborted) throw new Error('Téléchargement annulé.')
+  if (failures > Math.max(5, tiles.length * MAX_TILE_FAILURES_RATIO)) {
+    throw new Error(`Zone incomplète (${failures} tuiles manquantes sur ${tiles.length}). Réessaie : seules les manquantes seront retéléchargées.`)
+  }
+  const zone: OfflineZone = { id: String(Date.now()), name, bounds, savedAt: new Date().toISOString(), files, bytes }
+  writeZones([...readZones(), zone])
+  return zone
+}
+
+// Supprime les tuiles de la zone, sauf celles qui servent encore (autre zone, ou copie de la région).
+export async function deleteZone(id: string): Promise<void> {
+  const zones = readZones()
+  const zone = zones.find((z) => z.id === id)
+  const rest = zones.filter((z) => z.id !== id)
+  writeZones(rest)
+  if (!zone || typeof caches === 'undefined') return
+  const keep = new Set(rest.flatMap((z) => zoneTileUrls(z.bounds)))
+  const regionMax = readOfflineInfo()?.maxZoom ?? 0
+  for (const url of tileUrls(regionMax >= MIN_ZOOM ? regionMax : MIN_ZOOM - 1)) keep.add(url)
+  const cache = await caches.open(OFFLINE_CACHE)
+  await Promise.all(zoneTileUrls(zone.bounds).filter((u) => !keep.has(u)).map((u) => cache.delete(u)))
 }
 
 // ---------------------------------------------------------------------------------------------

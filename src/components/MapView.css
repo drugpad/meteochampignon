@@ -249,9 +249,16 @@
    ligne 3 = panneaux repliés en « puces » (un panneau déplié prend toute la ligne).
    --------------------------------------------------------------------------------------------- */
 @media (max-width: 640px) {
+  /* Ligne 1 : recherche + 🍄 + 📥 ; ligne 2 : Carte / Prévisions / Historique sur toute la largeur. */
   .map-view .floating-controls__row .search-bar {
+    order: -2;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .map-view .guide-open,
+  .map-view .offline {
     order: -1;
-    flex-basis: 100%;
   }
 
   .map-view .search-bar input {
@@ -267,7 +274,7 @@
   }
 
   .map-view .mode-switch {
-    margin-right: auto;
+    flex-basis: 100%;
     height: 44px;
     box-sizing: border-box;
     border-radius: 22px;
@@ -275,9 +282,11 @@
   }
 
   .map-view .mode-switch__btn {
+    flex: 1;
     border-radius: 19px;
-    padding: 0 12px;
+    padding: 0 6px;
     font-size: 14px;
+    white-space: nowrap;
   }
 
   .map-view .guide-open,
@@ -298,7 +307,7 @@
   /* Carte « hors ligne » : centrée sous les commandes plutôt qu'accrochée au bouton (qui est à droite). */
   .map-view .offline__card {
     position: fixed;
-    top: 112px;
+    top: 108px;
     left: 8px;
     right: 8px;
     width: auto;

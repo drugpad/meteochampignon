@@ -198,3 +198,23 @@
     width: auto;
   }
 }
+
+.offline__zones {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.offline__zones .offline__secondary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.offline__zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+}
