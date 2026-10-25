@@ -321,26 +321,40 @@ SPECIES = {
     # seuil : pluie sur 3 jours qui déclenche une pousse (mm) ; dd : degrés-jours (base 4 °C) depuis
     # l'épisode -> début, pic, fin de la fenêtre de pousse ; temp : courbe de la température moyenne des
     # 5 derniers jours ; saison : facteur par mois (janvier -> décembre).
-    # Cèpes de chaleur : sortent vite après un orage par temps chaud, de juin à septembre.
-    "cepe_ete": {"seuil": 25, "dd": (60, 100, 190), "temp": [(10, 0), (14, 0.6), (17, 1), (26, 1), (30, 0.5)],
+    # Cèpes de chaleur : sortent 7 à 10 jours après un gros orage par temps chaud (fenêtre décalée le 25/10/2026 :
+    # la 1re version les faisait sortir dès le 4e jour à 20 °C), de juin à septembre.
+    "cepe_ete": {"seuil": 25, "dd": (100, 150, 260), "temp": [(10, 0), (14, 0.6), (17, 1), (26, 1), (30, 0.5)],
                  "saison": [0, 0, 0, 0, 0.4, 0.9, 1, 1, 0.8, 0.3, 0.05, 0]},
     # Assoupli le 24/10/2026 : la tête de nègre donne encore un peu en octobre, voire début novembre les
     # automnes doux, dans les coteaux (1re version : éteinte sous 10 °C et octobre réduit de moitié).
-    "cepe_bronze": {"seuil": 25, "dd": (70, 115, 210), "temp": [(8, 0), (11, 0.5), (15, 1), (25, 1), (29, 0.5)],
+    "cepe_bronze": {"seuil": 25, "dd": (100, 150, 260), "temp": [(8, 0), (11, 0.5), (15, 1), (25, 1), (29, 0.5)],
                     "saison": [0, 0, 0, 0, 0.1, 0.4, 0.8, 1, 1, 0.9, 0.35, 0.05]},
     # Cèpes d'automne : il leur faut de la fraîcheur (nuits qui rafraîchissent), septembre à novembre.
-    "cepe_bordeaux": {"seuil": 30, "dd": (90, 140, 260), "temp": [(4, 0), (7, 0.5), (10, 1), (17, 1), (21, 0.5), (25, 0.15)],
+    # Cèpes d'automne : premiers 10-12 jours après la grosse pluie à ~12 °C, pic vers 14 j (fenêtre avancée le 25/10/2026).
+    "cepe_bordeaux": {"seuil": 30, "dd": (70, 115, 230), "temp": [(4, 0), (7, 0.5), (10, 1), (17, 1), (21, 0.5), (25, 0.15)],
                       "saison": [0, 0, 0, 0, 0.1, 0.2, 0.2, 0.4, 0.9, 1, 0.7, 0.15]},
-    "cepe_pins": {"seuil": 30, "dd": (90, 140, 260), "temp": [(4, 0), (7, 0.5), (10, 1), (18, 1), (22, 0.5)],
+    "cepe_pins": {"seuil": 30, "dd": (70, 115, 230), "temp": [(4, 0), (7, 0.5), (10, 1), (18, 1), (22, 0.5)],
                   "saison": [0, 0, 0, 0, 0.1, 0.3, 0.5, 0.6, 1, 1, 0.5, 0.1]},
     "girolle": {"seuil": 20, "dd": (100, 180, 380), "temp": [(6, 0), (10, 0.6), (14, 1), (22, 1), (26, 0.5)],
                 "saison": [0, 0, 0, 0, 0.3, 0.8, 1, 1, 1, 0.8, 0.4, 0.1]},
-    "coulemelle": {"seuil": 15, "dd": (70, 120, 240), "temp": [(6, 0), (10, 0.6), (13, 1), (22, 1), (26, 0.5)],
+    # Coulemelle : sortie rapide, 6 à 10 jours après une bonne pluie (fenêtre avancée le 25/10/2026).
+    "coulemelle": {"seuil": 15, "dd": (50, 85, 190), "temp": [(6, 0), (10, 0.6), (13, 1), (22, 1), (26, 0.5)],
                    "saison": [0, 0, 0, 0, 0.1, 0.4, 0.8, 1, 1, 0.9, 0.4, 0.05]},
     "trompette": {"seuil": 25, "dd": (100, 160, 300), "temp": [(3, 0), (6, 0.6), (9, 1), (16, 1), (20, 0.6), (24, 0.3)],
                   "saison": [0.2, 0.05, 0, 0, 0, 0, 0.3, 0.6, 0.9, 1, 1, 0.5]},
 }
 W_MAX = 60  # réserve d'eau utile de la litière et du sol superficiel (mm)
+
+# Besoin d'humidité du sol (réservoir W en mm -> facteur), propre à chaque espèce (révision du 25/10/2026) :
+# les cèpes de chaleur sortent sur un gros orage et supportent que le sol ressèche un peu ; la girolle et la
+# trompette exigent un sol humide durablement (pousse lente et étalée) et s'arrêtent net quand il s'assèche.
+MOISTURE_DEFAULT = [(0, 0.1), (5, 0.25), (10, 0.6), (20, 1), (W_MAX, 1)]  # cèpes d'automne, coulemelle
+MOISTURE = {
+    "cepe_ete": [(0, 0.15), (5, 0.4), (10, 0.75), (16, 1), (W_MAX, 1)],
+    "cepe_bronze": [(0, 0.15), (5, 0.4), (10, 0.75), (16, 1), (W_MAX, 1)],
+    "girolle": [(0, 0.05), (8, 0.2), (15, 0.55), (28, 1), (W_MAX, 1)],
+    "trompette": [(0, 0.05), (8, 0.2), (15, 0.55), (28, 1), (W_MAX, 1)],
+}
 
 
 def curve(x, pts):
@@ -366,13 +380,17 @@ def pousse(series, dates, k_target, sp):
     W = np.full(P.shape[1:], 20.0, np.float32)
     dev = np.zeros(P.shape[1:], np.float32)
     for k in range(k0, k_target + 1):
-        et = np.maximum(0.3, 0.1 * Tm[k] + 0.3)
+        # Évaporation de la litière sous couvert (mm/jour) : ~1,1 à 10 °C, ~1,4 à 12 °C, ~2,5 à 20 °C, ~3,2 à 25 °C.
+        # (1re version : 2,3 à 20 °C, trop faible l'été — le sol restait humide trop longtemps.)
+        et = np.maximum(0.3, 0.14 * Tm[k] - 0.3)
         W = np.clip(W + P[k] - et, 0, W_MAX)
     # Épisodes de pluie : chaque jour e où la pluie sur 3 jours dépasse le seuil ouvre une fenêtre ; on garde
     # la meilleure fenêtre en cours (degrés-jours depuis e, pondérés par la force de l'épisode).
     for e in range(k0 + 2, k_target + 1):
         p3 = P[e - 2 : e + 1].sum(axis=0)
-        strong = p3 >= cfg["seuil"]
+        # Le jour déclencheur doit lui-même être pluvieux (≥ 5 mm) : sinon un seul orage, vu dans la fenêtre de
+        # 3 jours, déclenchait aussi les 2 jours suivants et étirait la pousse de 2 jours (corrigé le 25/10/2026).
+        strong = (p3 >= cfg["seuil"]) & (P[e] >= 5)
         if not strong.any():
             continue
         dd = np.maximum(0, Tm[e + 1 : k_target + 1] - 4).sum(axis=0) if e < k_target else np.zeros_like(p3)
@@ -383,7 +401,7 @@ def pousse(series, dates, k_target, sp):
         )
         force = 0.6 + 0.4 * np.clip(p3 / (cfg["seuil"] * 2), 0, 1)
         dev = np.maximum(dev, np.where(strong, f * force, 0))
-    moist = curve(W, [(0, 0.1), (5, 0.25), (10, 0.6), (20, 1), (W_MAX, 1)])
+    moist = curve(W, MOISTURE.get(sp, MOISTURE_DEFAULT))
     t5 = Tm[max(0, k_target - 4) : k_target + 1].mean(axis=0)
     temp = curve(t5, cfg["temp"])
     frost = np.where(Tn[max(0, k_target - 2) : k_target + 1].min(axis=0) < -1, 0.3, 1.0)

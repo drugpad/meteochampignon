@@ -29,7 +29,8 @@ LAT_MIN, LAT_MAX, LON_MIN, LON_MAX = 42.595, 45.155, -0.405, 3.405
 # montagne ; cèpe des pins, sous conifères, surtout en altitude.
 HOSTS = {
     "cepe_ete": {  # Boletus reticulatus (= aestivalis)
-        "chene": 1, "chataignier": 0.9, "hetre": 0.8, "feuillus": 0.75, "mixte": 0.5, "chene_vert": 0.4,
+        # Chênes verts et pubescents (thermophiles, sols calcaires) : hôtes réguliers du cèpe d'été.
+        "chene": 1, "chataignier": 0.9, "hetre": 0.8, "feuillus": 0.75, "mixte": 0.5, "chene_vert": 0.6,
         "lande": 0.1, "robinier": 0.1, "pins": 0.05, "sapin_epicea": 0.05, "autres_conif": 0.05, "peuplier": 0.05,
     },
     "cepe_bronze": {  # Boletus aereus (tête de nègre)
@@ -67,14 +68,49 @@ PH = {
 ALT = {
     "cepe_ete": [(0, 1), (800, 1), (1100, 0.5), (1400, 0)],  # plaine et coteaux
     "cepe_bronze": [(0, 1), (500, 1), (800, 0.4), (1000, 0)],  # thermophile, basse altitude
-    "cepe_bordeaux": [(0, 0.6), (300, 0.8), (600, 1), (1600, 1), (1900, 0.4), (2100, 0)],  # plutôt frais
-    "cepe_pins": [(0, 0.5), (400, 0.7), (800, 1), (2000, 1), (2300, 0.3)],  # montagne surtout
+    # Corrigé le 25/10/2026 : dans le Sud-Ouest c'est LE cèpe des chênaies et châtaigneraies de plaine et de
+    # coteaux en automne (Gers, Tarn-et-Garonne, Lot, Landes) ; la 1re version le pénalisait à -40 % en plaine.
+    "cepe_bordeaux": [(0, 1), (1600, 1), (1900, 0.4), (2100, 0)],
+    "cepe_pins": [(0, 0.7), (600, 0.9), (900, 1), (2000, 1), (2300, 0.3)],  # montagne surtout, aussi pins de plaine
     "girolle": [(0, 0.85), (300, 1), (1500, 1), (1900, 0.3), (2100, 0)],
     "trompette": [(0, 0.9), (300, 1), (1200, 1), (1500, 0.4), (1800, 0)],
     "coulemelle": [(0, 1), (1200, 1), (1700, 0.3), (2000, 0)],
 }
 SLOPE = [(0, 1), (30, 1), (40, 0.6), (55, 0.2)]  # falaises et éboulis : peu de sol
 SPECIES = ["cepe_ete", "cepe_bronze", "cepe_bordeaux", "cepe_pins", "girolle", "coulemelle", "trompette"]
+
+# --- Règles ajoutées le 25/10/2026 (habitat à 20 m avec le couvert Copernicus 2024, build-habitat-fine.py) ---
+# Plancher des courbes de sol : le pH est une estimation à 250 m, lissée ; il ne doit pas condamner seul un bois.
+PH_FLOOR = 0.25
+
+# Ouverture du bois : densité du couvert (% d'arbres, Copernicus 2024) au point. Les cèpes de chaleur aiment les
+# bois clairs et parsemés, lisières et pré-bois (sol réchauffé, pluie qui arrive au sol) ; cèpes de Bordeaux et des
+# pins tolèrent mieux le dense (hêtraies, sapinières) ; la girolle va du bois clair au dense ; la trompette aime
+# l'ombre humide des bois fermés ; la coulemelle, le milieu ouvert. Valeurs à moins de 15 % : pré ou clairière,
+# n'a de sens qu'avec un arbre hôte tout proche (exigé à part, voir TREES_NEAR_M).
+OPENNESS = {
+    "cepe_ete": [(0, 0.7), (15, 0.85), (25, 1), (75, 1), (90, 0.6), (100, 0.4)],
+    "cepe_bronze": [(0, 0.7), (15, 0.85), (25, 1), (75, 1), (90, 0.6), (100, 0.4)],
+    "cepe_bordeaux": [(0, 0.55), (15, 0.75), (40, 1), (85, 1), (95, 0.75), (100, 0.65)],
+    "cepe_pins": [(0, 0.55), (15, 0.75), (40, 1), (85, 1), (95, 0.75), (100, 0.65)],
+    "girolle": [(0, 0.35), (15, 0.6), (35, 1), (85, 1), (100, 0.8)],
+    "trompette": [(0, 0.3), (20, 0.5), (50, 0.8), (75, 1), (100, 1)],
+    "coulemelle": [(0, 1), (40, 1), (75, 0.6), (90, 0.3), (100, 0.2)],
+}
+# Espèces liées aux arbres (mycorhiziennes) : un arbre doit se trouver à moins de ~30 m (une à deux hauteurs
+# d'arbre, portée des racines), sinon 0. La coulemelle (saprotrophe) en est dispensée.
+MYCORRHIZAL = ["cepe_ete", "cepe_bronze", "cepe_bordeaux", "cepe_pins", "girolle", "trompette"]
+TREES_NEAR_M = 30
+# Haies, bosquets, arbres isolés absents de la BD Forêt (elle ignore tout ce qui fait moins d'un demi-hectare) :
+# essence inconnue, majoritairement des chênes et châtaigniers dans le bocage de la région.
+SMALL_WOODS = {"cepe_ete": 0.6, "cepe_bronze": 0.55, "cepe_bordeaux": 0.45, "cepe_pins": 0.1, "girolle": 0.4, "trompette": 0.3}
+# Coupe récente : parcelle forestière de la BD Forêt (2014-2019) sans arbre en 2024 dans un rayon de 30 m.
+CUT_FACTOR = 0.1
+# Exposition : orientation la plus favorable et pénalité maximale à l'opposé, pondérée par la pente (aucun effet
+# sous 3°, plein effet à partir de 15°). Cèpes de chaleur : versants sud-sud-ouest ; espèces d'humidité : versants
+# nord-nord-est qui gardent la fraîcheur ; cèpe des pins et coulemelle : neutres.
+ASPECT = {"cepe_ete": (200, 0.15), "cepe_bronze": (200, 0.18), "cepe_bordeaux": (20, 0.12), "girolle": (20, 0.12), "trompette": (20, 0.15)}
+
 
 
 def curve(x, pts):

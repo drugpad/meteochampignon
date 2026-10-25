@@ -16,13 +16,15 @@ type Props = {
   detail: SpotDetail | null
   loading: boolean
   series: SeriesPoint[] | null
+  // Mode « Milieu seul » : le pourcentage est celui du milieu, sans la météo.
+  milieuOnly?: boolean
   onClose: () => void
 }
 
 const DAY = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric' })
 const isMobile = () => window.matchMedia('(max-width: 640px)').matches
 
-export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series, onClose }: Props) {
+export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series, milieuOnly = false, onClose }: Props) {
   const { today } = useParisToday()
   const [expanded, setExpanded] = useState(() => !isMobile())
   const sp = SPECIES.find((s) => s.key === species)!
@@ -64,7 +66,9 @@ export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series
             {detail && (
               <>
                 {' · '}
-                <span className="spot-card__badge">{scoreLabel(detail.score)}</span>
+                <span className="spot-card__badge">
+                  {Math.round(detail.score * 100)} % · {scoreLabel(detail.score)}
+                </span>
               </>
             )}
           </span>
@@ -82,7 +86,9 @@ export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series
           <span className="spot-card__muted">
             {best && best.value >= 0.12
               ? `Meilleur jour : ${best.date === today ? "aujourd'hui" : DAY.format(new Date(best.date))}`
-              : `Milieu ${Math.round(detail.habitat * 100)} % · météo ${Math.round(detail.pousse * 100)} %`}
+              : milieuOnly
+                ? `Milieu ${Math.round(detail.habitat * 100)} % (sans la météo)`
+                : `Milieu ${Math.round(detail.habitat * 100)} % · météo ${Math.round(detail.pousse * 100)} %`}
           </span>
           <button type="button" className="spot-card__more" onClick={() => setExpanded(true)}>
             Détails ▴
@@ -93,7 +99,10 @@ export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series
       {detail && expanded && (
         <>
           <div className="spot-card__score spot-card__muted">
-            milieu {Math.round(detail.habitat * 100)} % · météo {Math.round(detail.pousse * 100)} % · {lat.toFixed(4)}, {lon.toFixed(4)}
+            {milieuOnly
+              ? `Potentiel du milieu ${Math.round(detail.habitat * 100)} % (sans la météo)`
+              : `Potentiel ${Math.round(detail.score * 100)} % = milieu ${Math.round(detail.habitat * 100)} % × météo ${Math.round(detail.pousse * 100)} %`}{' '}
+            · {lat.toFixed(4)}, {lon.toFixed(4)}
           </div>
           <ul className="spot-card__facts">
             <li>

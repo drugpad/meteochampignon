@@ -20,7 +20,7 @@ import { ForecastFullscreen } from './ForecastFullscreen'
 import { ForecastPanel } from './ForecastPanel'
 import { ForecastRainControls } from './ForecastRainControls'
 import { BubbleStationsLayer } from './BubbleStationsLayer'
-import { CoinsControls, type NamedSpot } from './CoinsControls'
+import { CoinsControls, type CoinsView, type NamedSpot } from './CoinsControls'
 import { CoinsFineLayer } from './CoinsFineLayer'
 import { CoinsLayer } from './CoinsLayer'
 import { CoinsSpotCard } from './CoinsSpotCard'
@@ -30,6 +30,7 @@ import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './H
 import { LocateControl } from './LocateControl'
 import { CoinsCodeDialog } from './CoinsCodeDialog'
 import { coinsUnlocked } from '../lib/coinsLock'
+import { moonEnabled, setMoonEnabled } from '../lib/moon'
 import { collapsePanels } from '../lib/usePanelCollapse'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
@@ -259,6 +260,26 @@ export function MapView() {
     }
   }, [])
   const [coinsDay, setCoinsDay] = useState(0)
+  const [moon, setMoonState] = useState(moonEnabled)
+  const setMoon = useCallback((on: boolean) => {
+    setMoonState(on)
+    setMoonEnabled(on)
+  }, [])
+  const [coinsView, setCoinsViewState] = useState<CoinsView>(() => {
+    try {
+      return localStorage.getItem('mc-coins-view') === 'milieu' ? 'milieu' : 'meteo'
+    } catch {
+      return 'meteo'
+    }
+  })
+  const setCoinsView = useCallback((v: CoinsView) => {
+    setCoinsViewState(v)
+    try {
+      localStorage.setItem('mc-coins-view', v)
+    } catch {
+      // mémorisation facultative
+    }
+  }, [])
   const [pousseMeta, setPousseMeta] = useState<PousseMeta | null>(null)
   const [coinsResult, setCoinsResult] = useState<CoinsResult | null>(null)
   const [coinsStatus, setCoinsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -290,7 +311,7 @@ export function MapView() {
         setPousseMeta(meta)
         const first = meta.days.findIndex((d) => d.date >= today)
         const index = coinsDay < meta.days.length && meta.days[coinsDay].date >= today ? coinsDay : Math.max(0, first)
-        const res = await computeCoins(coinsSpecies, index)
+        const res = await computeCoins(coinsSpecies, index, coinsView === 'milieu', moon)
         if (cancelled) return
         setCoinsResult(res)
         setCoinsStatus('ready')
@@ -308,7 +329,7 @@ export function MapView() {
     return () => {
       cancelled = true
     }
-  }, [mode, coinsSpecies, coinsDay, coinsReload, today])
+  }, [mode, coinsSpecies, coinsDay, coinsReload, today, coinsView, moon])
 
   const openSpot = useCallback(
     (lat: number, lon: number, knownName: string | null = null) => {
@@ -334,7 +355,7 @@ export function MapView() {
     [coinsResult, coinsSpecies, map],
   )
   // Espèce ou jour changés : la fiche ouverte n'est plus valable.
-  useEffect(() => setSpot(null), [coinsSpecies, coinsDay, mode])
+  useEffect(() => setSpot(null), [coinsSpecies, coinsDay, mode, coinsView])
 
   // Précharge l'historique des stations (≈ 200 Ko compressé) peu après l'ouverture : en passant sur Historique, les
   // bulles de pluie s'affichent sans attendre le téléchargement. Échec ignoré (réessayé à l'ouverture d'Historique).
@@ -490,6 +511,10 @@ export function MapView() {
             error={coinsError}
             onRetry={() => setCoinsReload((k) => k + 1)}
             spots={spots}
+            view={coinsView}
+            onView={setCoinsView}
+            moon={moon}
+            onMoon={setMoon}
             onSelectSpot={(s) => {
               map?.flyTo([s.lat, s.lon], Math.max(map.getZoom(), 13))
               openSpot(s.lat, s.lon, s.name)
@@ -628,6 +653,7 @@ export function MapView() {
           detail={spot.detail}
           loading={spot.loading}
           series={spot.series}
+          milieuOnly={coinsView === 'milieu'}
           onClose={() => setSpot(null)}
         />
       )}

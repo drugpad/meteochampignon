@@ -33,7 +33,7 @@ from rasterio.features import rasterize
 from rasterio.transform import from_origin
 from rasterio.warp import reproject
 from rasterio.windows import Window
-from scipy.ndimage import map_coordinates, maximum_filter, uniform_filter
+from scipy.ndimage import map_coordinates, maximum_filter, uniform_filter  # noqa: F401
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -171,12 +171,35 @@ def ph_block(r0, c0, h, w):
 
 
 # --------------------------------------------------------------------------------------------------
-def habitat_block(forest, alt, ph, wc, mask, slope):
-    """Habitats (7, h, w) entre 0 et 1, mêmes règles que build-habitat.py."""
+TCD_FILE = os.path.join(CACHE, "tcd2024-z13.tif")
+
+
+def tcd_block(r0, c0, h, w):
+    """Couvert forestier Copernicus 2024 (% d'arbres) moyenné sur chaque case de 20 m ; NaN = pas de donnée."""
+    out = np.full((h, w), np.nan, np.float32)
+    if not os.path.exists(TCD_FILE):
+        return out
+    tr = from_origin(X0 + c0 * RES, Y1 - r0 * RES, RES, RES)
+    with rasterio.open(TCD_FILE) as src:
+        reproject(rasterio.band(src, 1), out, dst_transform=tr, dst_crs="EPSG:2154", resampling=Resampling.average,
+                  src_nodata=255, dst_nodata=np.nan)
+    return out
+
+
+def habitat_block(forest, alt, ph, wc, mask, slope_deg, aspect_deg, tcd):
+    """Habitats (7, h, w) entre 0 et 1 : arbres hôtes (proches) x ouverture du bois x sol x altitude x pente x
+    exposition, règles de build-habitat.py (HOSTS, OPENNESS, PH, ALT, SLOPE, ASPECT, SMALL_WOODS…)."""
     group = forest & 0x7F
     open_forest = (forest & 0x80) > 0
     is_forest = (group > 0) & ~np.isin(group, [GROUPS.index("lande"), GROUPS.index("herbe")])
-    trees = is_forest | (wc == 10)
+    # Couvert : Copernicus 2024 ; sans donnée, on se rabat sur la BD Forêt / WorldCover.
+    cover = np.where(np.isnan(tcd), np.where(is_forest, 70.0, np.where(wc == 10, 50.0, 0.0)), tcd).astype(np.float32)
+    near_px = max(1, round(hb.TREES_NEAR_M / RES))
+    trees_near = maximum_filter(cover >= 20, size=2 * near_px + 1)
+    cut = is_forest & ~trees_near  # coupe récente : forêt de la BD Forêt sans arbre en 2024 alentour
+    small_woods = ~is_forest & trees_near  # haies, bosquets, arbres isolés hors BD Forêt
+    w_slope = np.clip((slope_deg - 3) / 12, 0, 1)
+    slope_f = hb.curve(slope_deg, hb.SLOPE)
     grass = wc == 30
     out = []
     for sp in SPECIES:
@@ -185,20 +208,31 @@ def habitat_block(forest, alt, ph, wc, mask, slope):
             for g, wgt in hb.HOSTS[sp].items():
                 lut[GROUPS.index(g)] = wgt
             host = lut[group]
+            host = np.where(small_woods, np.maximum(host, hb.SMALL_WOODS[sp]), host)
+            host = np.where(cut, host * hb.CUT_FACTOR, host)
+            host = np.where(trees_near, host, 0)  # mycorhizien : pas d'arbre à moins de 30 m, pas de champignon
         else:
-            # Coulemelle à 20 m : prairie à moins de ~100 m d'arbres, lisières (bande de ~40 m de part et
-            # d'autre de la limite du bois), forêts ouvertes, landes.
+            # Coulemelle : prairie à moins de ~100 m d'arbres, lisières (± 40 m), forêts ouvertes, landes.
+            trees = cover >= 20
             near_trees = maximum_filter(trees, size=11) > 0
-            edge = (maximum_filter(is_forest, size=5) > 0) & (maximum_filter(~is_forest, size=5) > 0)
+            edge = (maximum_filter(trees, size=5) > 0) & (maximum_filter(~trees, size=5) > 0)
             host = np.maximum.reduce([
                 0.9 * (grass & near_trees),
                 0.7 * edge,
                 0.6 * open_forest,
                 0.4 * (group == GROUPS.index("lande")),
             ]).astype(np.float32)
-        h = host * hb.curve(ph, hb.PH[sp]) * hb.curve(alt, hb.ALT[sp]) * slope
+        openness = hb.curve(cover, hb.OPENNESS[sp])
+        ph_f = np.maximum(hb.curve(ph, hb.PH[sp]), hb.PH_FLOOR)
+        alt_f = hb.curve(alt, hb.ALT[sp])
+        if sp in hb.ASPECT:
+            best, depth = hb.ASPECT[sp]
+            aspect_f = 1 - depth * w_slope * (1 - np.cos(np.radians(aspect_deg - best))) / 2
+        else:
+            aspect_f = 1
+        h = host * openness * ph_f * alt_f * slope_f * aspect_f
         h[mask == 0] = 0
-        out.append(h)
+        out.append(np.clip(h, 0, 1).astype(np.float32))
     return np.stack(out)
 
 
@@ -210,6 +244,9 @@ def pack(habitats):
     return np.stack([(v >> 16) & 255, (v >> 8) & 255, v & 255]).astype(np.uint8)
 
 
+FULL = os.path.join(FINE, "habitat-20m-7b.tif")  # 7 bandes (habitat x 255), pour la carte d'ensemble à 250 m
+
+
 def build_raster():
     out = os.path.join(FINE, "habitat-20m.tif")
     if os.path.exists(out):
@@ -219,7 +256,8 @@ def build_raster():
                    compress="deflate", tiled=True, blockxsize=512, blockysize=512, BIGTIFF="IF_SAFER")
     nb = math.ceil(H / BLOCK) * math.ceil(W / BLOCK)
     k = 0
-    with rasterio.open(out + ".tmp.tif", "w", **profile) as dst:
+    full_profile = dict(profile, count=len(SPECIES))
+    with rasterio.open(out + ".tmp.tif", "w", **profile) as dst, rasterio.open(FULL + ".tmp.tif", "w", **full_profile) as full:
         for r0 in range(0, H, BLOCK):
             for c0 in range(0, W, BLOCK):
                 k += 1
@@ -235,15 +273,19 @@ def build_raster():
                 f = np.asarray(forest[R0:R1, C0:C1])
                 alt = dem_block(R0, C0, hh, ww)
                 a = np.nan_to_num(alt, nan=0)
-                gy, gx = np.gradient(a, RES)
-                slope = hb.curve(np.degrees(np.arctan(np.hypot(gx, gy))), hb.SLOPE)
+                gy, gx = np.gradient(a, RES)  # gy : vers le sud (ligne 0 = nord)
+                slope_deg = np.degrees(np.arctan(np.hypot(gx, gy)))
+                aspect_deg = np.degrees(np.arctan2(-gx, gy)) % 360  # direction de la descente, 0 = nord
                 ph = ph_block(R0, C0, hh, ww)
                 wc = worldcover_block(R0, C0, hh, ww)
-                hab = habitat_block(f, a, ph, wc, mask, slope)
-                packed = pack(hab)[:, r0 - R0 : r0 - R0 + h, c0 - C0 : c0 - C0 + w]
-                dst.write(packed, window=Window(c0, r0, w, h))
+                tcd = tcd_block(R0, C0, hh, ww)
+                hab = habitat_block(f, a, ph, wc, mask, slope_deg, aspect_deg, tcd)
+                crop = hab[:, r0 - R0 : r0 - R0 + h, c0 - C0 : c0 - C0 + w]
+                dst.write(pack(crop), window=Window(c0, r0, w, h))
+                full.write(np.rint(crop * 255).astype(np.uint8), window=Window(c0, r0, w, h))
                 log(f"bloc {k}/{nb} : " + ", ".join(f"{sp} {hab[i][mask > 0].mean():.2f}" for i, sp in enumerate(SPECIES)))
     os.replace(out + ".tmp.tif", out)
+    os.replace(FULL + ".tmp.tif", FULL)
     return out
 
 
@@ -300,8 +342,29 @@ def build_tiles(raster, zooms=(10, 11, 12, 13)):
     json.dump(meta, open(os.path.join(TILES, "habitat-tiles.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
 
+def build_coarse():
+    """Carte d'ensemble à 250 m (public/habitat/<espèce>.png) = MOYENNE de l'habitat à 20 m sur chaque case :
+    une seule source de vérité, la carte d'ensemble et les tuiles fines racontent la même chose."""
+    from PIL import Image
+    from rasterio.transform import from_bounds
+
+    rows, cols = hl.ROWS, hl.COLS
+    tr = from_bounds(hl.LON_MIN, hl.LAT_MIN, hl.LON_MAX, hl.LAT_MAX, cols, rows)
+    outdir = os.path.join(ROOT, "public", "habitat")
+    with rasterio.open(FULL) as src:
+        for i, sp in enumerate(SPECIES):
+            dst = np.zeros((rows, cols), np.float32)
+            reproject(rasterio.band(src, i + 1), dst, dst_transform=tr, dst_crs="EPSG:4326", resampling=Resampling.average,
+                      src_nodata=None, dst_nodata=0)
+            Image.fromarray(np.clip(np.rint(dst), 0, 255).astype(np.uint8), mode="L").save(os.path.join(outdir, f"{sp}.png"), optimize=True)
+            log(f"carte d'ensemble {sp} : moyenne {dst[dst > 0].mean() / 255:.3f}, cases >= 0,5 : {(dst >= 128).mean() * 100:.1f} %")
+
+
 if __name__ == "__main__":
     if not DEM_FILES:
         sys.exit("Relief GLO-30 absent : télécharger les tuiles dans .cache-habitat/dem30/")
+    if not os.path.exists(TCD_FILE):
+        sys.exit("Couvert Copernicus 2024 absent : lancer d'abord scripts/fetch-tcd.py")
     raster = build_raster()
+    build_coarse()
     build_tiles(raster)

@@ -4,7 +4,7 @@
 import L from 'leaflet'
 import { useEffect, useRef } from 'react'
 import { useMap } from 'react-leaflet'
-import { FINE_MAX_ZOOM, FINE_MIN_ZOOM, fineLevel, loadFineTile, paintZones, type CoinsResult } from '../lib/coins'
+import { displayValue, FINE_MAX_ZOOM, FINE_MIN_ZOOM, fineLevel, loadFineTile, paintZones, type CoinsResult } from '../lib/coins'
 
 type Props = { result: CoinsResult; speciesIndex: number }
 
@@ -56,6 +56,11 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
           const level = fineLevel(rgba, i, idx)
           levels[i] = level
           if (level === 0) continue
+          // « Milieu seul » : l'habitat à 20 m, sans la météo.
+          if (res.habitatOnly) {
+            score[i] = level / 7
+            continue
+          }
           const x0 = Math.floor(gx[c])
           const x1 = Math.min(x0 + 1, g.width - 1)
           const wx = gx[c] - x0
@@ -63,11 +68,11 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
             ((v[y0 * g.width + x0] * (1 - wx) + v[y0 * g.width + x1] * wx) * (1 - wy) +
               (v[y1 * g.width + x0] * (1 - wx) + v[y1 * g.width + x1] * wx) * wy) /
             255
-          score[i] = (level / 7) * p
+          score[i] = Math.min(1, (level / 7) * p * res.moonFactor)
         }
       }
       // Zone favorable = habitat ≥ 4/7 (≥ 50 %) : voile + contour, couleur de pousse par-dessus.
-      paintZones(img.data, 256, 256, (i) => score[i], (i) => levels[i] >= 4)
+      paintZones(img.data, 256, 256, (i) => displayValue(res, score[i]), (i) => levels[i] >= 4)
       ctx.putImageData(img, 0, 0)
     }
 

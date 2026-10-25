@@ -3,6 +3,7 @@ import { usePanelCollapse } from '../lib/usePanelCollapse'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { COINS_LEGEND, SPECIES, scoreLabel, type PousseMeta, type Species } from '../lib/coins'
 import { formatRelativeAge } from '../lib/formatRelativeAge'
+import { moonPhase } from '../lib/moon'
 import { useParisToday } from '../lib/useParisToday'
 import './CoinsControls.css'
 
@@ -21,9 +22,17 @@ type Props = {
   onRetry: () => void
   spots: NamedSpot[]
   onSelectSpot: (s: NamedSpot) => void
+  // « meteo » : milieu x météo de pousse du jour choisi ; « milieu » : le milieu seul (meilleurs coins dans l'absolu).
+  view: CoinsView
+  onView: (v: CoinsView) => void
+  // Clin d'œil « lune » (croyance populaire, lib/moon.ts), désactivé par défaut.
+  moon: boolean
+  onMoon: (on: boolean) => void
 }
 
-export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, status, error, onRetry, spots, onSelectSpot }: Props) {
+export type CoinsView = 'meteo' | 'milieu'
+
+export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, status, error, onRetry, spots, onSelectSpot, view, onView, moon, onMoon }: Props) {
   const [collapsed, setCollapsed] = useState(false)
   // Mobile : replié quand on touche la carte ou qu'une fiche s'ouvre (lib/usePanelCollapse.ts).
   usePanelCollapse(useCallback(() => setCollapsed(true), []))
@@ -47,13 +56,37 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
       <button type="button" className="coins__header" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed}>
         <span>
           🎯 {sp.label}
-          {day && <span className="coins__current"> · {dayLabel(day.date)}</span>}
+          {view === 'milieu' ? <span className="coins__current"> · milieu</span> : day && <span className="coins__current"> · {dayLabel(day.date)}</span>}
         </span>
         <span className="coins__chevron">{collapsed ? '▸' : '▾'}</span>
       </button>
 
       {!collapsed && (
         <div className="coins__body">
+          <div className="coins__view" role="radiogroup" aria-label="Affichage">
+            {(
+              [
+                ['meteo', '🌦️ Avec la météo'],
+                ['milieu', '🌳 Milieu seul'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="radio"
+                aria-checked={view === key}
+                className={view === key ? 'coins__view-btn coins__view-btn--on' : 'coins__view-btn'}
+                onClick={() => onView(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="coins__hint">
+            {view === 'milieu'
+              ? 'Les meilleurs coins dans l’absolu : arbres, ouverture du bois, sol, altitude et exposition, sans tenir compte de la météo.'
+              : 'Le milieu, multiplié par la pluie tombée et la météo prévue : où ça pousse en ce moment.'}
+          </p>
           {(['cepe', 'autre'] as const).map((group) => (
             <div key={group} className="coins__group" role="radiogroup" aria-label={group === 'cepe' ? 'Cèpes' : 'Autres espèces'}>
               <div className="coins__group-title">{group === 'cepe' ? 'Cèpes' : 'Autres'}</div>
@@ -75,7 +108,7 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
           ))}
           <p className="coins__hint">{sp.hint}</p>
 
-          {meta && (
+          {meta && view === 'meteo' && (
             <div className="coins__days">
               {meta.days.map((d, i) =>
                 // Jours 8 à 15 (AIFS seul, peu fiables) : seulement dans la courbe de la fiche, pas en carte.
@@ -119,7 +152,7 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
 
           {status === 'ready' && (
             <button type="button" className="coins__top-toggle" onClick={() => setShowTop((v) => !v)} aria-expanded={showTop}>
-              🏆 Les 10 meilleurs coins {showTop ? '▾' : '▸'}
+              🏆 {view === 'milieu' ? 'Les 10 meilleurs milieux' : 'Les 10 meilleurs coins'} {showTop ? '▾' : '▸'}
             </button>
           )}
           {status === 'ready' && showTop && (
@@ -144,11 +177,31 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
             </ol>
           )}
 
+          <label className="coins__moon">
+            <input type="checkbox" checked={moon} onChange={(e) => onMoon(e.target.checked)} />
+            <span>
+              🌙 Lune <small>(croyance populaire)</small>
+              {moon && day && view === 'meteo' && (
+                <small className="coins__moon-phase">
+                  {moonPhase(day.date).emoji} {moonPhase(day.date).label} : {moonPhase(day.date).effect}. Selon la tradition des
+                  cueilleurs, sans preuve scientifique.
+                </small>
+              )}
+              {moon && view === 'milieu' && <small className="coins__moon-phase">Sans effet en « Milieu seul » (pas de pousse à moduler).</small>}
+            </span>
+          </label>
+
           {meta && (
             <p className="coins__note">
-              Indicatif : milieu (forêts IGN, sol, relief) × météo (pluie, températures). Calculé{' '}
-              {formatRelativeAge(new Date(meta.generatedAt).getTime())}.
-              {meta.history.missing.length > 3 && ` Historique météo incomplet (${meta.history.missing.length} jours manquants).`}
+              {view === 'milieu' ? (
+                'Indice du milieu : essences (BD Forêt IGN), densité des arbres (Copernicus 2024), sol, altitude, exposition.'
+              ) : (
+                <>
+                  Indice : milieu × météo (pluie tombée, corrigée par les pluviomètres, et prévisions). Calculé{' '}
+                  {formatRelativeAge(new Date(meta.generatedAt).getTime())}.
+                  {meta.history.missing.length > 3 && ` Historique météo incomplet (${meta.history.missing.length} jours manquants).`}
+                </>
+              )}
             </p>
           )}
         </div>

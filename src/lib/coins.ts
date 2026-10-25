@@ -4,6 +4,7 @@
 //
 // Les deux grilles partagent la même emprise que les cartes de pluie : l'habitat est 4 fois plus fin
 // (~250 m) ; la météo (~1 km) est interpolée sur la grille de l'habitat.
+import { moonPhase } from './moon'
 import { fetchDataJson, fetchPixels } from './rainMaps'
 
 // Les quatre cèpes sont séparés : ils ne poussent ni aux mêmes endroits ni à la même saison.
@@ -135,9 +136,13 @@ export type CoinsResult = {
   species: Species
   pousse: Grid // météo de pousse de l'espèce (~1 km), réutilisée par les tuiles à 20 m
   habitat: Grid // habitat de l'espèce (250 m), pour le contour des zones favorables
+  // « Milieu seul » : score = habitat, sans la météo (les meilleurs coins dans l'absolu, quelle que soit la saison).
+  habitatOnly: boolean
+  // Clin d'œil « lune » (croyance populaire, lib/moon.ts) : facteur appliqué au score de pousse, 1 si désactivé.
+  moonFactor: number
 }
 
-export async function computeCoins(sp: Species, dayIndex: number): Promise<CoinsResult> {
+export async function computeCoins(sp: Species, dayIndex: number, habitatOnly = false, moon = false): Promise<CoinsResult> {
   const [hmeta, meta] = await Promise.all([loadHabitatMeta(), loadPousseMeta()])
   const day = meta.days[Math.min(dayIndex, meta.days.length - 1)]
   // Espèce ajoutée dans l'appli mais pas encore calculée côté serveur (entre deux publications).
@@ -145,6 +150,7 @@ export async function computeCoins(sp: Species, dayIndex: number): Promise<Coins
   const [hab, pou] = await Promise.all([loadHabitat(sp), loadPousse(day.files[sp])])
   const { width, height } = hab
   const score = new Float32Array(width * height)
+  const moonFactor = moon && !habitatOnly ? moonPhase(day.date).factor : 1
   const fx = pou.width / width
   const fy = pou.height / height
   for (let r = 0; r < height; r++) {
@@ -155,6 +161,10 @@ export async function computeCoins(sp: Species, dayIndex: number): Promise<Coins
     for (let c = 0; c < width; c++) {
       const h = hab.values[r * width + c]
       if (h === 0) continue
+      if (habitatOnly) {
+        score[r * width + c] = h / 255
+        continue
+      }
       const x = Math.min(Math.max((c + 0.5) * fx - 0.5, 0), pou.width - 1)
       const x0 = Math.floor(x)
       const x1 = Math.min(x0 + 1, pou.width - 1)
@@ -162,10 +172,10 @@ export async function computeCoins(sp: Species, dayIndex: number): Promise<Coins
       const p =
         (pou.values[y0 * pou.width + x0] * (1 - wx) + pou.values[y0 * pou.width + x1] * wx) * (1 - wy) +
         (pou.values[y1 * pou.width + x0] * (1 - wx) + pou.values[y1 * pou.width + x1] * wx) * wy
-      score[r * width + c] = (h / 255) * (p / 255)
+      score[r * width + c] = Math.min(1, (h / 255) * (p / 255) * moonFactor)
     }
   }
-  return { score, width, height, bounds: hmeta.bounds, day, meta, species: sp, pousse: pou, habitat: hab }
+  return { score, width, height, bounds: hmeta.bounds, day, meta, species: sp, pousse: pou, habitat: hab, habitatOnly, moonFactor }
 }
 
 // Palette : transparent sous 0,12, puis jaune -> orange -> rouge -> violet foncé.
@@ -237,6 +247,22 @@ export function paintZones(
   }
 }
 
+// Échelle de couleurs du mode « Milieu seul » : le milieu atteint facilement 60-90 %, alors que la palette est
+// calée sur le score avec météo (bien plus bas) ; sans cette conversion, toute la forêt sortait en rouge foncé.
+// Jaune à partir de 35 % de milieu, rouge foncé seulement au-delà de 90 %. Le pourcentage affiché reste le vrai.
+const MILIEU_SCALE: [number, number][] = [[0, 0], [0.35, 0.12], [0.5, 0.2], [0.65, 0.35], [0.8, 0.5], [0.9, 0.7], [1, 1]]
+export function displayValue(res: CoinsResult, v: number): number {
+  if (!res.habitatOnly) return v
+  for (let i = 1; i < MILIEU_SCALE.length; i++) {
+    const [x1, y1] = MILIEU_SCALE[i]
+    if (v <= x1) {
+      const [x0, y0] = MILIEU_SCALE[i - 1]
+      return y0 + ((v - x0) / (x1 - x0)) * (y1 - y0)
+    }
+  }
+  return 1
+}
+
 export function renderCoins(res: CoinsResult): string {
   const canvas = document.createElement('canvas')
   canvas.width = res.width
@@ -244,7 +270,7 @@ export function renderCoins(res: CoinsResult): string {
   const ctx = canvas.getContext('2d')!
   const img = ctx.createImageData(res.width, res.height)
   const threshold = ZONE_THRESHOLD * 255
-  paintZones(img.data, res.width, res.height, (i) => res.score[i], (i) => res.habitat.values[i] >= threshold)
+  paintZones(img.data, res.width, res.height, (i) => displayValue(res, res.score[i]), (i) => res.habitat.values[i] >= threshold)
   ctx.putImageData(img, 0, 0)
   return canvas.toDataURL()
 }
@@ -358,10 +384,11 @@ export async function describeSpot(res: CoinsResult, sp: Species, lat: number, l
   if (temp5 < 6) reasons.push('Trop froid ces derniers jours.')
   else if (temp5 > 24) reasons.push('Trop chaud ces derniers jours.')
   if (rain15 < 10 && since !== 255) reasons.push('Sol qui s’assèche (peu de pluie ces 15 jours).')
-  if (reasons.length === 0 && (fine !== null ? habitat * pousse : res.score[i]) >= 0.35) reasons.push('Bon milieu, pluie suffisante au bon moment et températures douces.')
+  if (res.habitatOnly && habitat >= 0.6) reasons.unshift(`Très bon milieu pour l'espèce (${GROUP_LABELS[group] ?? group}), indépendamment de la météo.`)
+  if (reasons.length === 0 && !res.habitatOnly && (fine !== null ? habitat * pousse : res.score[i]) >= 0.35) reasons.push('Bon milieu, pluie suffisante au bon moment et températures douces.')
 
   return {
-    score: fine !== null ? habitat * pousseAt(res, lat, lon) : res.score[i],
+    score: res.habitatOnly ? habitat : fine !== null ? Math.min(1, habitat * pousseAt(res, lat, lon) * res.moonFactor) : res.score[i],
     habitat,
     pousse,
     trees: GROUP_LABELS[group] ?? group,
@@ -453,6 +480,7 @@ export async function potentialSeries(res: CoinsResult, sp: Species, lat: number
   return days.flatMap((d, k) => {
     const g = grids[k]
     if (!g) return []
-    return [{ date: d.date, value: habitat * pousseAt({ ...res, pousse: g }, lat, lon), reliable: d.reliable !== false }]
+    const moon = res.moonFactor !== 1 ? moonPhase(d.date).factor : 1
+    return [{ date: d.date, value: Math.min(1, habitat * pousseAt({ ...res, pousse: g }, lat, lon) * moon), reliable: d.reliable !== false }]
   })
 }
