@@ -9,24 +9,27 @@
 import L from 'leaflet'
 import { useEffect, useRef } from 'react'
 import { useMap } from 'react-leaflet'
-import { rainColor } from '../lib/color'
+import { rainColor, rainColorExtended } from '../lib/color'
 import type { RainImage, RainMapsMeta } from '../types'
 
 const UPSCALE = 3
 const OPACITY = 0.75
 
-type Props = { image: RainImage; bounds: RainMapsMeta['bounds'] }
+// extended : échelle prolongée au-delà de 20 mm (historique jour par jour et cumuls, voir lib/color.ts).
+type Props = { image: RainImage; bounds: RainMapsMeta['bounds']; extended?: boolean }
 
 // Table niveau (0-255) -> RGBA, une par échelle (0,1 mm par niveau pour les cartes de pluie, 0,5 mm pour
 // l'historique jour par jour) : une seule table en cache aurait coloré la 2e échelle avec la 1re.
-const luts = new Map<number, Uint8ClampedArray>()
-function paletteLut(mmPerLevel: number): Uint8ClampedArray {
-  const cached = luts.get(mmPerLevel)
+const luts = new Map<string, Uint8ClampedArray>()
+function paletteLut(mmPerLevel: number, extended: boolean): Uint8ClampedArray {
+  const key = `${mmPerLevel}|${extended}`
+  const cached = luts.get(key)
   if (cached) return cached
   const lut = new Uint8ClampedArray(256 * 4)
-  luts.set(mmPerLevel, lut)
+  luts.set(key, lut)
+  const colorOf = extended ? rainColorExtended : rainColor
   for (let level = 0; level < 256; level++) {
-    const m = rainColor(level * mmPerLevel).match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/)
+    const m = colorOf(level * mmPerLevel).match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/)
     if (!m) continue
     lut[level * 4] = Number(m[1])
     lut[level * 4 + 1] = Number(m[2])
@@ -36,7 +39,7 @@ function paletteLut(mmPerLevel: number): Uint8ClampedArray {
   return lut
 }
 
-function renderDataUrl(image: RainImage): string {
+function renderDataUrl(image: RainImage, extended: boolean): string {
   // 1) niveaux -> canvas source (gris dans le canal rouge)
   const src = document.createElement('canvas')
   src.width = image.width
@@ -60,7 +63,7 @@ function renderDataUrl(image: RainImage): string {
 
   // 3) coloration par palette
   const px = bctx.getImageData(0, 0, big.width, big.height)
-  const table = paletteLut(image.mmPerLevel)
+  const table = paletteLut(image.mmPerLevel, extended)
   for (let i = 0; i < px.data.length; i += 4) {
     const level = px.data[i]
     px.data[i] = table[level * 4]
@@ -72,12 +75,12 @@ function renderDataUrl(image: RainImage): string {
   return big.toDataURL()
 }
 
-export function RainOverlay({ image, bounds }: Props) {
+export function RainOverlay({ image, bounds, extended = false }: Props) {
   const map = useMap()
   const overlayRef = useRef<L.ImageOverlay | null>(null)
 
   useEffect(() => {
-    const dataUrl = renderDataUrl(image)
+    const dataUrl = renderDataUrl(image, extended)
     const latLngBounds = L.latLngBounds([bounds.latMin, bounds.lonMin], [bounds.latMax, bounds.lonMax])
     if (overlayRef.current) {
       overlayRef.current.setUrl(dataUrl)
@@ -85,7 +88,7 @@ export function RainOverlay({ image, bounds }: Props) {
     } else {
       overlayRef.current = L.imageOverlay(dataUrl, latLngBounds, { opacity: OPACITY, interactive: false }).addTo(map)
     }
-  }, [image, bounds, map])
+  }, [image, bounds, map, extended])
 
   useEffect(() => {
     return () => {

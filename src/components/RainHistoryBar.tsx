@@ -1,25 +1,41 @@
-// Mode Historique : curseur de la pluie jour par jour, de J-15 à J-1, plus « 24 dernières heures » tout à droite
-// (la carte glissante habituelle), avec ▶ / ⏸ qui fait défiler les jours comme une animation radar.
+// Mode Historique : curseur à DEUX poignées sur les 15 derniers jours (J-15 à J-1). Les deux poignées sur le même
+// jour = la pluie de ce jour-là ; écartées = le CUMUL de pluie sur la plage (ex. de J-10 à J-8). Bouton « 24 h » pour
+// revenir à la carte glissante des 24 dernières heures ; ▶ / ⏸ fait défiler les jours un par un (animation radar).
+import { RAIN_EXTENDED_LEGEND } from '../lib/color'
 import type { RainDay } from '../lib/rainDays'
 import './RainHistoryBar.css'
 
 const DAY = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })
+const fmtDay = (d: string) => DAY.format(new Date(`${d}T12:00:00`))
 const mm = (v: number) => `${v.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} mm`
+
+// Plage en « décalages » : 1 = hier (J-1) … n = le jour le plus ancien ; from >= to.
+export type RainRange = { from: number; to: number }
 
 type Props = {
   days: RainDay[] // du plus ancien au plus récent
-  // Position : 0 = 24 dernières heures ; 1 = hier (J-1) ; … ; days.length = le plus ancien.
-  offset: number
-  onOffset: (o: number) => void
+  range: RainRange | null // null = 24 dernières heures
+  onRange: (r: RainRange | null) => void
+  maxMm: number | null // maximum de la carte affichée (jour ou cumul)
   playing: boolean
   onPlay: () => void
   loading: boolean
 }
 
-export function RainHistoryBar({ days, offset, onOffset, playing, onPlay, loading }: Props) {
+export function RainHistoryBar({ days, range, onRange, maxMm, playing, onPlay, loading }: Props) {
   const n = days.length
   if (n === 0) return null
-  const day = offset > 0 ? days[n - offset] : null
+  const r = range ?? { from: 1, to: 1 }
+  const dayAt = (offset: number) => days[n - offset]
+  const first = dayAt(r.from)
+  const last = dayAt(r.to)
+  const count = r.from - r.to + 1
+  const allCorrected = range ? days.slice(n - r.from, n - r.to + 1).every((d) => d.corrected) : true
+
+  // Valeurs des deux curseurs : position = -décalage (gauche = plus ancien).
+  const setFrom = (v: number) => onRange({ from: Math.max(-v, r.to), to: r.to })
+  const setTo = (v: number) => onRange({ from: r.from, to: Math.min(-v, r.from) })
+
   return (
     <div className="rain-history" role="group" aria-label="Historique de pluie">
       <button type="button" className="rain-history__play" onClick={onPlay} aria-label={playing ? 'Pause' : 'Faire défiler les jours'}>
@@ -27,13 +43,15 @@ export function RainHistoryBar({ days, offset, onOffset, playing, onPlay, loadin
       </button>
       <div className="rain-history__main">
         <div className="rain-history__label">
-          {day ? (
+          {range ? (
             <>
-              <b className="rain-history__date">{DAY.format(new Date(`${day.date}T12:00:00`))}</b>
+              <b className="rain-history__date">
+                {count === 1 ? fmtDay(first.date) : `du ${fmtDay(first.date)} au ${fmtDay(last.date)}`}
+              </b>
               <span>
-                {' '}
-                · J-{offset} · max {mm(day.maxMm)}
-                {day.corrected ? ' · corrigée par les pluviomètres' : ' · modèle seul'}
+                {count > 1 ? ` · cumul ${count} jours` : ` · J-${r.from}`}
+                {maxMm !== null && ` · max ${mm(maxMm)}`}
+                {allCorrected ? ' · corrigée par les pluviomètres' : ' · en partie modèle seul'}
               </span>
             </>
           ) : (
@@ -41,25 +59,48 @@ export function RainHistoryBar({ days, offset, onOffset, playing, onPlay, loadin
           )}
           {loading && <span className="rain-history__loading"> · chargement…</span>}
         </div>
-        <input
-          type="range"
-          min={-n}
-          max={0}
-          step={1}
-          value={-offset}
-          onChange={(e) => onOffset(-Number(e.target.value))}
-          aria-label="Jour affiché"
-          aria-valuetext={day ? `${DAY.format(new Date(`${day.date}T12:00:00`))}, J-${offset}` : '24 dernières heures'}
-        />
+        <div className={range ? 'rain-history__slider' : 'rain-history__slider rain-history__slider--off'}>
+          <input
+            type="range"
+            min={-n}
+            max={-1}
+            step={1}
+            value={-r.from}
+            onChange={(e) => setFrom(Number(e.target.value))}
+            aria-label="Premier jour"
+          />
+          <input
+            type="range"
+            min={-n}
+            max={-1}
+            step={1}
+            value={-r.to}
+            onChange={(e) => setTo(Number(e.target.value))}
+            aria-label="Dernier jour"
+          />
+        </div>
         <div className="rain-history__ticks" aria-hidden="true">
           <span>J-{n}</span>
-          {/* « J-1 » à sa vraie place : l'avant-dernière graduation, tout près de la droite. */}
-          <span className="rain-history__tick-j1" style={{ left: `${((n - 1) / n) * 100}%` }}>
-            J-1
-          </span>
-          <span>24 h</span>
+          <span>J-1</span>
+        </div>
+        <div className="rain-history__legend" aria-hidden="true">
+          {RAIN_EXTENDED_LEGEND.map((l) => (
+            <span key={l.label} title={`${l.label} mm`}>
+              <i style={{ background: l.color }} />
+              {l.label}
+            </span>
+          ))}
         </div>
       </div>
+      <button
+        type="button"
+        className={range ? 'rain-history__24h' : 'rain-history__24h rain-history__24h--on'}
+        onClick={() => onRange(range ? null : { from: 1, to: 1 })}
+        aria-pressed={!range}
+        title="Pluie des 24 dernières heures"
+      >
+        24 h
+      </button>
     </div>
   )
 }

@@ -38,7 +38,7 @@ import { OfflinePanel } from './OfflinePanel'
 import { GUIDE_TO_COINS, MushroomGuide } from './MushroomGuide'
 import { RainControls } from './RainControls'
 import { RainOverlay } from './RainOverlay'
-import { RainHistoryBar } from './RainHistoryBar'
+import { RainHistoryBar, type RainRange } from './RainHistoryBar'
 import { loadRainDayImage, loadRainDays, type RainDaysMeta } from '../lib/rainDays'
 import type { RainImage } from '../types'
 import { RegionOutline } from './RegionOutline'
@@ -460,11 +460,11 @@ export function MapView() {
 
   const currentImage: RainImageState = (neededFile && images[neededFile]) || { status: 'idle' }
 
-  // ---- Historique de pluie jour par jour (curseur J-15 à J-1, voir lib/rainDays.ts) ----
+  // ---- Historique de pluie jour par jour (curseur J-15 à J-1 à deux poignées, voir lib/rainDays.ts) ----
   const [rainDays, setRainDays] = useState<RainDaysMeta | null>(null)
-  const [rainOffset, setRainOffset] = useState(0) // 0 = 24 dernières heures, 1 = hier, …
+  const [rainRange, setRainRange] = useState<RainRange | null>(null) // null = 24 dernières heures
   const [rainPlaying, setRainPlaying] = useState(false)
-  const [dayImage, setDayImage] = useState<{ file: string; image: RainImage } | null>(null)
+  const [dayImage, setDayImage] = useState<{ key: string; image: RainImage; maxMm: number } | null>(null)
   const [dayLoading, setDayLoading] = useState(false)
   useEffect(() => {
     if (mode !== 'historique') {
@@ -479,26 +479,57 @@ export function MapView() {
       cancelled = true
     }
   }, [mode, reloadKey])
-  const selectedDay = rainDays && rainOffset > 0 ? rainDays.days[rainDays.days.length - rainOffset] : null
+  // Carte de la plage choisie : le jour seul tel quel, ou la SOMME des jours (cumul), recodée à 1 mm par niveau
+  // (plafond 255 mm) pour l'échelle prolongée.
   useEffect(() => {
-    if (!selectedDay) return
+    if (!rainDays || !rainRange) return
+    const n = rainDays.days.length
+    const picked = rainDays.days.slice(n - rainRange.from, n - rainRange.to + 1)
+    const key = picked.map((d) => d.file).join('|')
     let cancelled = false
     setDayLoading(true)
-    loadRainDayImage(selectedDay)
-      .then((image) => !cancelled && setDayImage({ file: selectedDay.file, image }))
+    Promise.all(picked.map((d) => loadRainDayImage(d)))
+      .then((imgs) => {
+        if (cancelled || imgs.length === 0) return
+        if (imgs.length === 1) {
+          const lv = imgs[0].levels
+          let max = 0
+          for (let i = 0; i < lv.length; i++) if (lv[i] > max) max = lv[i]
+          setDayImage({ key, image: imgs[0], maxMm: max * imgs[0].mmPerLevel })
+          return
+        }
+        const { width, height } = imgs[0]
+        const sum = new Float32Array(width * height)
+        for (const im of imgs) for (let i = 0; i < sum.length; i++) sum[i] += im.levels[i] * im.mmPerLevel
+        const levels = new Uint8ClampedArray(sum.length)
+        let max = 0
+        for (let i = 0; i < sum.length; i++) {
+          levels[i] = Math.min(255, Math.round(sum[i]))
+          if (sum[i] > max) max = sum[i]
+        }
+        setDayImage({ key, image: { width, height, levels, mmPerLevel: 1 }, maxMm: max })
+      })
       .catch(() => undefined)
       .finally(() => !cancelled && setDayLoading(false))
     return () => {
       cancelled = true
     }
-  }, [selectedDay])
-  // ▶ : les jours défilent du plus ancien à hier, puis recommencent (une image par seconde ; toutes les images
-  // sont préchargées au lancement pour que l'animation ne saccade pas).
+  }, [rainDays, rainRange])
+  // ▶ : les jours défilent un par un, du plus ancien à hier, puis recommencent (une image par seconde ; toutes les
+  // images sont préchargées au lancement pour que l'animation ne saccade pas).
   useEffect(() => {
     if (!rainPlaying || !rainDays) return
     for (const d of rainDays.days) void loadRainDayImage(d).catch(() => undefined)
     const n = rainDays.days.length
-    const timer = window.setInterval(() => setRainOffset((o) => (o <= 1 ? n : o - 1)), 1000)
+    const timer = window.setInterval(
+      () =>
+        setRainRange((r) => {
+          const cur = r && r.from === r.to ? r.from : n + 1
+          const next = cur <= 1 ? n : cur - 1
+          return { from: next, to: next }
+        }),
+      1000,
+    )
     return () => window.clearInterval(timer)
   }, [rainPlaying, rainDays])
   const handleRetry = reloadMaps
@@ -684,28 +715,26 @@ export function MapView() {
 
         {mode === 'previsions' && <ForecastCross point={forecastState.status === 'idle' ? null : forecastState.point} />}
 
-        {mapsState.status === 'ready' && currentImage.status === 'ready' && !(mode === 'historique' && rainOffset > 0) && (
+        {mapsState.status === 'ready' && currentImage.status === 'ready' && !(mode === 'historique' && rainRange) && (
           <RainOverlay image={currentImage.image} bounds={mapsState.meta.bounds} />
         )}
-        {mode === 'historique' && rainOffset > 0 && rainDays && dayImage && (
-          <RainOverlay image={dayImage.image} bounds={rainDays.bounds} />
+        {mode === 'historique' && rainRange && rainDays && dayImage && (
+          <RainOverlay image={dayImage.image} bounds={rainDays.bounds} extended />
         )}
       </MapContainer>
 
       {mode === 'historique' && rainDays && rainDays.days.length > 0 && (
         <RainHistoryBar
           days={rainDays.days}
-          offset={rainOffset}
-          onOffset={(o) => {
+          range={rainRange}
+          onRange={(r) => {
             setRainPlaying(false)
-            setRainOffset(o)
+            setRainRange(r)
           }}
+          maxMm={rainRange && dayImage ? dayImage.maxMm : null}
           playing={rainPlaying}
-          onPlay={() => {
-            if (!rainPlaying && rainOffset === 0) setRainOffset(rainDays.days.length)
-            setRainPlaying((p) => !p)
-          }}
-          loading={dayLoading && rainOffset > 0}
+          onPlay={() => setRainPlaying((p) => !p)}
+          loading={dayLoading && !!rainRange}
         />
       )}
 

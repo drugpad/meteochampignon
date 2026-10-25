@@ -27,3 +27,27 @@ export const RAIN_LEGEND_STOPS = BINS.map((bin) => ({
   label: bin.label,
   color: `rgb(${bin.color.join(',')})`,
 }))
+
+// Échelle PROLONGÉE pour l'historique jour par jour et les cumuls sur plusieurs jours (curseur du mode Historique,
+// 25/10/2026) : mêmes couleurs jusqu'à 20 mm, puis des paliers au-delà — un cumul de quelques jours dépasse vite
+// 20 mm (107 mm le 19/10/2026 sur un seul jour) et tout serait d'un violet uniforme. Les cartes 24 h et prévision,
+// plafonnées à 25,5 mm, gardent l'échelle ci-dessus.
+const EXTENDED_BINS: { max: number; color: [number, number, number]; label: string }[] = [
+  ...BINS.slice(0, 4),
+  { max: 30, color: [124, 58, 237], label: '20-30' },
+  { max: 50, color: [219, 39, 119], label: '30-50' },
+  { max: 80, color: [220, 38, 38], label: '50-80' },
+  { max: Infinity, color: [127, 29, 29], label: '80+' },
+]
+
+export function rainColorExtended(mm: number | null): string {
+  if (mm === null || mm <= 0) return 'rgba(255,255,255,0)'
+  const bin = EXTENDED_BINS.find((b) => mm <= b.max) ?? EXTENDED_BINS[EXTENDED_BINS.length - 1]
+  const [r, g, b] = bin.color
+  return `rgba(${r},${g},${b},0.65)`
+}
+
+export const RAIN_EXTENDED_LEGEND = EXTENDED_BINS.map((bin) => ({
+  label: bin.label.replace('mm', ''),
+  color: `rgb(${bin.color.join(',')})`,
+}))
