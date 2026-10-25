@@ -38,6 +38,9 @@ import { OfflinePanel } from './OfflinePanel'
 import { GUIDE_TO_COINS, MushroomGuide } from './MushroomGuide'
 import { RainControls } from './RainControls'
 import { RainOverlay } from './RainOverlay'
+import { RainHistoryBar } from './RainHistoryBar'
+import { loadRainDayImage, loadRainDays, type RainDaysMeta } from '../lib/rainDays'
+import type { RainImage } from '../types'
 import { RegionOutline } from './RegionOutline'
 import { SearchBar } from './SearchBar'
 import { StationsLayer } from './StationsLayer'
@@ -456,6 +459,48 @@ export function MapView() {
   }, [mapsState, neededFile])
 
   const currentImage: RainImageState = (neededFile && images[neededFile]) || { status: 'idle' }
+
+  // ---- Historique de pluie jour par jour (curseur J-15 à J-1, voir lib/rainDays.ts) ----
+  const [rainDays, setRainDays] = useState<RainDaysMeta | null>(null)
+  const [rainOffset, setRainOffset] = useState(0) // 0 = 24 dernières heures, 1 = hier, …
+  const [rainPlaying, setRainPlaying] = useState(false)
+  const [dayImage, setDayImage] = useState<{ file: string; image: RainImage } | null>(null)
+  const [dayLoading, setDayLoading] = useState(false)
+  useEffect(() => {
+    if (mode !== 'historique') {
+      setRainPlaying(false)
+      return
+    }
+    let cancelled = false
+    loadRainDays()
+      .then((m) => !cancelled && setRainDays(m))
+      .catch(() => !cancelled && setRainDays(null)) // pas encore publié : pas de curseur
+    return () => {
+      cancelled = true
+    }
+  }, [mode, reloadKey])
+  const selectedDay = rainDays && rainOffset > 0 ? rainDays.days[rainDays.days.length - rainOffset] : null
+  useEffect(() => {
+    if (!selectedDay) return
+    let cancelled = false
+    setDayLoading(true)
+    loadRainDayImage(selectedDay)
+      .then((image) => !cancelled && setDayImage({ file: selectedDay.file, image }))
+      .catch(() => undefined)
+      .finally(() => !cancelled && setDayLoading(false))
+    return () => {
+      cancelled = true
+    }
+  }, [selectedDay])
+  // ▶ : les jours défilent du plus ancien à hier, puis recommencent (une image par seconde ; toutes les images
+  // sont préchargées au lancement pour que l'animation ne saccade pas).
+  useEffect(() => {
+    if (!rainPlaying || !rainDays) return
+    for (const d of rainDays.days) void loadRainDayImage(d).catch(() => undefined)
+    const n = rainDays.days.length
+    const timer = window.setInterval(() => setRainOffset((o) => (o <= 1 ? n : o - 1)), 1000)
+    return () => window.clearInterval(timer)
+  }, [rainPlaying, rainDays])
   const handleRetry = reloadMaps
 
   return (
@@ -639,10 +684,30 @@ export function MapView() {
 
         {mode === 'previsions' && <ForecastCross point={forecastState.status === 'idle' ? null : forecastState.point} />}
 
-        {mapsState.status === 'ready' && currentImage.status === 'ready' && (
+        {mapsState.status === 'ready' && currentImage.status === 'ready' && !(mode === 'historique' && rainOffset > 0) && (
           <RainOverlay image={currentImage.image} bounds={mapsState.meta.bounds} />
         )}
+        {mode === 'historique' && rainOffset > 0 && rainDays && dayImage && (
+          <RainOverlay image={dayImage.image} bounds={rainDays.bounds} />
+        )}
       </MapContainer>
+
+      {mode === 'historique' && rainDays && rainDays.days.length > 0 && (
+        <RainHistoryBar
+          days={rainDays.days}
+          offset={rainOffset}
+          onOffset={(o) => {
+            setRainPlaying(false)
+            setRainOffset(o)
+          }}
+          playing={rainPlaying}
+          onPlay={() => {
+            if (!rainPlaying && rainOffset === 0) setRainOffset(rainDays.days.length)
+            setRainPlaying((p) => !p)
+          }}
+          loading={dayLoading && rainOffset > 0}
+        />
+      )}
 
       {mode === 'coins' && spot && (
         <CoinsSpotCard

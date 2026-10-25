@@ -69,6 +69,12 @@ def fetch(url, timeout=30):
         return r.read()
 
 
+# Pluie de chaque jour passé CORRIGÉE par les pluviomètres, gardée dans l'historique (weather/rainc-<date>.png,
+# 16 bits, pluie x 10, ligne 0 = sud) : l'historique des stations ne couvre que 10 jours, mais une carte corrigée le
+# reste ensuite (curseur de pluie J-15 à J-1 de l'appli, 25/10/2026).
+CORRECTED = {}
+
+
 def load_archive(rows):
     """{date: (pluie, tmoy, tmin, source)} depuis la branche data (vide au premier lancement)."""
     try:
@@ -90,7 +96,20 @@ def load_archive(rows):
         for d, v in ex.map(one, index.get("days", {}).items()):
             if v is not None:
                 days[date.fromisoformat(d)] = v
-    log(f"historique météo : {len(days)} jours relus")
+
+    def one_corr(d):
+        try:
+            a = np.asarray(Image.open(io.BytesIO(fetch(f"{ARCHIVE_URL}/rainc-{d}.png")))).astype(np.float32) / 10
+            return d, a
+        except Exception as err:
+            log(f"pluie corrigée {d} illisible ({err})")
+            return d, None
+
+    with ThreadPoolExecutor(8) as ex:
+        for d, a in ex.map(one_corr, index.get("corrected", [])):
+            if a is not None:
+                CORRECTED[date.fromisoformat(d)] = a
+    log(f"historique météo : {len(days)} jours relus, dont {len(CORRECTED)} cartes de pluie corrigées par les pluviomètres")
     return days
 
 
@@ -99,7 +118,18 @@ def save_archive(days):
     for d, (rain, tmean, tmin, _src) in days.items():
         with open(f"{OUT_DIR}/weather/{d.isoformat()}.png", "wb") as fh:
             fh.write(encode_day(rain, tmean, tmin))
-    index = {"days": {d.isoformat(): v[3] for d, v in sorted(days.items())}, "encoding": "PNG 16 bits, 3 bandes : pluie x10, (tmoy+50)x100, (tmin+50)x100, ligne 0 = sud"}
+    keep = min(days) if days else None
+    corrected = sorted(d for d in CORRECTED if keep is None or d >= keep)
+    for d in corrected:
+        buf = io.BytesIO()
+        Image.fromarray(np.clip(np.rint(CORRECTED[d] * 10), 0, 65535).astype(np.uint16)).save(buf, format="PNG", optimize=True)
+        with open(f"{OUT_DIR}/weather/rainc-{d.isoformat()}.png", "wb") as fh:
+            fh.write(buf.getvalue())
+    index = {
+        "days": {d.isoformat(): v[3] for d, v in sorted(days.items())},
+        "corrected": [d.isoformat() for d in corrected],
+        "encoding": "PNG 16 bits, 3 bandes : pluie x10, (tmoy+50)x100, (tmin+50)x100, ligne 0 = sud ; rainc-<date>.png : pluie corrigée x10",
+    }
     with open(f"{OUT_DIR}/weather/index.json", "w", encoding="utf-8") as fh:
         json.dump(index, fh, ensure_ascii=False, separators=(",", ":"))
 
@@ -313,6 +343,37 @@ def correct_rain(rain, totals, rows, cols):
     out = np.clip(rain + num / den, 0, None).astype(np.float32)
     after = RegularGridInterpolator((lats, lons), out, bounds_error=False, fill_value=None)(st)
     return out, (float(np.abs(resid).mean()), float(np.abs(meas - after).mean()))
+
+
+# --------------------------------------------------------------------------------------------------
+# Curseur « historique de pluie » de l'appli (J-15 à J-1) : pluie de chaque jour, de minuit à minuit (Paris),
+# corrigée par les pluviomètres quand on l'a, sinon celle du modèle. PNG 8 bits, niveau = mm x 2 (0,5 mm près,
+# plafond 127,5 mm), ligne 0 = nord, même grille que les cartes de pluie.
+RAIN_DAYS = 15
+
+
+def write_rain_days(archive, today, rows, cols):
+    os.makedirs(f"{OUT_DIR}/rain-days", exist_ok=True)
+    days = []
+    for b in range(1, RAIN_DAYS + 1):
+        d = today - timedelta(days=b)
+        rain = CORRECTED.get(d)
+        corrected = rain is not None
+        if rain is None and d in archive:
+            rain = archive[d][0]
+        if rain is None:
+            continue
+        fname = f"rain-days/{d.isoformat()}.png"
+        level = np.clip(np.rint(rain * 2), 0, 255).astype(np.uint8)
+        Image.fromarray(np.ascontiguousarray(level[::-1])).save(f"{OUT_DIR}/{fname}", optimize=True, compress_level=9)
+        days.append({"date": d.isoformat(), "file": fname, "corrected": corrected,
+                     "meanMm": round(float(rain.mean()), 1), "maxMm": round(float(rain.max()), 1)})
+    bounds = json.load(open(f"{OUT_DIR}/maps.json", encoding="utf-8"))["bounds"]
+    meta = {"generatedAt": datetime.now(rm.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), "bounds": bounds, "rows": rows, "cols": cols,
+            "encoding": {"mmPerLevel": 0.5, "maxMm": 127.5}, "days": sorted(days, key=lambda x: x["date"])}
+    with open(f"{OUT_DIR}/rain-days.json", "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, ensure_ascii=False, separators=(",", ":"))
+    log(f"historique de pluie : {len(days)} jours publiés, dont {sum(x['corrected'] for x in days)} corrigés par les pluviomètres")
 
 
 # --------------------------------------------------------------------------------------------------
@@ -588,14 +649,20 @@ def main():
     stations = load_stations()
     corrected = 0
     for k, d in enumerate([today - timedelta(days=b) for b in range(HISTORY_DAYS, 0, -1)]):
-        if not stations or d not in archive:
+        if d not in archive:
             continue
-        totals = station_totals(stations, d)
+        totals = station_totals(stations, d) if stations else []
         P[k], err = correct_rain(P[k], totals, rows, cols)
+        if err:
+            CORRECTED[d] = P[k]  # gardée : elle restera corrigée quand les mesures sortiront des 10 jours
+        elif d in CORRECTED:
+            P[k] = CORRECTED[d]  # plus de mesures pour ce jour : on reprend sa carte corrigée de l'époque
         if err:
             corrected += 1
             log(f"{d} : {len(totals)} pluviomètres, écart moyen modèle {err[0]:.2f} mm -> {err[1]:.2f} mm après correction")
     series = (np.stack(P), np.stack(Tm), np.stack(Tn))
+    save_archive({d: v for d, v in archive.items() if d >= today - timedelta(days=KEEP_DAYS)})
+    write_rain_days(archive, today, rows, cols)
     timeline = [today - timedelta(days=b) for b in range(HISTORY_DAYS, 0, -1)] + [d for d, _ in forecast_days if d in temps]
 
     out_days = []

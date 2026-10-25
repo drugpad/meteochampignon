@@ -17,11 +17,14 @@ const OPACITY = 0.75
 
 type Props = { image: RainImage; bounds: RainMapsMeta['bounds'] }
 
-// Table niveau (0-255) -> RGBA, calculée une fois.
-let lut: Uint8ClampedArray | null = null
+// Table niveau (0-255) -> RGBA, une par échelle (0,1 mm par niveau pour les cartes de pluie, 0,5 mm pour
+// l'historique jour par jour) : une seule table en cache aurait coloré la 2e échelle avec la 1re.
+const luts = new Map<number, Uint8ClampedArray>()
 function paletteLut(mmPerLevel: number): Uint8ClampedArray {
-  if (lut) return lut
-  lut = new Uint8ClampedArray(256 * 4)
+  const cached = luts.get(mmPerLevel)
+  if (cached) return cached
+  const lut = new Uint8ClampedArray(256 * 4)
+  luts.set(mmPerLevel, lut)
   for (let level = 0; level < 256; level++) {
     const m = rainColor(level * mmPerLevel).match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/)
     if (!m) continue
