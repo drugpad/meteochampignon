@@ -370,7 +370,14 @@ export async function describeSpot(res: CoinsResult, sp: Species, lat: number, l
   const reasons: string[] = []
   if (habitat === 0 && group === 'aucun') reasons.push('Pas de bois ni de prairie favorable cartographiés ici.')
   else if (habitat < 0.3) reasons.push(`Milieu peu favorable à l'espèce (${GROUP_LABELS[group] ?? group}).`)
-  if (since === 255) reasons.push('Aucune grosse pluie (20 mm en 3 jours) depuis plusieurs semaines : trop sec.')
+  if (since === 255) {
+    // Pas d'épisode (15 mm en 5 jours) : distinguer le vrai sec des pluies faibles et étalées.
+    reasons.push(
+      rain15 >= 15
+        ? `Pluies faibles et étalées (${rain15} mm en 15 jours) : de quoi lancer au mieux une petite poussée.`
+        : 'Pas de vraie pluie depuis plusieurs semaines : trop sec.',
+    )
+  }
   else if (since <= 6) {
     const ago = `il y a ${since} jour${since > 1 ? 's' : ''}`
     // La pousse du moment peut venir de pluies plus anciennes : ne pas annoncer « pas encore démarré »

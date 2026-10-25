@@ -325,10 +325,11 @@ SPECIES = {
     # la 1re version les faisait sortir dès le 4e jour à 20 °C), de juin à septembre.
     "cepe_ete": {"seuil": 25, "dd": (100, 150, 260), "temp": [(10, 0), (14, 0.6), (17, 1), (26, 1), (30, 0.5)],
                  "saison": [0, 0, 0, 0, 0.4, 0.9, 1, 1, 0.8, 0.3, 0.05, 0]},
-    # Assoupli le 24/10/2026 : la tête de nègre donne encore un peu en octobre, voire début novembre les
-    # automnes doux, dans les coteaux (1re version : éteinte sous 10 °C et octobre réduit de moitié).
-    "cepe_bronze": {"seuil": 25, "dd": (100, 150, 260), "temp": [(8, 0), (11, 0.5), (15, 1), (25, 1), (29, 0.5)],
-                    "saison": [0, 0, 0, 0, 0.1, 0.4, 0.8, 1, 1, 0.9, 0.35, 0.05]},
+    # Réglage intermédiaire (revu le 25/10/2026 après vérification) : espèce thermophile d'été et de début d'automne,
+    # encore un peu en octobre les automnes doux, rare en novembre. L'assouplissement du 24/10 (octobre 0,9,
+    # novembre 0,35, à l'aise dès 15 °C) allait trop loin.
+    "cepe_bronze": {"seuil": 25, "dd": (100, 150, 260), "temp": [(9, 0), (12, 0.5), (16, 1), (25, 1), (29, 0.5)],
+                    "saison": [0, 0, 0, 0, 0.1, 0.4, 0.8, 1, 1, 0.7, 0.15, 0]},
     # Cèpes d'automne : il leur faut de la fraîcheur (nuits qui rafraîchissent), septembre à novembre.
     # Cèpes d'automne : premiers 10-12 jours après la grosse pluie à ~12 °C, pic vers 14 j (fenêtre avancée le 25/10/2026).
     "cepe_bordeaux": {"seuil": 30, "dd": (70, 115, 230), "temp": [(4, 0), (7, 0.5), (10, 1), (17, 1), (21, 0.5), (25, 0.15)],
@@ -371,36 +372,75 @@ def season_factor(sp, d):
     return s[i] * (1 - frac) + s[(i + 1) % 12] * frac
 
 
+# Révision du 25/10/2026 (scénarios testés) :
+# - une vraie gelée (minimum <= -2 °C) détruit la poussée en cours : les épisodes antérieurs sont annulés pour les
+#   cèpes et la coulemelle, réduits de 60 % pour la girolle et la trompette (plus résistantes) ;
+# - girolle et trompette ont un second déclencheur, l'humidité ENTRETENUE : un sol resté bien humide en moyenne sur
+#   14 jours fait produire même sans grosse pluie (avant : 12 mm par semaine en juillet laissaient retomber la girolle
+#   de 0,75 à 0,09) ;
+# - degrés-jours à partir de 2 °C pour la trompette (la plus tolérante au froid ; avant, plus rien en décembre).
+WEAK_RATIO = 0.6  # en dessous de 60 % du seuil d'une espèce, pas de poussée
+FROST_RESET = -2.0
+FROST_TOLERANT = {"girolle": 0.4, "trompette": 0.4}  # part des poussées gardée après une gelée
+# Humidité moyenne sur 21 jours : début, plein, plafond. 21 jours et seuil de 20 mm : une seule grosse pluie ne suffit
+# pas (la 1re version, sur 14 jours dès 15 mm, faisait sortir la trompette à J+6 au lieu de 2-3 semaines).
+SUSTAINED = {"girolle": (20, 35, 0.85), "trompette": (20, 35, 0.85)}
+SUSTAINED_DAYS = 21
+DD_BASE = {"trompette": 2.0}
+
+
 def pousse(series, dates, k_target, sp):
     """Score 0-1 pour le jour dates[k_target] à partir des séries (jours, lignes, colonnes)."""
     P, Tm, Tn = series
     cfg = SPECIES[sp]
     start_dd, peak_dd, end_dd = cfg["dd"]
+    base = DD_BASE.get(sp, 4.0)
     k0 = max(0, k_target - HISTORY_DAYS)
     W = np.full(P.shape[1:], 20.0, np.float32)
-    dev = np.zeros(P.shape[1:], np.float32)
+    w_hist = []
     for k in range(k0, k_target + 1):
         # Évaporation de la litière sous couvert (mm/jour) : ~1,1 à 10 °C, ~1,4 à 12 °C, ~2,5 à 20 °C, ~3,2 à 25 °C.
-        # (1re version : 2,3 à 20 °C, trop faible l'été — le sol restait humide trop longtemps.)
         et = np.maximum(0.3, 0.14 * Tm[k] - 0.3)
         W = np.clip(W + P[k] - et, 0, W_MAX)
-    # Épisodes de pluie : chaque jour e où la pluie sur 3 jours dépasse le seuil ouvre une fenêtre ; on garde
-    # la meilleure fenêtre en cours (degrés-jours depuis e, pondérés par la force de l'épisode).
-    for e in range(k0 + 2, k_target + 1):
-        p3 = P[e - 2 : e + 1].sum(axis=0)
-        # Le jour déclencheur doit lui-même être pluvieux (≥ 5 mm) : sinon un seul orage, vu dans la fenêtre de
-        # 3 jours, déclenchait aussi les 2 jours suivants et étirait la pousse de 2 jours (corrigé le 25/10/2026).
-        strong = (p3 >= cfg["seuil"]) & (P[e] >= 5)
+        w_hist.append(W)
+    # Dernière gelée (par case) : jour le plus récent avec un minimum <= -2 °C, -1 si aucune.
+    last_frost = np.full(P.shape[1:], -1, np.int32)
+    for k in range(k0, k_target + 1):
+        last_frost = np.where(Tn[k] <= FROST_RESET, k, last_frost)
+    keep_after_frost = FROST_TOLERANT.get(sp, 0.0)
+    dev = np.zeros(P.shape[1:], np.float32)
+    # Épisodes de pluie : chaque jour e où la pluie sur 3 jours dépasse le seuil ouvre une fenêtre ; on garde la
+    # meilleure fenêtre en cours (degrés-jours depuis e, pondérés par la force de l'épisode).
+    seuil = cfg["seuil"]
+    for e in range(k0 + 4, k_target + 1):
+        # Épisode = pluie des 5 derniers jours, compté à sa FIN (jour e lui-même pluvieux, >= 2 mm) : plusieurs jours de
+        # pluie qui se suivent mouillent le sol comme un seul épisode. Révision du 25/10/2026 (cas de Cérizols : 25 mm
+        # en petites pluies étalées, 17,6 mm au mieux sur 3 jours, donnaient 0 % pour le cèpe de Bordeaux).
+        p5 = P[e - 4 : e + 1].sum(axis=0)
+        strong = (p5 >= WEAK_RATIO * seuil) & (P[e] >= 2)
         if not strong.any():
             continue
-        dd = np.maximum(0, Tm[e + 1 : k_target + 1] - 4).sum(axis=0) if e < k_target else np.zeros_like(p3)
+        dd = np.maximum(0, Tm[e + 1 : k_target + 1] - base).sum(axis=0) if e < k_target else np.zeros_like(p5)
         f = np.where(
             dd < start_dd,
             0,
             np.where(dd < peak_dd, (dd - start_dd) / (peak_dd - start_dd), np.clip(1 - (dd - peak_dd) / (end_dd - peak_dd), 0, 1)),
         )
-        force = 0.6 + 0.4 * np.clip(p3 / (cfg["seuil"] * 2), 0, 1)
+        # Seuil progressif : de 60 % à 100 % du seuil, petite poussée (force 0,3 à 0,6) ; au-delà, 0,6 à 1.
+        force = np.where(
+            p5 >= seuil,
+            0.6 + 0.4 * np.clip(p5 / (seuil * 2), 0, 1),
+            0.3 + 0.3 * np.clip((p5 - WEAK_RATIO * seuil) / ((1 - WEAK_RATIO) * seuil), 0, 1),
+        )
+        frost_after = last_frost >= e  # une gelée est survenue après l'épisode
+        f = np.where(frost_after, f * keep_after_frost, f)
         dev = np.maximum(dev, np.where(strong, f * force, 0))
+    if sp in SUSTAINED:
+        lo, full, cap = SUSTAINED[sp]
+        w_mean = np.mean(w_hist[-SUSTAINED_DAYS:], axis=0)
+        sustained = np.clip((w_mean - lo) / (full - lo), 0, 1) * cap
+        sustained = np.where(last_frost >= k_target - 3, sustained * keep_after_frost, sustained)
+        dev = np.maximum(dev, sustained)
     moist = curve(W, MOISTURE.get(sp, MOISTURE_DEFAULT))
     t5 = Tm[max(0, k_target - 4) : k_target + 1].mean(axis=0)
     temp = curve(t5, cfg["temp"])
@@ -412,9 +452,9 @@ def info_layer(series, dates, k_target):
     P, Tm, _ = series
     rain15 = P[max(0, k_target - 14) : k_target + 1].sum(axis=0)
     since = np.full(P.shape[1:], 255, np.float32)
-    for e in range(k_target, max(1, k_target - 60), -1):
-        p3 = P[max(0, e - 2) : e + 1].sum(axis=0)
-        hit = (p3 >= 20) & (since == 255)
+    for e in range(k_target, max(4, k_target - 60), -1):
+        p5 = P[e - 4 : e + 1].sum(axis=0)
+        hit = (p5 >= 15) & (P[e] >= 2) & (since == 255)
         since[hit] = k_target - e
     t5 = Tm[max(0, k_target - 4) : k_target + 1].mean(axis=0)
     rgb = np.stack([np.clip(np.rint(rain15 / 2), 0, 255), np.clip(since, 0, 255), np.clip(np.rint((t5 + 10) * 6), 0, 255)], axis=-1)
@@ -581,7 +621,7 @@ def main():
         "species": list(SPECIES),
         "days": out_days,
         "history": {"days": HISTORY_DAYS, "missing": missing_now, "sources": sorted({v[3] for v in archive.values()}), "stationCorrectedDays": corrected},
-        "info": {"r": "pluie des 15 derniers jours / 2 (mm)", "g": "jours depuis la dernière pluie de 20 mm en 3 jours (255 = aucune)", "b": "(température moyenne des 5 derniers jours + 10) x 6"},
+        "info": {"r": "pluie des 15 derniers jours / 2 (mm)", "g": "jours depuis le dernier épisode pluvieux (15 mm en 5 jours ; 255 = aucun)", "b": "(température moyenne des 5 derniers jours + 10) x 6"},
     }
     with open(f"{OUT_DIR}/pousse.json", "w", encoding="utf-8") as fh:
         json.dump(meta, fh, ensure_ascii=False, separators=(",", ":"))

@@ -89,11 +89,14 @@ PH_FLOOR = 0.25
 # l'ombre humide des bois fermés ; la coulemelle, le milieu ouvert. Valeurs à moins de 15 % : pré ou clairière,
 # n'a de sens qu'avec un arbre hôte tout proche (exigé à part, voir TREES_NEAR_M).
 OPENNESS = {
-    "cepe_ete": [(0, 0.7), (15, 0.85), (25, 1), (75, 1), (90, 0.6), (100, 0.4)],
-    "cepe_bronze": [(0, 0.7), (15, 0.85), (25, 1), (75, 1), (90, 0.6), (100, 0.4)],
-    "cepe_bordeaux": [(0, 0.55), (15, 0.75), (40, 1), (85, 1), (95, 0.75), (100, 0.65)],
-    "cepe_pins": [(0, 0.55), (15, 0.75), (40, 1), (85, 1), (95, 0.75), (100, 0.65)],
-    "girolle": [(0, 0.35), (15, 0.6), (35, 1), (85, 1), (100, 0.8)],
+    # Pénalité des bois très denses ADOUCIE le 25/10/2026 : le satellite mesure le couvert vu d'en haut, et une
+    # vieille futaie de chênes (90-100 % de couvert) au sous-bois clair, excellent milieu à cèpes, ne se distingue
+    # pas d'un taillis serré. Constaté en forêt de Bouconne : cœur de futaie à ~45 % contre 100 % sur les allées.
+    "cepe_ete": [(0, 0.7), (15, 0.85), (25, 1), (80, 1), (92, 0.8), (100, 0.65)],
+    "cepe_bronze": [(0, 0.7), (15, 0.85), (25, 1), (80, 1), (92, 0.8), (100, 0.65)],
+    "cepe_bordeaux": [(0, 0.55), (15, 0.75), (40, 1), (88, 1), (100, 0.8)],
+    "cepe_pins": [(0, 0.55), (15, 0.75), (40, 1), (88, 1), (100, 0.8)],
+    "girolle": [(0, 0.35), (15, 0.6), (35, 1), (88, 1), (100, 0.85)],
     "trompette": [(0, 0.3), (20, 0.5), (50, 0.8), (75, 1), (100, 1)],
     "coulemelle": [(0, 1), (40, 1), (75, 0.6), (90, 0.3), (100, 0.2)],
 }
@@ -104,8 +107,15 @@ TREES_NEAR_M = 30
 # Haies, bosquets, arbres isolés absents de la BD Forêt (elle ignore tout ce qui fait moins d'un demi-hectare) :
 # essence inconnue, majoritairement des chênes et châtaigniers dans le bocage de la région.
 SMALL_WOODS = {"cepe_ete": 0.6, "cepe_bronze": 0.55, "cepe_bordeaux": 0.45, "cepe_pins": 0.1, "girolle": 0.4, "trompette": 0.3}
-# Coupe récente : parcelle forestière de la BD Forêt (2014-2019) sans arbre en 2024 dans un rayon de 30 m.
-CUT_FACTOR = 0.1
+# Milieux exclus (ESA WorldCover 2021) : bâti (50), cultures (40, le labour détruit le mycélium), eau (80) : 0 pour
+# toutes les espèces. Constaté le 25/10/2026 : jardins, rives et champs bordés de haies sortaient à 0,1-0,4.
+EXCLUDED_LANDCOVER = [40, 50, 80]
+# Prairie près d'un arbre : un cèpe peut y sortir, mais seulement sous la couronne (~20 m), et moins qu'en sous-bois.
+MEADOW_TREE_M = 20
+MEADOW_FACTOR = 0.6
+# Coupe récente : case de forêt de la BD Forêt (2014-2019) avec moins de 10 % d'arbres en 2024.
+CUT_FACTOR = 0.1  # coupe, aucun arbre restant à moins de 20 m
+CUT_EDGE_FACTOR = 0.5  # coupe, juste sous un arbre restant
 # Exposition : orientation la plus favorable et pénalité maximale à l'opposé, pondérée par la pente (aucun effet
 # sous 3°, plein effet à partir de 15°). Cèpes de chaleur : versants sud-sud-ouest ; espèces d'humidité : versants
 # nord-nord-est qui gardent la fraîcheur ; cèpe des pins et coulemelle : neutres.

@@ -196,8 +196,13 @@ def habitat_block(forest, alt, ph, wc, mask, slope_deg, aspect_deg, tcd):
     cover = np.where(np.isnan(tcd), np.where(is_forest, 70.0, np.where(wc == 10, 50.0, 0.0)), tcd).astype(np.float32)
     near_px = max(1, round(hb.TREES_NEAR_M / RES))
     trees_near = maximum_filter(cover >= 20, size=2 * near_px + 1)
-    cut = is_forest & ~trees_near  # coupe récente : forêt de la BD Forêt sans arbre en 2024 alentour
+    # Coupe récente : case de forêt (BD Forêt) avec moins de 10 % d'arbres en 2024. 1re version : seulement sans
+    # aucun arbre à 30 m, donc presque toute coupe (bordée d'arbres) restait notée comme une lisière (constaté le
+    # 25/10/2026 : 0,17-0,19 en moyenne pour le cèpe d'été sur les parcelles déboisées).
     small_woods = ~is_forest & trees_near  # haies, bosquets, arbres isolés hors BD Forêt
+    under_px = max(1, round(hb.MEADOW_TREE_M / RES))
+    trees_under = maximum_filter(cover >= 20, size=2 * under_px + 1)
+    excluded = np.isin(wc, hb.EXCLUDED_LANDCOVER) & ~is_forest  # bâti, cultures, eau (sauf parcelle forestière)
     w_slope = np.clip((slope_deg - 3) / 12, 0, 1)
     slope_f = hb.curve(slope_deg, hb.SLOPE)
     grass = wc == 30
@@ -209,8 +214,12 @@ def habitat_block(forest, alt, ph, wc, mask, slope_deg, aspect_deg, tcd):
                 lut[GROUPS.index(g)] = wgt
             host = lut[group]
             host = np.where(small_woods, np.maximum(host, hb.SMALL_WOODS[sp]), host)
-            host = np.where(cut, host * hb.CUT_FACTOR, host)
+            cut = is_forest & (cover < 10)
+            host = np.where(cut, host * np.where(trees_under, hb.CUT_EDGE_FACTOR, hb.CUT_FACTOR), host)
             host = np.where(trees_near, host, 0)  # mycorhizien : pas d'arbre à moins de 30 m, pas de champignon
+            # Prairie (hors forêt) : seulement sous la couronne d'un arbre (~20 m), et moins qu'en sous-bois.
+            meadow = grass & ~is_forest
+            host = np.where(meadow, np.where(trees_under, host * hb.MEADOW_FACTOR, 0), host)
         else:
             # Coulemelle : prairie à moins de ~100 m d'arbres, lisières (± 40 m), forêts ouvertes, landes.
             trees = cover >= 20
@@ -231,6 +240,7 @@ def habitat_block(forest, alt, ph, wc, mask, slope_deg, aspect_deg, tcd):
         else:
             aspect_f = 1
         h = host * openness * ph_f * alt_f * slope_f * aspect_f
+        h[excluded] = 0
         h[mask == 0] = 0
         out.append(np.clip(h, 0, 1).astype(np.float32))
     return np.stack(out)
