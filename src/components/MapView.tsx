@@ -28,6 +28,8 @@ import { computeCoins, describeSpot, FINE_MIN_ZOOM, isSpecies, loadFineMeta, loa
 import { reverseCity } from '../lib/geocoding'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import { LocateControl } from './LocateControl'
+import { CoinsCodeDialog } from './CoinsCodeDialog'
+import { coinsUnlocked } from '../lib/coinsLock'
 import { collapsePanels } from '../lib/usePanelCollapse'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
@@ -181,13 +183,15 @@ export function MapView() {
   const [mode, setModeState] = useState<AppMode>(() => {
     try {
       const saved = localStorage.getItem('mc-mode')
-      if (saved === 'carte' || saved === 'previsions' || saved === 'historique' || saved === 'coins') return saved
+      if (saved === 'carte' || saved === 'previsions' || saved === 'historique') return saved
+      // « Coins » retenu mais appareil pas (ou plus) déverrouillé : on démarre sur Prévisions.
+      if (saved === 'coins') return coinsUnlocked() ? 'coins' : 'previsions'
     } catch {
       // stockage indisponible
     }
     return 'previsions'
   })
-  const setMode = useCallback((m: AppMode) => {
+  const applyMode = useCallback((m: AppMode) => {
     setModeState(m)
     try {
       localStorage.setItem('mc-mode', m)
@@ -195,6 +199,15 @@ export function MapView() {
       // mémorisation facultative
     }
   }, [])
+  // Le mode « Coins » demande un code (lib/coinsLock.ts), retenu sur l'appareil après la première saisie.
+  const [askCode, setAskCode] = useState(false)
+  const setMode = useCallback(
+    (m: AppMode) => {
+      if (m === 'coins' && !coinsUnlocked()) setAskCode(true)
+      else applyMode(m)
+    },
+    [applyMode],
+  )
   const guide = useMushroomGuide()
   const [forecastState, setForecastState] = useState<ForecastState>({ status: 'idle' })
   const [mapsState, setMapsState] = useState<RainMapsState>({ status: 'loading' })
@@ -426,6 +439,15 @@ export function MapView() {
 
   return (
     <div className="map-view">
+      {askCode && (
+        <CoinsCodeDialog
+          onUnlocked={() => {
+            setAskCode(false)
+            applyMode('coins')
+          }}
+          onCancel={() => setAskCode(false)}
+        />
+      )}
       {guide.view && (
         <MushroomGuide
           view={guide.view}
