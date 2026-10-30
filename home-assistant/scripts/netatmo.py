@@ -7,10 +7,11 @@ un cumul 3 jours (il se remplit en ~3 jours). getpublicdata plafonne à ~700 sta
 région en quadrants, en subdivisant seulement là où c'est dense (quadtree adaptatif, ~85 appels, ~2 min).
 
 État local (sur Home Assistant, pas dans le dépôt) :
-  netatmo-history.json : {stations: {id: {lat, lon, h: {heureISO: mm}}}}, fenêtre 72 h.
+  netatmo-history.json : {stations: {id: {lat, lon, h: {heureISO: mm}}}}, fenêtre 15 jours.
   netatmo-token.txt    : dernier refresh token (si Netatmo le fait tourner).
 Publié sur GitHub (lu par l'appli, comme Infoclimat) :
-  public/netatmo-stations.json : {generatedAt, stations: [{id, lat, lon, mm, hours}]}.
+  public/netatmo-stations.json : {generatedAt, days, stations: [{id, lat, lon, mm, hours, d, n}]} (mm/hours = 72 h pour la
+  bulle ; d/n = pluie et heures mesurées par jour de Paris sur 15 jours, pour la frise de la fiche).
 
 Secrets (secrets.yaml) : meteochampignon_netatmo_client_id / _client_secret / _refresh_token, github_dispatch_auth.
 Options : --launch (détaché, défaut via HA), --run (travail ici), --check (diagnostic).
@@ -27,6 +28,13 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+try:
+    from zoneinfo import ZoneInfo
+
+    PARIS = ZoneInfo("Europe/Paris")
+except Exception:  # noqa: BLE001 - pas de base de fuseaux : repli approximatif
+    PARIS = None
+
 REPO = "drugpad/meteochampignon"
 # Données sur la branche « live » (jamais déployée par Vercel) : sur master, chaque écriture redéployait
 # le site, ~100 fois par jour, soit toute la limite quotidienne du compte Vercel (constaté le 21/10/2026).
@@ -42,7 +50,9 @@ LOG = os.path.join(HERE, "netatmo.log")
 STATUS = os.path.join(HERE, "netatmo-status.json")
 
 LAT_MIN, LAT_MAX, LON_MIN, LON_MAX = 42.6, 45.15, -0.4, 3.4
-KEEP_HOURS = 72
+KEEP_HOURS = 360      # 15 jours d'historique local (frise jour par jour) ; la bulle de la carte n'en prend que 72 h
+BUBBLE_HOURS = 72
+DAYS = 15
 CAP = 380           # on subdivise un quadrant au-delà (plafond réel ~700, marge)
 MAX_DEPTH = 6
 PAUSE = 0.35
@@ -182,7 +192,7 @@ def collect(token):
 
 
 def accumulate(found, now):
-    """Ajoute la mesure horaire courante à l'historique local (une valeur par heure, fenêtre 72 h)."""
+    """Ajoute la mesure horaire courante à l'historique local (une valeur par heure, fenêtre KEEP_HOURS)."""
     try:
         hist = json.load(open(HISTORY, encoding="utf-8"))
     except (OSError, ValueError):
@@ -209,14 +219,43 @@ def accumulate(found, now):
     return hist
 
 
+def paris_day(dt):
+    """Jour calendaire de Paris (date) d'un instant UTC."""
+    if PARIS is not None:
+        return dt.astimezone(PARIS).date()
+    summer = 4 <= dt.month <= 9  # repli approximatif (été = avril à septembre)
+    return (dt + timedelta(hours=2 if summer else 1)).date()
+
+
 def totals(hist, now):
+    """Cumul 72 h (bulle) + pluie par jour de Paris sur 15 jours (frise). `rain_60min` est la pluie de l'heure
+    écoulée au moment de la mesure : l'échantillon de 00:00 locale compte pour la veille."""
+    today = paris_day(now)
+    days = [today - timedelta(days=k) for k in range(DAYS - 1, -1, -1)]
+    bubble_from = (now - timedelta(hours=BUBBLE_HOURS)).strftime("%Y-%m-%dT%H:00:00Z")
     out = []
     for sid, s in hist.get("stations", {}).items():
         hrs = s.get("h", {})
-        mm = round(sum(hrs.values()), 1)
-        out.append({"id": sid, "lat": s["lat"], "lon": s["lon"], "mm": mm, "hours": len(hrs)})
+        recent = {k: v for k, v in hrs.items() if k > bubble_from}
+        sums = {d: 0.0 for d in days}
+        counts = {d: 0 for d in days}
+        for k, v in hrs.items():
+            try:
+                dt = datetime.strptime(k, "%Y-%m-%dT%H:00:00Z").replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            d = paris_day(dt - timedelta(hours=1))
+            if d in sums:
+                sums[d] += v
+                counts[d] += 1
+        out.append({
+            "id": sid, "lat": s["lat"], "lon": s["lon"],
+            "mm": round(sum(recent.values()), 1), "hours": len(recent),
+            "d": [round(sums[d], 1) if counts[d] else None for d in days],
+            "n": [counts[d] for d in days],
+        })
     out.sort(key=lambda x: x["id"])
-    return {"generatedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "stations": out}
+    return {"generatedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "days": [d.isoformat() for d in days], "stations": out}
 
 
 def publish(payload, auth):

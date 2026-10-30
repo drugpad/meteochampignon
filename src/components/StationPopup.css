@@ -125,3 +125,8 @@
   text-align: center;
 }
 
+
+.station-popup--network {
+  width: 270px;
+  max-height: none;
+}

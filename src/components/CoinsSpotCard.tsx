@@ -3,7 +3,7 @@
 // pour garder la carte visible, dépliée d'un appui sur l'en-tête (retour utilisateur : « des fois certaines
 // fenêtres cachent tout »). Sur grand écran, toujours dépliée.
 import { useEffect, useRef, useState } from 'react'
-import { SPECIES, scoreLabel, type SeriesPoint, type Species, type SpotDetail } from '../lib/coins'
+import { outlook as buildOutlook, SPECIES, scoreLabel, type SeriesPoint, type Species, type SpotDetail } from '../lib/coins'
 import { useParisToday } from '../lib/useParisToday'
 import { PotentialChart } from './PotentialChart'
 import './CoinsSpotCard.css'
@@ -30,6 +30,12 @@ export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series
   const sp = SPECIES.find((s) => s.key === species)!
   const nav = `https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(5)},${lon.toFixed(5)}`
   const best = series?.length ? series.reduce((b, p) => (p.value > b.value ? p : b)) : null
+  const rawOutlook = !milieuOnly && series ? buildOutlook(series, today) : null
+  // Si les pluviomètres proches contredisent le modèle (pluie bien plus basse), on ne dit plus « c'est le moment ».
+  const outlook =
+    rawOutlook && detail?.rainCheck.status === 'lower' && rawOutlook.tone === 'go'
+      ? { ...rawOutlook, headline: `À confirmer sur place : ${rawOutlook.headline.replace("C'est le moment : ", '').replace(/^F/, 'f')}`, tone: 'soon' as const }
+      : rawOutlook
 
   // Mobile : les boutons ronds (GPS, fonds) remontent au-dessus du tiroir, quelle que soit sa hauteur.
   const ref = useRef<HTMLDivElement>(null)
@@ -84,7 +90,9 @@ export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series
       {detail && !expanded && (
         <div className="spot-card__compact">
           <span className="spot-card__muted">
-            {best && best.value >= 0.12
+            {outlook
+              ? outlook.headline
+              : best && best.value >= 0.12
               ? `Meilleur jour : ${best.date === today ? "aujourd'hui" : DAY.format(new Date(best.date))}`
               : milieuOnly
                 ? `Milieu ${Math.round(detail.habitat * 100)} % (sans la météo)`
@@ -111,12 +119,30 @@ export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series
             </li>
             <li>
               🌧️ <b>Pluie</b> : {detail.rain15} mm ces 15 jours
-              {detail.daysSinceRain !== null ? `, dernière grosse pluie il y a ${detail.daysSinceRain} j` : ', pas de grosse pluie récente'}
+              {detail.daysSinceRain !== null
+                ? `, dernier épisode de pluie (≥ 15 mm en 5 jours) il y a ${detail.daysSinceRain} j`
+                : ', pas d’épisode de pluie (≥ 15 mm en 5 jours) récent'}{' '}
+              <span className="spot-card__muted">(estimation du modèle, corrigée par les pluviomètres proches)</span>
             </li>
             <li>
-              🌡️ <b>Températures</b> : {detail.temp5.toFixed(0)} °C en moyenne ces 5 jours
+              🌡️ <b>Températures</b> : {detail.temp5.toFixed(0)} °C en moyenne ces 5 jours{' '}
+              <span className="spot-card__muted">(modèle)</span>
             </li>
+            {detail.nearby.map((m) => (
+              <li key={m.name}>
+                📏 <b>Mesuré</b> à {m.name} ({m.altitude !== undefined ? `${m.altitude} m, ` : ''}{m.km} km) :{' '}
+                {m.rainMm.toLocaleString('fr-FR')} mm sur {m.days} jours
+                {m.tminC !== null && `, minimale ${m.tminC.toLocaleString('fr-FR')} °C ces 3 jours`}
+              </li>
+            ))}
           </ul>
+          <p className={`spot-card__check spot-card__check--${detail.rainCheck.status}`}>{detail.rainCheck.text}</p>
+          {outlook && (
+            <div className={`spot-card__outlook spot-card__outlook--${outlook.tone}`}>
+              <b>{outlook.headline}</b>
+              <span>{outlook.detail}</span>
+            </div>
+          )}
           {series && <PotentialChart series={series} today={today} />}
           {detail.reasons.length > 0 && (
             <ul className="spot-card__reasons">

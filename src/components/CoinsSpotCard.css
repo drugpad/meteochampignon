@@ -206,3 +206,51 @@
 .potential__note {
   font-style: italic;
 }
+
+.spot-card__outlook {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.spot-card__outlook--go {
+  background: #ecfdf3;
+  border: 1px solid #a7e3bd;
+  color: #14532d;
+}
+.spot-card__outlook--soon {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #78350f;
+}
+.spot-card__outlook--no {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #7f1d1d;
+}
+
+.spot-card__check {
+  margin: 4px 0 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.spot-card__check--ok {
+  background: #f0fdf4;
+  color: #166534;
+}
+.spot-card__check--lower,
+.spot-card__check--higher {
+  background: #fef3c7;
+  color: #78350f;
+  border: 1px solid #fcd34d;
+}
+.spot-card__check--unknown {
+  background: #f3f4f6;
+  color: #4b5563;
+}

@@ -4,6 +4,7 @@
 //
 // Les deux grilles partagent la même emprise que les cartes de pluie : l'habitat est 4 fois plus fin
 // (~250 m) ; la météo (~1 km) est interpolée sur la grille de l'habitat.
+import { nearbyMeasures, type NearbyMeasure } from './stations'
 import { moonPhase } from './moon'
 import { fetchDataJson, fetchPixels } from './rainMaps'
 
@@ -336,6 +337,31 @@ export type SpotDetail = {
   daysSinceRain: number | null
   temp5: number
   reasons: string[]
+  // Mesures réelles des stations Météo-France proches (vérification du modèle) ; vide si aucune à moins de 30 km.
+  nearby: NearbyMeasure[]
+  // Le modèle est-il d'accord avec le pluviomètre proche le plus comparable ? (voir rainCheck)
+  rainCheck: RainCheck
+}
+
+// Compare la pluie du modèle (15 jours) à ce que la station la plus comparable (distance + altitude) a mesuré, ramené à
+// 15 jours (la collecte n'en a parfois que 10 ou 11). Seuil : écart d'au moins 10 mm ET d'au moins 40 % — en dessous,
+// on ne conclut rien. Une seule station ne prouve pas tout (la pluie varie vite en montagne) : le texte reste prudent.
+export type RainCheck = { status: 'ok' | 'lower' | 'higher' | 'unknown'; text: string }
+
+export function rainCheck(modelRain15: number, nearby: NearbyMeasure[]): RainCheck {
+  const ref = nearby.find((m) => m.days >= 5)
+  if (!ref) return { status: 'unknown', text: 'Aucune station Météo-France comparable à moins de 30 km : la pluie est une estimation du modèle, non vérifiée sur place.' }
+  const measured15 = (ref.rainMm * 15) / ref.days
+  const gap = modelRain15 - measured15
+  const fr = (v: number) => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
+  const where = `${ref.name} (${ref.altitude !== undefined ? ref.altitude + ' m, ' : ''}${ref.km} km)`
+  if (gap >= 10 && measured15 < 0.6 * modelRain15) {
+    return { status: 'lower', text: `⚠ Écart : le modèle compte ${modelRain15} mm sur 15 jours, mais ${where} n'a mesuré que ${fr(ref.rainMm)} mm en ${ref.days} jours (≈ ${Math.round(measured15)} mm sur 15). La pousse est probablement surestimée ici : à prendre avec prudence.` }
+  }
+  if (-gap >= 10 && measured15 > 1.4 * modelRain15) {
+    return { status: 'higher', text: `⚠ Écart : ${where} a mesuré ${fr(ref.rainMm)} mm en ${ref.days} jours (≈ ${Math.round(measured15)} mm sur 15), plus que les ${modelRain15} mm du modèle. La pousse est peut-être sous-estimée ici.` }
+  }
+  return { status: 'ok', text: `✓ Cohérent avec ${where} : ${fr(ref.rainMm)} mm mesurés en ${ref.days} jours (modèle : ${modelRain15} mm sur 15 jours).` }
 }
 
 export async function describeSpot(res: CoinsResult, sp: Species, lat: number, lon: number): Promise<SpotDetail | null> {
@@ -367,6 +393,8 @@ export async function describeSpot(res: CoinsResult, sp: Species, lat: number, l
   const temp5 = pinfo.rgba[j * 4 + 2] / 6 - 10
   const ph = phRaw > 0 ? phRaw / 25 : null
 
+  const nearby = await nearbyMeasures(lat, lon, altitude > 0 ? altitude : null).catch(() => [] as NearbyMeasure[])
+  const check = rainCheck(rain15, nearby)
   const reasons: string[] = []
   if (habitat === 0 && group === 'aucun') reasons.push('Pas de bois ni de prairie favorable cartographiés ici.')
   else if (habitat < 0.3) reasons.push(`Milieu peu favorable à l'espèce (${GROUP_LABELS[group] ?? group}).`)
@@ -378,21 +406,13 @@ export async function describeSpot(res: CoinsResult, sp: Species, lat: number, l
         : 'Pas de vraie pluie depuis plusieurs semaines : trop sec.',
     )
   }
-  else if (since <= 6) {
-    const ago = `il y a ${since} jour${since > 1 ? 's' : ''}`
-    // La pousse du moment peut venir de pluies plus anciennes : ne pas annoncer « pas encore démarré »
-    // quand la météo est déjà favorable.
-    reasons.push(
-      pousse >= 0.3
-        ? `Pousse en cours grâce aux pluies précédentes ; la grosse pluie ${ago} devrait relancer une nouvelle vague d'ici une à deux semaines.`
-        : `Grosse pluie ${ago} : la pousse n'a pas encore démarré, elle est attendue d'ici une à deux semaines si la douceur se maintient.`,
-    )
-  }
+  // Pas de promesse sur l'avenir ici : ce que la météo prévue fera de ce coin est calculé jour par jour dans la
+  // courbe (voir outlook) ; cette liste ne contient que des constats sur le passé.
   if (temp5 < 6) reasons.push('Trop froid ces derniers jours.')
   else if (temp5 > 24) reasons.push('Trop chaud ces derniers jours.')
   if (rain15 < 10 && since !== 255) reasons.push('Sol qui s’assèche (peu de pluie ces 15 jours).')
   if (res.habitatOnly && habitat >= 0.6) reasons.unshift(`Très bon milieu pour l'espèce (${GROUP_LABELS[group] ?? group}), indépendamment de la météo.`)
-  if (reasons.length === 0 && !res.habitatOnly && (fine !== null ? habitat * pousse : res.score[i]) >= 0.35) reasons.push('Bon milieu, pluie suffisante au bon moment et températures douces.')
+  if (reasons.length === 0 && !res.habitatOnly && check.status !== 'lower' && (fine !== null ? habitat * pousse : res.score[i]) >= 0.35) reasons.push(`Bon milieu, ${rain15} mm de pluie en 15 jours et ${temp5.toFixed(0)} °C de moyenne : conditions réunies selon le modèle${check.status === 'ok' ? ', confirmées par les stations proches' : ''}.`)
 
   return {
     score: res.habitatOnly ? habitat : fine !== null ? Math.min(1, habitat * pousseAt(res, lat, lon) * res.moonFactor) : res.score[i],
@@ -405,6 +425,8 @@ export async function describeSpot(res: CoinsResult, sp: Species, lat: number, l
     daysSinceRain: since === 255 ? null : since,
     temp5,
     reasons,
+    nearby,
+    rainCheck: check,
   }
 }
 
@@ -490,4 +512,76 @@ export async function potentialSeries(res: CoinsResult, sp: Species, lat: number
     const moon = res.moonFactor !== 1 ? moonPhase(d.date).factor : 1
     return [{ date: d.date, value: Math.min(1, habitat * pousseAt({ ...res, pousse: g }, lat, lon) * moon), reliable: d.reliable !== false }]
   })
+}
+
+// --------------------------------------------------------------------------------------------------
+// Verdict en clair d'un endroit : QUAND y aller, déduit de la courbe jour par jour (la même que celle affichée), jamais
+// d'une phrase toute faite. Seuils = ceux de scoreLabel (0,12 = « possible »). Au-delà de 7 jours (reliable = false),
+// c'est une tendance d'un seul modèle : le texte le dit.
+export type Outlook = { headline: string; detail: string; tone: 'go' | 'soon' | 'no' }
+
+const OUTLOOK_MIN = 0.12
+const pct = (v: number) => `${Math.round(v * 100)} %`
+const DAY_NAME = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+
+function dayName(iso: string, today: string): string {
+  const t = Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10))
+  const d = Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10))
+  const diff = Math.round((d - t) / 86400000)
+  if (diff === 0) return "aujourd'hui"
+  if (diff === 1) return 'demain'
+  return DAY_NAME.format(new Date(`${iso}T12:00:00Z`))
+}
+
+export function outlook(series: SeriesPoint[], today: string): Outlook | null {
+  if (series.length < 2) return null
+  const last = series[series.length - 1]
+  const trend = (p: SeriesPoint) => (p.reliable ? '' : ' (tendance, moins sûre)')
+  const peakOf = (pts: SeriesPoint[]) => pts.reduce((b, p) => (p.value > b.value ? p : b))
+  const now = series[0]
+
+  if (now.value >= OUTLOOK_MIN) {
+    const end = series.findIndex((p) => p.value < OUTLOOK_MIN)
+    const window = end === -1 ? series : series.slice(0, end)
+    const lastGood = window[window.length - 1]
+    const n = window.length
+    if (end === -1) {
+      const peak = peakOf(series)
+      return {
+        headline: `Favorable pendant toute la période prévue (jusqu'au ${dayName(last.date, today)})`,
+        detail: `${pct(now.value)} aujourd'hui (${scoreLabel(now.value).toLowerCase()})${peak.date === now.date ? ', et c\'est le maximum de la période' : `, maximum ${pct(peak.value)} ${dayName(peak.date, today)}${trend(peak)}`}.`,
+        tone: 'go',
+      }
+    }
+    const rest = series.slice(end)
+    const rebound = peakOf(rest)
+    const after =
+      rebound.value >= OUTLOOK_MIN
+        ? ` Remontée possible vers ${pct(rebound.value)} ${dayName(rebound.date, today)}${trend(rebound)}.`
+        : ` Aucune remontée prévue d'ici le ${dayName(last.date, today)}.`
+    return {
+      headline:
+        n === 1
+          ? `C'est le moment : seulement ${now.date === today ? "aujourd'hui" : dayName(now.date, today)}`
+          : `C'est le moment : encore ${n} jours, jusqu'au ${dayName(lastGood.date, today)}`,
+      detail: `${pct(now.value)} aujourd'hui (${scoreLabel(now.value).toLowerCase()}) ; sous ${pct(OUTLOOK_MIN)} (peu probable) dès ${dayName(series[end].date, today)}.${after}`,
+      tone: 'go',
+    }
+  }
+
+  const start = series.findIndex((p) => p.value >= OUTLOOK_MIN)
+  if (start === -1) {
+    const peak = peakOf(series)
+    return {
+      headline: `Pas de bon moment prévu d'ici le ${dayName(last.date, today)}`,
+      detail: `Potentiel de ${pct(now.value)} aujourd'hui${peak.date === now.date ? '' : `, au mieux ${pct(peak.value)} ${dayName(peak.date, today)}${trend(peak)}`} : sauf nouvelle pluie importante, ça ne pousse pas ici.`,
+      tone: 'no',
+    }
+  }
+  const peak = peakOf(series.slice(start))
+  return {
+    headline: `Pas encore : à surveiller à partir du ${dayName(series[start].date, today)}`,
+    detail: `${pct(now.value)} aujourd'hui ; monte vers ${pct(peak.value)} ${dayName(peak.date, today)} (${scoreLabel(peak.value).toLowerCase()})${trend(peak)}.`,
+    tone: 'soon',
+  }
 }

@@ -3,8 +3,24 @@
 // l'historique Météo-France : branche « live » lue sur raw.githubusercontent (cache ~5 min), repli jsDelivr.
 import type { StationRainTotal } from './stationRain'
 
-export type NetworkStation = { id: string; name: string; lat: number; lon: number } & StationRainTotal
-export type NetworkData = { generatedAt: string; stations: NetworkStation[] }
+// `d`/`n` : pluie (mm, null = aucune mesure) et heures mesurées pour chacun des jours de `days` (jours de Paris,
+// le plus ancien d'abord) — absents des fichiers publiés avant l'ajout de la frise.
+export type NetworkStation = { id: string; name: string; lat: number; lon: number; d?: (number | null)[]; n?: number[] } & StationRainTotal
+export type NetworkData = { generatedAt: string; days?: string[]; stations: NetworkStation[] }
+
+// Jours de la frise d'une station : un jour compte comme partiel s'il a moins de 80 % de ses heures mesurées
+// (le jour en cours est comparé aux heures déjà écoulées).
+export function networkFriseDays(data: NetworkData, station: NetworkStation, now = new Date()): { date: string; mm: number | null; partial: boolean }[] {
+  const days = data.days
+  if (!days || !station.d) return []
+  const todayParis = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(now)
+  const hourParis = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', hour: '2-digit', hour12: false }).format(now)) % 24
+  return days.map((date, k) => {
+    const mm = station.d?.[k] ?? null
+    const expected = date === todayParis ? Math.max(1, hourParis) : 24
+    return { date, mm, partial: mm !== null && (station.n?.[k] ?? 0) < 0.8 * expected }
+  })
+}
 
 const RAW = 'https://raw.githubusercontent.com/drugpad/meteochampignon/live/public'
 const JSDELIVR = 'https://cdn.jsdelivr.net/gh/drugpad/meteochampignon@live/public'

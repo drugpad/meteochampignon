@@ -52,7 +52,8 @@ SECRETS_FILE = os.environ.get("HA_SECRETS", "/config/secrets.yaml")
 GITHUB_API = os.environ.get("GITHUB_API_BASE", "https://api.github.com")  # surchargé par les tests uniquement
 
 WINDOW_HOURS = 23          # limite stricte de l'API Paquet (< 24h)
-KEEP_HOURS = 240           # fenêtre glissante de l'historique (10 jours)
+KEEP_HOURS = 360           # fenêtre glissante de l'historique (15 jours)
+CATCHUP_HOURS = 240        # profondeur maximale du rattrapage station par station (inchangée : l'API par station ne remonte pas plus loin)
 PUBLICATION_LAG_MIN = 15   # l'observation de l'heure H est publiée vers H+10 min
 COMPLETE_RATIO = 0.95
 ALWAYS_REFETCH_LAST_HOURS = 3
@@ -264,8 +265,8 @@ def verify_upstream(history, stations, mf_key, now, fetcher=fetch_station_obs, p
             extra[sid] = latest
             continue
         have = {p["time"] for p in points}
-        start = parse_time(our_last) + timedelta(hours=1) if our_last else now - timedelta(hours=KEEP_HOURS)
-        start = max(start, now - timedelta(hours=KEEP_HOURS)).replace(minute=0, second=0, microsecond=0)
+        start = parse_time(our_last) + timedelta(hours=1) if our_last else now - timedelta(hours=CATCHUP_HOURS)
+        start = max(start, now - timedelta(hours=CATCHUP_HOURS)).replace(minute=0, second=0, microsecond=0)
         complete, t = True, start
         while t <= parse_time(mf_last):
             iso = iso_hour(t)

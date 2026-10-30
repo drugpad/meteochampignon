@@ -2,8 +2,9 @@
 // Stations) : pluie + température des 24 dernières heures sur un même
 // graphique (retour utilisateur : les avoir sur deux graphiques séparés
 // prenait trop de place), et mini prévision 5 jours elle aussi en graphique.
-import { Bar, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import './StationPopup.css'
+import { DayRainFrise } from './DayRainFrise'
 import { formatRelativeAge, isOlderThanHours } from '../lib/formatRelativeAge'
 import { COMPLETE_RATIO, meteocielStationUrl, prettyStationName } from '../lib/stations'
 import { weatherCodeInfo } from '../lib/weatherCode'
@@ -11,7 +12,6 @@ import type { StationDetailState } from '../types'
 
 const HOUR_FORMATTER = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit' })
 const WEEKDAY_FORMATTER = new Intl.DateTimeFormat('fr-FR', { weekday: 'short' })
-const DAY_FORMATTER = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit' })
 
 type Props = {
   state: StationDetailState
@@ -75,7 +75,7 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
   const hasIncompleteDays = dailyRain.some((d) => !d.complete)
   const totalRain = Math.round(rainHistory.reduce((sum, p) => sum + p.rain, 0) * 10) / 10
   const totalRain10d = Math.round(dailyRain.reduce((sum, d) => sum + d.rain, 0) * 10) / 10
-  const dailyRainData = dailyRain.map((d) => ({ ...d, label: DAY_FORMATTER.format(new Date(d.date)) }))
+  const dailyRainData = dailyRain
 
   // Fusion pluie + température par horodatage (les deux viennent des mêmes
   // observations horaires mais une valeur peut manquer côté station pour
@@ -170,21 +170,10 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
       </div>
       {dailyRainData.length > 0 ? (
         <>
-          <ResponsiveContainer width="100%" height={100}>
-            <ComposedChart data={dailyRainData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-              <XAxis dataKey="label" fontSize={10} interval={dailyRainData.length > 6 ? 1 : 0} />
-              <YAxis fontSize={10} width={28} />
-              <Tooltip formatter={(v) => [`${v} mm`, 'Pluie']} />
-              <Bar dataKey="rain" fill="#2563eb" radius={[2, 2, 0, 0]} barSize={14}>
-                {dailyRainData.map((d) => (
-                  <Cell key={d.date} fill={d.complete ? '#2563eb' : '#bfdbfe'} />
-                ))}
-              </Bar>
-            </ComposedChart>
-          </ResponsiveContainer>
+          <DayRainFrise days={dailyRain.map((d) => ({ date: d.date, mm: d.rain, partial: !d.complete }))} />
           {hasIncompleteDays && (
             <div className="station-popup__notice">
-              Barres claires : jours aux données horaires incomplètes, cumul sous-estimé possible.
+              Jours hachurés : données horaires incomplètes, cumul sous-estimé possible.
             </div>
           )}
         </>

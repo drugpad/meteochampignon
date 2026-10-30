@@ -15,7 +15,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 
-const HISTORY_WINDOW_HOURS = 240 // 10 jours
+const HISTORY_WINDOW_HOURS = 360 // 15 jours
 // HISTORY_FILE : le fichier vit sur la branche « live » (extraite à part par les workflows), pas sur master.
 const OUTPUT_PATH = process.env.HISTORY_FILE ?? new URL('../public/station-history.json', import.meta.url)
 
