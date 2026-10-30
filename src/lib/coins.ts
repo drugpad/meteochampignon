@@ -223,7 +223,9 @@ export function paintZones(
   height: number,
   scoreAt: (i: number) => number,
   goodAt: (i: number) => boolean,
+  edgeWidth = 1,
 ): void {
+  const outside = (r: number, c: number) => r >= 0 && r < height && c >= 0 && c < width && !goodAt(r * width + c)
   for (let r = 0; r < height; r++) {
     for (let c = 0; c < width; c++) {
       const i = r * width + c
@@ -232,12 +234,14 @@ export function paintZones(
       if (good) px = ZONE_FILL
       const v = scoreAt(i)
       if (v >= STOPS[0][0]) px = colorOf(v)
-      // Bord de zone : case favorable dont un voisin (gauche, droite, haut, bas) ne l'est pas.
-      if (
-        good &&
-        ((c > 0 && !goodAt(i - 1)) || (c < width - 1 && !goodAt(i + 1)) || (r > 0 && !goodAt(i - width)) || (r < height - 1 && !goodAt(i + width)))
-      ) {
-        px = ZONE_EDGE
+      // Bord de zone : case favorable dont un voisin (gauche, droite, haut, bas, jusqu'à edgeWidth cases) ne l'est pas.
+      if (good) {
+        for (let d = 1; d <= edgeWidth; d++) {
+          if (outside(r, c - d) || outside(r, c + d) || outside(r - d, c) || outside(r + d, c)) {
+            px = ZONE_EDGE
+            break
+          }
+        }
       }
       if (px[3] === 0) continue
       data[i * 4] = px[0]

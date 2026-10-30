@@ -19,15 +19,68 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
         const tile = document.createElement('canvas')
         tile.width = tile.height = 256
         const { z, x, y } = coords
-        void loadFineTile(z, x, y).then((px) => {
-          if (px) paint(tile, px.rgba, z, x, y)
+        // Au-delà du zoom 13 (dernier niveau publié), on redessine à la résolution de l'écran depuis la tuile
+        // du zoom 13 (revu le 30/10/2026 : le navigateur agrandissait les images, bords flous et en escalier).
+        const scale = 2 ** Math.max(0, z - FINE_MAX_ZOOM)
+        const src = { z: Math.min(z, FINE_MAX_ZOOM), x: Math.floor(x / scale), y: Math.floor(y / scale) }
+        void loadFineTile(src.z, src.x, src.y).then((px) => {
+          if (px) paint(tile, px.rgba, z, x, y, scale)
           done(undefined, tile)
         })
         return tile
       },
     })
 
-    const paint = (tile: HTMLCanvasElement, rgba: Uint8ClampedArray, z: number, x: number, y: number) => {
+    // Niveau d'habitat (0-7) de l'espèce sur la tuile affichée, en valeur continue : interpolation bilinéaire
+    // entre les cases de 20 m, pour que le bord des zones (seuil 3,5) suive une ligne lissée et non des marches.
+    const levelsFor = (rgba: Uint8ClampedArray, idx: number, x: number, y: number, scale: number): Float32Array => {
+      const src = new Uint8Array(256 * 256)
+      for (let i = 0; i < src.length; i++) src[i] = fineLevel(rgba, i, idx)
+      const out = new Float32Array(256 * 256)
+      if (scale === 1) {
+        out.set(src)
+        return out
+      }
+      // Léger lissage (noyau 1-2-1) avant l'agrandissement : arrondit les angles des cases sans effacer les petits bois.
+      const sm = new Float32Array(256 * 256)
+      for (let r = 0; r < 256; r++) {
+        for (let c = 0; c < 256; c++) {
+          let s = 0
+          let w = 0
+          for (let dr = -1; dr <= 1; dr++) {
+            const rr = r + dr
+            if (rr < 0 || rr > 255) continue
+            for (let dc = -1; dc <= 1; dc++) {
+              const cc = c + dc
+              if (cc < 0 || cc > 255) continue
+              const k = (dr === 0 ? 2 : 1) * (dc === 0 ? 2 : 1)
+              s += src[rr * 256 + cc] * k
+              w += k
+            }
+          }
+          sm[r * 256 + c] = s / w
+        }
+      }
+      const ox = (x % scale) * (256 / scale)
+      const oy = (y % scale) * (256 / scale)
+      for (let r = 0; r < 256; r++) {
+        const v = Math.min(Math.max(oy + (r + 0.5) / scale - 0.5, 0), 255)
+        const y0 = Math.floor(v)
+        const y1 = Math.min(y0 + 1, 255)
+        const wy = v - y0
+        for (let c = 0; c < 256; c++) {
+          const u = Math.min(Math.max(ox + (c + 0.5) / scale - 0.5, 0), 255)
+          const x0 = Math.floor(u)
+          const x1 = Math.min(x0 + 1, 255)
+          const wx = u - x0
+          out[r * 256 + c] =
+            (sm[y0 * 256 + x0] * (1 - wx) + sm[y0 * 256 + x1] * wx) * (1 - wy) + (sm[y1 * 256 + x0] * (1 - wx) + sm[y1 * 256 + x1] * wx) * wy
+        }
+      }
+      return out
+    }
+
+    const paint = (tile: HTMLCanvasElement, rgba: Uint8ClampedArray, z: number, x: number, y: number, scale: number) => {
       const { result: res, speciesIndex: idx } = stateRef.current
       const ctx = tile.getContext('2d')!
       const img = ctx.createImageData(256, 256)
@@ -46,16 +99,15 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
       }
       const v = g.values
       const score = new Float32Array(256 * 256)
-      const levels = new Uint8Array(256 * 256)
+      const levels = levelsFor(rgba, idx, x, y, scale)
       for (let r = 0; r < 256; r++) {
         const y0 = Math.floor(gy[r])
         const y1 = Math.min(y0 + 1, g.height - 1)
         const wy = gy[r] - y0
         for (let c = 0; c < 256; c++) {
           const i = r * 256 + c
-          const level = fineLevel(rgba, i, idx)
-          levels[i] = level
-          if (level === 0) continue
+          const level = levels[i]
+          if (level < 0.5) continue
           // « Milieu seul » : l'habitat à 20 m, sans la météo.
           if (res.habitatOnly) {
             score[i] = level / 7
@@ -72,7 +124,8 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
         }
       }
       // Zone favorable = habitat ≥ 4/7 (≥ 50 %) : voile + contour, couleur de pousse par-dessus.
-      paintZones(img.data, 256, 256, (i) => displayValue(res, score[i]), (i) => levels[i] >= 4)
+      // Seuil 3,5 sur le niveau interpolé = mi-chemin entre une case à 3/7 et une case à 4/7.
+      paintZones(img.data, 256, 256, (i) => displayValue(res, score[i]), (i) => levels[i] >= 3.5, z >= 15 ? 2 : 1)
       ctx.putImageData(img, 0, 0)
     }
 
@@ -83,7 +136,7 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
     const layer = new (FineLayer as unknown as new (o: L.GridLayerOptions) => L.GridLayer)({
       pane: 'coinsFine',
       minZoom: FINE_MIN_ZOOM,
-      maxNativeZoom: FINE_MAX_ZOOM,
+      maxNativeZoom: 18,
       maxZoom: 20,
       opacity: 0.85,
       className: 'coins-fine',
