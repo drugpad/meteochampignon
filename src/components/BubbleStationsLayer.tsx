@@ -105,8 +105,8 @@ function NetworkStationCard({ network, data, station }: { network: NetworkId; da
           {days.some((d) => d.partial || d.mm === null) && (
             <div className="station-popup__notice">
               {network === 'netatmo'
-                ? "Netatmo ne fournit pas d'historique : les jours avant le début de notre collecte, ou avec des heures manquantes, sont vides ou incomplets (hachurés)."
-                : 'Jours hachurés ou vides : heures de mesure manquantes.'}
+                ? "Netatmo ne fournit pas d'historique : les jours avant le début de notre collecte, ou avec des heures manquantes, sont vides ou incomplets (barres claires)."
+                : 'Barres claires ou vides : heures de mesure manquantes.'}
             </div>
           )}
         </>

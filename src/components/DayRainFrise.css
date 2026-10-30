@@ -1,107 +1,32 @@
-.frise {
-  margin: 4px 0 6px;
-}
-.frise__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.frise__day {
-  flex: 1;
-  text-align: center;
-  min-width: 0;
-}
-.frise__date {
+.frise__readout {
   font-size: 12px;
-  color: #475569;
-  text-transform: capitalize;
-}
-.frise__mm {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1d4ed8;
-  line-height: 1.2;
-}
-.frise__none {
-  font-size: 14px;
-  font-weight: 600;
-  color: #94a3b8;
-}
-.frise__step {
-  width: 34px;
-  height: 34px;
-  flex: none;
-  border: 1px solid #cbd5e1;
-  border-radius: 50%;
-  background: #fff;
-  color: #1e3a8a;
-  font-size: 13px;
-  cursor: pointer;
-}
-.frise__step:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-.frise__bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 56px;
-  margin-top: 8px;
-}
-.frise__bar {
-  flex: 1;
-  height: 100%;
-  min-width: 0;
-  display: flex;
-  align-items: flex-end;
-  padding: 0;
-  border: 0;
-  border-bottom: 1px solid #cbd5e1;
-  background: transparent;
-  cursor: pointer;
-}
-.frise__fill {
-  display: block;
-  width: 100%;
-  background: #93c5fd;
-  border-radius: 2px 2px 0 0;
-}
-.frise__bar--partial .frise__fill {
-  background: repeating-linear-gradient(135deg, #bfdbfe 0 3px, #eff6ff 3px 6px);
-}
-.frise__bar--none {
-  background: repeating-linear-gradient(135deg, #f1f5f9 0 3px, #fff 3px 6px);
-}
-.frise__bar--on {
-  background: #eff6ff;
-}
-.frise__bar--on .frise__fill {
-  background: #1d4ed8;
-}
-.frise__range {
-  width: 100%;
-  margin: 6px 0 0;
-  accent-color: #1d4ed8;
-}
-.frise__axis {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: #64748b;
+  color: #1e293b;
+  margin: 2px 0 2px;
+  min-height: 30px;
 }
 .frise__cumul {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #334155;
+  color: #475569;
 }
-.frise__note {
-  color: #64748b;
-  font-size: 11px;
+.frise__chart {
+  position: relative;
+  margin: 0 -2px;
 }
-.station-popup--page .frise__mm {
-  font-size: 24px;
+.frise__chart *:focus,
+.frise__chart:focus {
+  outline: none;
 }
-.station-popup--page .frise__bars {
-  height: 72px;
+.frise__band {
+  position: absolute;
+  top: 10px;
+  bottom: 26px;
+  background: rgba(37, 99, 235, 0.14);
+  border-radius: 3px;
+  pointer-events: none;
+}
+.frise__hint {
+  font-size: 10px;
+  color: #94a3b8;
+}
+.station-popup--page .frise__readout {
+  font-size: 13px;
 }

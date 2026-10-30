@@ -173,7 +173,7 @@ export function StationPopup({ state, variant = 'popup' }: Props) {
           <DayRainFrise days={dailyRain.map((d) => ({ date: d.date, mm: d.rain, partial: !d.complete }))} />
           {hasIncompleteDays && (
             <div className="station-popup__notice">
-              Jours hachurés : données horaires incomplètes, cumul sous-estimé possible.
+              Barres claires : données horaires incomplètes, cumul sous-estimé possible.
             </div>
           )}
         </>
