@@ -4,6 +4,8 @@ Espèces : cèpe d'été (*Boletus reticulatus*), cèpe bronzé (*B. aereus*), c
 
 ## Méthode et limites (à lire d'abord)
 
+**Mise à jour du 30/10/2026 (soir)** : le réseau de la session a été élargi. Deux sources ont pu être lues **en texte intégral** (étude turque d'Artvin, article Frontiers sur le cèpe en châtaigneraie) et **GBIF** a servi à tester le modèle sur ~2 200 observations réelles (section 3). Restent illisibles (proxy 403/429) : bioRxiv, Springer, PMC — les chiffres qui en viennent restent de seconde main.
+
 - **Recherche web uniquement** : aucune page n'a pu être lue en entier (bioRxiv, Springer, Wikipédia, PMC… hors des domaines autorisés de la session). Les chiffres viennent de **résumés rendus par le moteur de recherche**, donc de seconde main.
 - **Double vérification** : chaque espèce a été cherchée **deux fois, avec des requêtes indépendantes** (anglais scientifique, puis français naturaliste/forestier), puis un second tour a ciblé les points contradictoires.
 - **Niveaux de confiance** :
@@ -15,8 +17,8 @@ Espèces : cèpe d'été (*Boletus reticulatus*), cèpe bronzé (*B. aereus*), c
 
 ## Corrections de mes affirmations précédentes
 
-1. **Exposition du cèpe de Bordeaux** : j'avais écrit « non étayée, à retirer ». **C'était trop hâtif.** Un modèle des pinèdes des Pyrénées centrales trouve que l'**altitude croissante et l'exposition nord augmentent** la production fongique totale, et que la **pente croissante la diminue** (A−, tous champignons de pinède, pas *B. edulis* seul). Une étude turque trouve l'inverse pour *B. edulis* (nord et pentes 20-30 % moins productifs). Verdict : **contradictoire (C)**, mais la source pyrénéenne, la plus proche de la région, va dans le sens de mon choix. **Je ne retire pas la préférence nord.**
-2. **Altitude du cèpe de Bordeaux** : le modèle pyrénéen ci-dessus dit que la production **augmente** avec l'altitude (jusqu'à la limite des pins) ; des guides disent « 500-1000 m les plus propices », d'autres jusqu'à 1600-2000 m. **Aucun consensus : je ne peux ni resserrer ni élargir mon plateau 0-1600 m** (C). Conclusion inchangée : à calibrer sur observations.
+1. **Exposition du cèpe de Bordeaux** (étude turque **lue en entier** le 30/10 : 75 placettes à Bicik, forêt mixte équienne ; différences significatives selon l'exposition et la pente, **aucune selon l'altitude** ; productivité plus basse en exposition nord (6,5 kg/ha) et pentes de 20-30 % (33 kg/ha)) : j'avais écrit « non étayée, à retirer ». **C'était trop hâtif.** Un modèle des pinèdes des Pyrénées centrales trouve que l'**altitude croissante et l'exposition nord augmentent** la production fongique totale, et que la **pente croissante la diminue** (A−, tous champignons de pinède, pas *B. edulis* seul). Une étude turque trouve l'inverse pour *B. edulis* (nord et pentes 20-30 % moins productifs). Verdict : **contradictoire (C)**, mais la source pyrénéenne, la plus proche de la région, va dans le sens de mon choix. **Je ne retire pas la préférence nord.**
+2. **Altitude du cèpe de Bordeaux** : la littérature seule ne tranchait pas (modèle pyrénéen : production qui augmente avec l'altitude ; étude turque : aucun effet ; guides : « 500-1000 m »). **Les observations GBIF tranchent pour la région** (section 3) : optimum net à 600-1000 m, nettement moins en dessous de 400 m. Ma conclusion précédente (« aucune base ») est donc **remplacée**.
 3. **Surface terrière / âge** (déjà dans la 1re étude) : confirmés par un second résultat — dans une pinède de Soria, *B. edulis* sort chaque année (moyenne **40 kg/ha/an**), la classe d'âge **51-70 ans** donne le plus (**70 kg/ha**). Mais ce sont des pins, pas des hêtres.
 
 ## Résultats par espèce (ce que disent les sources → mon modèle)
@@ -91,19 +93,76 @@ Légende : ✓ cohérent, ⚠ écart à examiner, — sans donnée.
 | Température | 10-15 °C favorable (1 source) | C | ✓ |
 | Altitude | maximum 1500 m (1 source) | C | ✓ |
 
-## Ce que cela implique pour le modèle (par solidité)
+## 3. Validation sur observations réelles (GBIF, 30/10/2026)
 
-1. **Commun à toutes les espèces mycorhiziennes** : le milieu n'est pas une probabilité (variabilité de 0 à 38,5 kg/ha/an dans une même forêt, A). Ne plus afficher 100 % ; plafonner ou classer par rang régional.
-2. **Cèpe de Bordeaux** : remplacer le plateau de couvert par une cloche (A−) ; garder l'exposition nord ; pénaliser la pente progressivement dès ~15° au lieu de seulement > 30° (C, sens étayé par le modèle pyrénéen) ; ne pas toucher à l'altitude sans données.
-3. **Cèpe des pins** : baisser le hêtre (0,5 → ~0,3) (A, mais effet faible).
-4. **Cèpe d'été** : tester une sortie plus rapide (3-7 jours au lieu de 7-10) — seule la source la plus fragile le suggère (C), donc à valider avant de modifier.
-5. **Coulemelle** : ajouter une préférence modérée pour pH 5,5-7,5 (C), faible poids.
-6. **Trompette** : adoucir la pénalité des sols acides (C) tant que le désaccord n'est pas tranché.
-7. **Bronzé** : la coupure d'altitude 500-1000 m n'a pas de source ; la garder prudente mais la signaler comme hypothèse.
+**Données** : observations humaines de *B. reticulatus*, *B. aereus*, *B. edulis*, *B. pinophilus*, *C. cibarius*, *M. procera*, *C. cornucopioides* dans l'emprise (lat 42,6-45,15 ; lon −0,4-3,4), 1995-2026, coordonnées à ≤ 1 km ou d'incertitude non renseignée : **n = 74 à 223 par espèce**. Source : GBIF.org (consulté le 30/10/2026) ; licences des jeux de données variées (CC0, CC BY, CC BY-NC) — seuls des **agrégats** sont publiés ici, jamais les points. Scripts : `docs/validation-gbif/`.
 
-## Validation recommandée (non faite)
+**Méthode.** Comparer le score de mon modèle (grille de 250 m) aux endroits d'observation avec celui de **27 439 observations de champignons quelconques** de la région (même biais d'observateur : on se promène là où c'est accessible). Mesure : AUC (probabilité qu'une observation ait un meilleur score qu'un point de comparaison ; 0,5 = aucun pouvoir, 1 = parfait), **à l'intérieur de la forêt** (la vraie question : le score distingue-t-il un bon endroit d'une forêt ordinaire ?). Test hors échantillon : recalage de l'altitude et des essences sur 80 % des observations, mesure sur les 20 % restants (5 plis × 10).
 
-Observations ouvertes (GBIF / iNaturalist) de chaque espèce dans la région vs points forestiers aléatoires, pour régler altitude, pH, exposition, couvert. **Nécessite d'autoriser `api.gbif.org`** dans le réseau de la session.
+| Espèce | Obs. en forêt | AUC actuel | + altitude seule | + essences seules | + les deux |
+|---|---|---|---|---|---|
+| Cèpe d'été | 71 | 0,68 | 0,70 | 0,69 | 0,70 |
+| Cèpe bronzé | 51 | **0,82** | 0,81 | 0,81 | 0,79 |
+| **Cèpe de Bordeaux** | 118 | **0,55** | **0,63** | 0,60 | **0,64** |
+| Cèpe des pins | 13 | — trop peu d'observations — | | | |
+| **Girolle** | 71 | 0,60 | **0,74** | 0,63 | 0,72 |
+| Coulemelle | 57 (sur 222) | 0,57 | 0,61 | 0,59 | 0,61 |
+| Trompette | 78 | 0,61 | 0,65 | 0,61 | 0,65 |
+
+### Ce que ça montre
+
+1. **Cèpe de Bordeaux : mon milieu n'a presque aucun pouvoir de tri dans la forêt (AUC 0,55).** Les scores bas (< 0,35) sont bien évités (observations 0,3 à 0,5 fois plus rares qu'au hasard), mais entre 0,35 et 1,0 les observations sont à peu près aussi fréquentes partout (rapport 1,0 à 1,2). C'est exactement le « plateau » : tout ce qui est acceptable reçoit 0,5-1 sans être distingué. **C'est probablement l'explication de votre écart 60 % chez moi / 26 % ailleurs.**
+2. **L'altitude est le critère qui manque le plus** (rapport observations/fond, avec intervalle de confiance à 95 % par rééchantillonnage) pour le cèpe de Bordeaux : 0-400 m **0,48** [0,22 ; 0,77] ; 400-600 m 1,05 [0,69 ; 1,45] ; **600-800 m 2,21 [1,41 ; 3,11] ; 800-1000 m 2,24 [1,23 ; 3,31]** ; 1000-1200 m 1,43 [0,71 ; 2,28] ; 1200-1600 m ≈ 0,7 [0,26 ; 1,17]. L'optimum est à **600-1000 m**, ce que disent aussi plusieurs guides ; mon plateau 0-1600 m est faux pour cette région. Au pied de Campan (1 170-1 240 m), le milieu devrait être nettement plus bas.
+3. **Essences du cèpe de Bordeaux** : hêtre **1,99** [1,24 ; 2,83], mixte 1,44 [0,92 ; 2,02], sapin/épicéa 0,93, feuillus 0,78, **chêne 0,53 [0,23 ; 0,89]**. Mon poids de 0,9 pour le chêne n'est pas confirmé (l'idée « LE cèpe des chênaies du Sud-Ouest » ne tient pas ici : peut-être une confusion avec les cèpes d'été/bronzé dans les observations de plaine).
+4. **Girolle** : l'altitude seule fait passer l'AUC de 0,60 à 0,74. Les observations se concentrent à 400-800 m et chutent fortement au-dessus de ~1000 m (rapport 1400-1600 m : 0,08), alors que mon plateau va jusqu'à 1500 m.
+5. **Cèpe bronzé : mon modèle est bon (AUC 0,82-0,85).** Aucune observation au-dessus de 1000 m (rapport ≈ 2 de 0 à 800 m, 0 au-delà), chêne 2,0, hêtre 0,23, sapin 0 : tout cohérent avec mes règles. Rien à changer.
+6. **Coulemelle : aucun pouvoir (AUC 0,49-0,57).** 74 % des observations sont **hors forêt** (prairies, jardins, bords de chemin), et mon modèle donne 0 à 66 % de ces observations, comme au hasard (65 %). Mon milieu de coulemelle n'est pas informatif.
+7. **Cèpe des pins** : 30 observations seulement, 13 en forêt : impossible de conclure.
+
+### Saisons (deux lectures, parce que l'effort d'observation est biaisé)
+
+Part de chaque mois dans les observations, normalisée au pic, en **brut** (biaisé vers l'automne où l'on cherche le plus) et **corrigé de l'effort** (divisé par le total des champignons observés ce mois-là ; biaisé vers les mois creux). La vérité est entre les deux ; je ne retiens que les écarts où **les deux lectures s'accordent**.
+
+| Espèce | Mois | Brut / corrigé | Mon modèle | Verdict |
+|---|---|---|---|---|
+| Coulemelle | juin | 0,05 / 0,19 | 0,4 | trop haut |
+| Coulemelle | juillet | 0,06 / 0,13 | 0,8 | **trop haut** (saison réelle : août-novembre) |
+| Trompette | juillet | 0,04 / 0,09 | 0,3 | trop haut |
+| Trompette | novembre | 0,36 / 0,67 | 1,0 | trop haut |
+| Cèpe des pins | juillet | 0,13 / 0,13 | 0,5 | trop haut |
+| Cèpe des pins | novembre | 0,10 / 0,09 | 0,5 | **trop haut** |
+| Cèpe bronzé | juillet | 0,30 / 0,59 | 0,8 | un peu haut ; pic réel : septembre |
+| Girolle | octobre | 0,64 / 0,18 | 0,8 | un peu haut |
+| Cèpe de Bordeaux | août à novembre | 0,41-1,0 / 0,63-1,0 | 0,4-1,0 | **cohérent** |
+
+### Limites de cette validation (à garder en tête)
+
+- **Effectifs modestes** (51 à 118 observations en forêt) : les intervalles de confiance sont larges ; seuls les écarts nets (altitude du cèpe de Bordeaux, essences hêtre/chêne) sont significatifs.
+- **Précision des coordonnées** : l'incertitude déclarée va jusqu'à 1 km ou n'est pas renseignée, alors que ma grille fait 250 m. Cela **brouille** les mesures, donc l'AUC réel est probablement un peu meilleur que mesuré, pour toutes les espèces.
+- **Identification** : des observations d'amateurs, certaines peuvent être mal déterminées (cèpe d'été / Bordeaux en particulier).
+- **Essences** : la grille donne l'essence **dominante** à 250 m ; le châtaignier est trop rare pour être estimé (il faisait exploser les poids dans un premier essai, écarté).
+- **Le fond n'est pas parfait** : « tous champignons » mélange forêt et prairies ; j'ai donc restreint la comparaison à la forêt pour les espèces mycorhiziennes.
+- Ce que cela **ne** valide pas : la météo (pousse), car GBIF ne dit pas quand il a plu avant chaque observation. À faire ensuite : comparer le score de pousse du jour d'observation (cartes de pluie/température archivées sur la branche `data`).
+
+## 4. Ce que cela implique pour le modèle (par solidité)
+
+Classées par **gain mesuré hors échantillon** puis par solidité de la littérature.
+
+1. **Cèpe de Bordeaux — courbe d'altitude** (gain AUC +0,08, IC net) : optimum 600-1000 m (poids 1), ~0,65 à 1000-1200 m, ~0,3-0,45 de 1200 à 1600 m, ~0,3 de 200 à 400 m, ~0 en dessous de 200 m (à lisser, jamais de coupure brutale). **C'est le changement le plus utile.**
+2. **Girolle — courbe d'altitude** (+0,14) : optimum 400-600 m, déclin progressif dès ~600 m, faible au-dessus de ~1200 m.
+3. **Trompette** (+0,04) et **cèpe d'été** (+0,02) : léger gain avec l'altitude ; optimum 200-800 m pour les deux. Faible priorité.
+4. **Cèpe de Bordeaux — essences** (+0,05) : hêtre 1, mixte ~0,75, sapin/épicéa ~0,5-0,9, feuillus ~0,4-0,8, **chêne ~0,3-0,5** (au lieu de 0,9). Moyennement sûr (effectifs).
+5. **Saisons** (accord des deux lectures) : coulemelle (juin 0,1 ; juillet 0,15 ; août 0,6 ; septembre 0,85 ; octobre 1 ; novembre 0,7 ; décembre 0,3) ; trompette (juillet 0,05 ; novembre 0,6 ; décembre 0,25) ; cèpe des pins (juillet 0,15 ; novembre 0,1) ; bronzé (juillet 0,5).
+6. **Densité (cloche)** : toujours recommandée par la littérature (A−), mais **non testable ici** (la grille de 250 m ne contient pas le couvert).
+7. **Ne PAS toucher** : cèpe bronzé (AUC 0,82-0,85) ; exposition nord du cèpe de Bordeaux (littérature contradictoire, non testable ici : la grille ne contient pas l'exposition).
+8. **Coulemelle (milieu)** : à repenser (milieu ouvert, jardins et bords de chemin), pas d'amélioration chiffrée disponible ; ne rien changer sans donnée d'occupation du sol à fine échelle.
+9. **Affichage** : ne plus montrer 100 %. Le score du milieu est un indice relatif (comme les rapports ci-dessus), pas une probabilité.
+
+**Pour appliquer 1 à 4** : modifier `ALT` et `HOSTS` dans `scripts/build-habitat.py`, puis relancer `build-habitat-fine.py` **sur votre PC** (fichiers lourds absents du cloud) et repousser la branche `habitat`. Les **saisons (5)** se règlent dans `build-pousse.py` (`SPECIES[...]["saison"]`) et s'appliquent au prochain passage de `maps.yml`. Après modification, relancer `docs/validation-gbif/` pour vérifier le gain.
+
+## Validation : faite pour le milieu, pas encore pour la météo
+
+Voir la section 3. Restent à tester : la **pousse** (pluie/température avant chaque observation) et, avec le couvert et l'exposition à 20 m, la courbe de densité et l'exposition.
 
 ## Sources
 
