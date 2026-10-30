@@ -4,8 +4,10 @@
 Contrairement à Météo-France, l'API OpenData d'Infoclimat (infoclimat.fr/opendata) fournit l'HISTORIQUE :
 on redemande donc les 72 dernières heures à chaque passage et on recalcule le cumul (pas d'accumulation).
 Écrit `public/infoclimat-stations.json` dans le dépôt par l'API GitHub (comme stations.py) :
-  { "generatedAt": ISO, "stations": [ {"id","name","lat","lon","mm","hours"} ] }
-L'appli lit ce fichier et affiche une bulle par station (même rendu que Météo-France, lib/stationRain.ts).
+  { "generatedAt": ISO, "days": [15 jours Paris, le plus ancien d'abord],
+    "stations": [ {"id","name","lat","lon","mm","hours","d":[mm par jour ou null],"n":[heures mesurées par jour]} ] }
+`mm`/`hours` = cumul des 72 dernières heures (bulle de la carte) ; `d`/`n` = pluie jour par jour sur 15 jours
+(frise de la fiche station). L'appli lit ce fichier (même rendu que Météo-France, lib/stationRain.ts).
 
 Secrets (secrets.yaml) : meteochampignon_infoclimat_token (clé OpenData « Non-commercial »), github_dispatch_auth.
 Options : --dry-run (ne pas écrire), --check (diagnostic).
@@ -21,6 +23,13 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+try:
+    from zoneinfo import ZoneInfo
+
+    PARIS = ZoneInfo("Europe/Paris")
+except Exception:  # noqa: BLE001 - pas de base de fuseaux : repli approximatif ci-dessous
+    PARIS = None
+
 REPO = "drugpad/meteochampignon"
 # Données sur la branche « live » (jamais déployée par Vercel) : sur master, chaque écriture redéployait
 # le site, ~100 fois par jour, soit toute la limite quotidienne du compte Vercel (constaté le 21/10/2026).
@@ -34,6 +43,8 @@ GITHUB_API = os.environ.get("GITHUB_API_BASE", "https://api.github.com")
 # Emprise Midi-Pyrénées (identique à src/lib/config.ts / regionOutline).
 LAT_MIN, LAT_MAX, LON_MIN, LON_MAX = 42.6, 45.15, -0.4, 3.4
 WINDOW_HOURS = 72
+DAYS = 15           # profondeur de la frise jour par jour
+CHUNK_DAYS = 6      # l'API refuse plus de 7 jours par requête
 BATCH = 20          # stations par requête OpenData (testé : ~20 OK)
 PAUSE = 0.5
 DRY_RUN = "--dry-run" in sys.argv
@@ -108,13 +119,16 @@ def fetch_batch(ids, token, start, end):
     return {k: v for k, v in hourly.items() if k != "_params"}
 
 
-def cumul(points, now):
-    """Somme la pluie horaire (pluie_1h échantillonnée à chaque heure ronde) sur les 72 dernières heures.
+def paris_day(dt):
+    """Jour calendaire de Paris (date) d'un instant UTC."""
+    if PARIS is not None:
+        return dt.astimezone(PARIS).date()
+    summer = 4 <= dt.month <= 9  # repli approximatif (été = avril à septembre)
+    return (dt + timedelta(hours=2 if summer else 1)).date()
 
-    Les stations StatIC rapportent souvent toutes les ~6 min : sommer tous les pluie_1h (= pluie de l'heure
-    écoulée) compterait 6 fois chaque averse. On garde donc une valeur par heure ronde (la plus proche de HH:00).
-    """
-    since = now - timedelta(hours=WINDOW_HOURS)
+
+def hourly_samples(points, since, now):
+    """Une valeur par heure ronde : la pluie_1h la plus proche de HH:00 (les StatIC rapportent toutes les ~6 min)."""
     by_hour = {}
     for p in points:
         try:
@@ -126,28 +140,69 @@ def cumul(points, now):
             hk = dt.replace(minute=0, second=0, microsecond=0)
             if hk not in by_hour or dt.minute < by_hour[hk][0]:
                 by_hour[hk] = (dt.minute, max(0.0, float(v)))
-    total = sum(v for _, v in by_hour.values())
-    return round(total, 1), len(by_hour)
+    return {hk: v for hk, (_, v) in by_hour.items()}
+
+
+def daily(points, now, days):
+    """Pluie par jour calendaire de Paris sur `days` (liste de dates) : ([mm ou None], [heures mesurées]).
+
+    pluie_1h est la pluie de l'heure qui PRÉCÈDE l'horodatage : l'échantillon de 00:00 locale compte pour la veille.
+    """
+    since = now - timedelta(days=DAYS + 2)
+    sums = {d: 0.0 for d in days}
+    counts = {d: 0 for d in days}
+    for hk, v in hourly_samples(points, since, now).items():
+        d = paris_day(hk - timedelta(hours=1))
+        if d in sums:
+            sums[d] += v
+            counts[d] += 1
+    return [round(sums[d], 1) if counts[d] else None for d in days], [counts[d] for d in days]
+
+
+def cumul(points, now):
+    """Somme la pluie horaire (pluie_1h échantillonnée à chaque heure ronde) sur les 72 dernières heures.
+
+    Les stations StatIC rapportent souvent toutes les ~6 min : sommer tous les pluie_1h (= pluie de l'heure
+    écoulée) compterait 6 fois chaque averse. On garde donc une valeur par heure ronde (la plus proche de HH:00).
+    """
+    samples = hourly_samples(points, now - timedelta(hours=WINDOW_HOURS), now)
+    return round(sum(samples.values()), 1), len(samples)
+
+
+def fetch_range(ids, token, start_day, end_day):
+    """Toute la période demandée, découpée en requêtes de CHUNK_DAYS jours (limite de l'API : 7 jours)."""
+    merged = {}
+    day = start_day
+    while day <= end_day:
+        stop = min(day + timedelta(days=CHUNK_DAYS), end_day)
+        part = fetch_batch(ids, token, day.strftime("%Y-%m-%d"), stop.strftime("%Y-%m-%d"))
+        for sid, points in part.items():
+            merged.setdefault(sid, []).extend(points)
+        day = stop + timedelta(days=1)
+    return merged
 
 
 def collect(token):
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     stations = zone_stations()
-    start = (now - timedelta(hours=WINDOW_HOURS + 1)).strftime("%Y-%m-%d")
-    end = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    today = paris_day(now)
+    days = [today - timedelta(days=k) for k in range(DAYS - 1, -1, -1)]
+    start_day = (now - timedelta(days=DAYS + 1)).date()
+    end_day = (now + timedelta(days=1)).date()
     by_id = {s["id"]: s for s in stations}
     result = []
     ids = list(by_id)
     for i in range(0, len(ids), BATCH):
         if i:
             time.sleep(PAUSE)
-        hourly = fetch_batch(ids[i : i + BATCH], token, start, end)
+        hourly = fetch_range(ids[i : i + BATCH], token, start_day, end_day)
         for sid, points in hourly.items():
             mm, hours = cumul(points, now)
-            if hours > 0:
-                result.append({**by_id[sid], "mm": mm, "hours": hours})
+            d, n = daily(points, now, days)
+            if any(n):
+                result.append({**by_id[sid], "mm": mm, "hours": hours, "d": d, "n": n})
     result.sort(key=lambda s: s["id"])
-    return {"generatedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "stations": result}, len(stations)
+    return {"generatedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "days": [d.isoformat() for d in days], "stations": result}, len(stations)
 
 
 def publish(payload, auth):

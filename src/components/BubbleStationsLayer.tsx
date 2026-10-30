@@ -1,16 +1,20 @@
-// Couche de bulles « cumul de pluie » pour un réseau non cliquable (Infoclimat, Netatmo) : un marqueur par
-// station, sans popup (le cumul s'affiche en infobulle native au survol — attribut title de la bulle).
+// Couche de bulles « cumul de pluie » pour un réseau amateur (Infoclimat, Netatmo) : un marqueur par station ;
+// au toucher, une fiche avec la frise jour par jour (fichiers publiés par Home Assistant, 15 jours).
 //
 // Allègement au dézoom (« apparition progressive ») : Netatmo peut compter des milliers de stations ; afficher
 // tout de loin serait illisible. On ne garde donc, dans la vue courante, qu'UNE station (la plus arrosée) par
 // cellule d'une grille dont la taille diminue avec le zoom — plus on zoome, plus il en apparaît.
 import { useEffect, useMemo, useState } from 'react'
-import { Marker, useMap, useMapEvents } from 'react-leaflet'
-import { loadNetwork, cachedNetwork, type NetworkData, type NetworkId, type NetworkStation } from '../lib/networkStations'
+import { Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
+import { loadNetwork, cachedNetwork, networkFriseDays, type NetworkData, type NetworkId, type NetworkStation } from '../lib/networkStations'
 import { stationIcon, useZoomClass } from '../lib/stationBubbleIcon'
 import { rainBubble, rainReference } from '../lib/stationRain'
+import { DayRainFrise } from './DayRainFrise'
+import './StationPopup.css'
 
 const EMOJI: Record<NetworkId, string> = { infoclimat: '🌧️', netatmo: '🏠' }
+const LABEL: Record<NetworkId, string> = { infoclimat: 'Station Infoclimat (StatIC)', netatmo: 'Station Netatmo' }
+const fr = (v: number) => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
 
 function useNetwork(network: NetworkId): NetworkData | null {
   const [data, setData] = useState<NetworkData | null>(() => cachedNetwork(network))
@@ -69,11 +73,47 @@ export function BubbleStationsLayer({ network }: { network: NetworkId }) {
           key={s.id}
           position={[s.lat, s.lon]}
           icon={stationIcon(zoomClass, rainBubble(s, reference), EMOJI[network])}
-          interactive={false}
-          keyboard={false}
           zIndexOffset={Math.round(s.mm)}
-        />
+        >
+          <Popup minWidth={260} maxWidth={300}>
+            <NetworkStationCard network={network} data={data} station={s} />
+          </Popup>
+        </Marker>
       ))}
     </>
+  )
+}
+
+function NetworkStationCard({ network, data, station }: { network: NetworkId; data: NetworkData; station: NetworkStation }) {
+  const days = useMemo(() => networkFriseDays(data, station), [data, station])
+  const name = network === 'netatmo' ? LABEL[network] : station.name
+  const age = new Date(data.generatedAt)
+  return (
+    <div className="station-popup station-popup--network">
+      <div className="station-popup__title">{name}</div>
+      <div className="station-popup__altitude">
+        {network === 'netatmo' ? 'Pluviomètre d\'un particulier (réseau Netatmo)' : LABEL[network]} · {station.lat.toFixed(3)}, {station.lon.toFixed(3)}
+      </div>
+      <div className="station-popup__section-title">
+        Pluie des 3 derniers jours : {station.hours > 0 ? `${fr(station.mm)} mm` : 'pas de mesure'}
+        {station.hours > 0 && station.hours < 0.8 * 72 && ` (au moins : ${station.hours} h mesurées sur 72)`}
+      </div>
+      {days.length > 0 ? (
+        <>
+          <div className="station-popup__section-title">Pluie jour par jour</div>
+          <DayRainFrise days={days} />
+          {days.some((d) => d.partial || d.mm === null) && (
+            <div className="station-popup__notice">
+              {network === 'netatmo'
+                ? "Netatmo ne fournit pas d'historique : les jours avant le début de notre collecte, ou avec des heures manquantes, sont vides ou incomplets (barres claires)."
+                : 'Barres claires ou vides : heures de mesure manquantes.'}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="station-popup__message">Détail jour par jour pas encore publié pour ce réseau (prochaine collecte).</div>
+      )}
+      <div className="station-popup__altitude">Données mises à jour {age.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
+    </div>
   )
 }

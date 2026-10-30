@@ -17,7 +17,7 @@ type Props = { station: Station; state: StationDetailState; onClose: () => void 
 const mm = (v: number) => `${v.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} mm`
 
 export function StationFullscreen({ station, state, onClose }: Props) {
-  // Résumé en tête (même principe que l'écran de prévision) : pluie 24 h, 3 jours, 10 jours, température.
+  // Résumé en tête (même principe que l'écran de prévision) : pluie 24 h, 3 jours, cumul de la frise (jusqu'à 15 jours), température.
   const detail = state.status === 'ready' ? state.detail : null
   const rain24 = detail ? detail.rainHistory.reduce((s, p) => s + p.rain, 0) : null
   const rain3d = cachedRainTotals()?.[station.id]?.mm ?? null

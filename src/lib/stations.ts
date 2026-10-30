@@ -8,7 +8,7 @@
 // dans src/data/stations-midi-pyrenees.json plutôt que refaite à chaque
 // chargement — la liste des stations ne change quasiment jamais).
 //
-// L'historique horaire (pluie + température, jusqu'à 10 jours) n'est PAS
+// L'historique horaire (pluie + température, jusqu'à 15 jours) n'est PAS
 // tiré en direct depuis le navigateur au clic : un job GitHub Actions
 // (voir scripts/fetch-station-history.mjs) accumule un point par station et
 // par heure dans public/station-history.json, lu ici une seule fois par
@@ -131,7 +131,7 @@ export async function loadRainTotals(): Promise<Record<string, StationRainTotal>
 }
 
 const HOUR_MS = 3600000
-const HISTORY_WINDOW_MS = 240 * HOUR_MS // même fenêtre que fetch-station-history.mjs
+const HISTORY_WINDOW_MS = 360 * HOUR_MS // même fenêtre que fetch-station-history.mjs (15 jours)
 // Latence de publication d'une observation horaire côté Météo-France : on
 // n'attend pas encore la dernière heure ronde juste après qu'elle a sonné.
 const PUBLICATION_LAG_MS = 30 * 60 * 1000
@@ -185,7 +185,7 @@ export async function fetchStationDetail(station: Station): Promise<StationDetai
     .map((p) => ({ time: p.time, temp: p.temp as number }))
 
   // Cumul par jour calendaire (Paris) sur toute la fenêtre disponible
-  // (jusqu'à 10 jours) — un jour partiel (premier jour de la fenêtre
+  // (jusqu'à 15 jours) — un jour partiel (premier jour de la fenêtre
   // glissante, ou jour courant pas terminé) reste inclus tel quel plutôt
   // qu'exclu.
   const dailyTotals = new Map<string, number>()
@@ -227,4 +227,48 @@ export function prettyStationName(name: string): string {
     .replace(/_/g, ' ')
     .toLowerCase()
     .replace(/(^|[\s'-])(\p{L})/gu, (_m, sep: string, c: string) => sep + c.toUpperCase())
+}
+
+// Mesures RÉELLES des stations Météo-France les plus proches d'un point (fiche d'un coin) : pour vérifier, à côté
+// des estimations du modèle, ce que les pluviomètres ont relevé et s'il a gelé. Rien n'est extrapolé : seules les
+// stations à moins de `maxKm` sont retenues, avec leur distance et leur altitude (la pluie varie vite en montagne).
+export type NearbyMeasure = {
+  name: string
+  altitude?: number
+  km: number
+  rainMm: number // pluie mesurée sur `days` jours calendaires
+  days: number // jours (Paris) ayant au moins une mesure, dans la fenêtre de 15 jours
+  tminC: number | null // plus basse température relevée sur les 3 derniers jours
+}
+
+const kmBetween = (aLat: number, aLon: number, bLat: number, bLon: number) =>
+  Math.hypot((bLat - aLat) * 111.32, (bLon - aLon) * 111.32 * Math.cos(((aLat + bLat) / 2) * (Math.PI / 180)))
+
+// Classement : la distance compte, mais aussi l'altitude (en montagne, une station 1 000 m plus haut ne mesure pas la même
+// pluie) : 50 m d'écart d'altitude « coûtent » autant que 1 km.
+export async function nearbyMeasures(lat: number, lon: number, altitude: number | null = null, maxKm = 30, count = 2): Promise<NearbyMeasure[]> {
+  const history = await loadHistory()
+  const now = Date.now()
+  const out: NearbyMeasure[] = []
+  const cost = (km: number, alt?: number) => km + (altitude !== null && alt !== undefined ? Math.abs(alt - altitude) / 50 : 0)
+  const candidates = STATIC_STATIONS.map((s) => ({ s, km: kmBetween(lat, lon, s.lat, s.lon) }))
+    .filter((c) => c.km <= maxKm)
+    .sort((a, b) => cost(a.km, a.s.altitude) - cost(b.km, b.s.altitude))
+  for (const { s, km } of candidates) {
+    const points = (history.stations[s.id] ?? []).filter((p) => new Date(p.time).getTime() > now - HISTORY_WINDOW_MS)
+    const rainPoints = points.filter((p) => p.rr1 !== null)
+    if (rainPoints.length < 24) continue // quasi aucune mesure : on passe à la suivante
+    const dayKeys = new Set(rainPoints.map((p) => dayKeyOfObservation(new Date(p.time).getTime())))
+    const temps = points.filter((p) => p.temp !== null && new Date(p.time).getTime() > now - 72 * HOUR_MS).map((p) => p.temp as number)
+    out.push({
+      name: prettyStationName(s.name),
+      altitude: s.altitude,
+      km: Math.round(km),
+      rainMm: Math.round(rainPoints.reduce((sum, p) => sum + (p.rr1 as number), 0) * 10) / 10,
+      days: dayKeys.size,
+      tminC: temps.length > 0 ? Math.round(Math.min(...temps) * 10) / 10 : null,
+    })
+    if (out.length >= count) break
+  }
+  return out
 }
