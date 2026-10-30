@@ -164,6 +164,13 @@ Classées par **gain mesuré hors échantillon** puis par solidité de la litté
 
 Voir la section 3. Restent à tester : la **pousse** (pluie/température avant chaque observation) et, avec le couvert et l'exposition à 20 m, la courbe de densité et l'exposition.
 
+## État d'avancement et suite (pour reprendre en local)
+
+- **Fait** : recherche documentaire croisée (2 requêtes indépendantes par espèce + second tour sur les contradictions), 2 sources lues en entier (étude turque d'Artvin, article Frontiers), validation sur ~2 200 observations GBIF (section 3), scripts dans `docs/validation-gbif/`.
+- **Pas fait** : aucune modification de `build-habitat.py` ni de `build-pousse.py` ; branche `etude-cepe-bordeaux` non fusionnée, pas de pull request.
+- **Prochaines étapes, par ordre de gain** : (1) courbe d'altitude du cèpe de Bordeaux puis de la girolle ; (2) poids des essences du cèpe de Bordeaux (chêne ~0,3-0,5) ; (3) saisons (coulemelle, trompette, cèpe des pins) ; (4) relancer `build-habitat-fine.py` sur le poste, repousser la branche `habitat`, relancer la validation pour mesurer le gain ; (5) tester la pousse (pluie/température avant chaque observation, archives de la branche `data`) ; (6) afficher le milieu comme un indice relatif, jamais 100 %.
+- **Sources encore illisibles depuis le cloud** : bioRxiv (préprint des déclencheurs météo), Springer (modèles de rendement en pinèdes, production par classe d'âge), PMC (génétique et âge du peuplement). À relire en local pour confirmer les chiffres de seconde main (optimum de surface terrière, 13,2 °C, exposition nord dans les Pyrénées).
+
 ## Sources
 
 Cèpes (général) : <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7428248/> · <https://cdnsciencepub.com/doi/10.1139/X09-198> · <https://link.springer.com/article/10.1186/s40663-019-0211-1> · <https://oppla.eu/casestudy/20556> · <https://link.springer.com/article/10.1007/s00572-011-0382-2> · <https://link.springer.com/article/10.1007/s00572-011-0389-8> · <https://www.sciencedirect.com/science/article/abs/pii/S0378112717301317> · <https://www.researchgate.net/publication/223100960_Experimental_study_for_increasing_productivity_of_Boletus_edulis_sl_in_Italy> · <https://italianmycology.unibo.it/article/view/16464> · <https://www.biorxiv.org/content/10.64898/2025.12.12.693895.full.pdf> (préprint) · <https://dergipark.org.tr/en/pub/artvinofd/article/449736> · <https://www.nature.com/articles/srep45824> · <https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0037567>
