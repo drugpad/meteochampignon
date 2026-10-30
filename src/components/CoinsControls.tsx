@@ -194,7 +194,7 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
           {meta && (
             <p className="coins__note">
               {view === 'milieu' ? (
-                'Indice du milieu : essences (BD Forêt IGN), densité des arbres (Copernicus 2024), sol, altitude, exposition.'
+                'Indice du milieu : essences (BD Forêt IGN), densité des arbres (Copernicus 2024), roche (carte géologique BRGM), sol, altitude, pente. Règles vérifiées sur des observations réelles (GBIF).'
               ) : (
                 <>
                   Indice : milieu × météo (pluie tombée, corrigée par les pluviomètres, et prévisions). Calculé{' '}

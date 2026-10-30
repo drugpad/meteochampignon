@@ -12,12 +12,12 @@ import { fetchDataJson, fetchPixels } from './rainMaps'
 export type Species = 'cepe_ete' | 'cepe_bronze' | 'cepe_bordeaux' | 'cepe_pins' | 'girolle' | 'coulemelle' | 'trompette'
 export const SPECIES: { key: Species; label: string; short: string; group: 'cepe' | 'autre'; hint: string }[] = [
   { key: 'cepe_ete', label: "Cèpe d'été", short: "d'été", group: 'cepe', hint: 'chênes, châtaigniers ; juin-septembre, chaleur' },
-  { key: 'cepe_bronze', label: 'Cèpe bronzé', short: 'bronzé', group: 'cepe', hint: 'tête de nègre ; chênes, coteaux chauds ; été-début automne' },
-  { key: 'cepe_bordeaux', label: 'Cèpe de Bordeaux', short: 'de Bordeaux', group: 'cepe', hint: 'feuillus et sapins, jusqu’en montagne ; automne, fraîcheur' },
-  { key: 'cepe_pins', label: 'Cèpe des pins', short: 'des pins', group: 'cepe', hint: 'pins, sapins, surtout en altitude ; automne' },
-  { key: 'girolle', label: 'Girolle', short: 'Girolle', group: 'autre', hint: 'feuillus et conifères, sol acide' },
-  { key: 'coulemelle', label: 'Coulemelle', short: 'Coulemelle', group: 'autre', hint: 'prairies, lisières, clairières' },
-  { key: 'trompette', label: 'Trompette', short: 'Trompette', group: 'autre', hint: 'hêtres et chênes, sol argileux' },
+  { key: 'cepe_bronze', label: 'Cèpe bronzé', short: 'bronzé', group: 'cepe', hint: 'tête de nègre ; chênes, châtaigniers, sols siliceux, coteaux chauds ; juillet-octobre' },
+  { key: 'cepe_bordeaux', label: 'Cèpe de Bordeaux', short: 'de Bordeaux', group: 'cepe', hint: 'hêtres, sapins, châtaigniers, sols acides, surtout 600-1 200 m ; automne' },
+  { key: 'cepe_pins', label: 'Cèpe des pins', short: 'des pins', group: 'cepe', hint: 'pins, sapins, sols acides, montagne ; printemps et automne' },
+  { key: 'girolle', label: 'Girolle', short: 'Girolle', group: 'autre', hint: 'feuillus et conifères, sol acide, surtout 300-900 m' },
+  { key: 'coulemelle', label: 'Coulemelle', short: 'Coulemelle', group: 'autre', hint: 'prairies, lisières, bois clairs ; fin d’été-automne' },
+  { key: 'trompette', label: 'Trompette', short: 'Trompette', group: 'autre', hint: 'hêtres, chênes, châtaigniers ; sous-bois frais' },
 ]
 export const isSpecies = (v: unknown): v is Species => SPECIES.some((s) => s.key === v)
 
@@ -410,7 +410,10 @@ export async function describeSpot(res: CoinsResult, sp: Species, lat: number, l
   // courbe (voir outlook) ; cette liste ne contient que des constats sur le passé.
   if (temp5 < 6) reasons.push('Trop froid ces derniers jours.')
   else if (temp5 > 24) reasons.push('Trop chaud ces derniers jours.')
-  if (rain15 < 10 && since !== 255) reasons.push('Sol qui s’assèche (peu de pluie ces 15 jours).')
+  // Modèle de pousse à fenêtres (30/10/2026) : la pluie d'il y a 1 à 6 semaines est celle qui fait sortir les
+  // champignons ; quelques jours secs ensuite ne sont pas un mauvais signe en soi.
+  if (rain15 < 10 && since !== 255)
+    reasons.push(`Peu de pluie ces 15 derniers jours (${rain15} mm) : la pluie plus ancienne compte encore, les champignons sortent 1 à 3 semaines après.`)
   if (res.habitatOnly && habitat >= 0.6) reasons.unshift(`Très bon milieu pour l'espèce (${GROUP_LABELS[group] ?? group}), indépendamment de la météo.`)
   if (reasons.length === 0 && !res.habitatOnly && check.status !== 'lower' && (fine !== null ? habitat * pousse : res.score[i]) >= 0.35) reasons.push(`Bon milieu, ${rain15} mm de pluie en 15 jours et ${temp5.toFixed(0)} °C de moyenne : conditions réunies selon le modèle${check.status === 'ok' ? ', confirmées par les stations proches' : ''}.`)
 

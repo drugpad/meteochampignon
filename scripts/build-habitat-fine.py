@@ -37,6 +37,7 @@ from scipy.ndimage import map_coordinates, maximum_filter, uniform_filter  # noq
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
 CACHE = os.path.join(ROOT, ".cache-habitat")
 FINE = os.path.join(CACHE, "fine")
 TILES = os.path.join(CACHE, "tiles")
@@ -52,6 +53,7 @@ def _load(name, file):
 
 hb = _load("habitat", "build-habitat.py")  # règles (HOSTS, PH, ALT, SLOPE, SPECIES, curve)
 hl = _load("layers", "build-habitat-layers.py")  # groupes d'essences (group_of, GROUPS)
+from geol_classes import CLASSES as GEOL_CLASSES  # noqa: E402
 
 RES = 20
 X0, Y1 = 428_000, 6_440_000  # coin nord-ouest (Lambert-93)
@@ -93,6 +95,30 @@ def forest_raster():
             band = arr[r0 : r0 + h]
             np.copyto(band, part, where=part > 0)
         log(f"BD Forêt {dept} : {len(shapes)} polygones rasterisés à 20 m")
+    arr.flush()
+    open(done, "w").close()
+    return arr
+
+
+def geology_raster():
+    """Classe de réaction du sol par case de 20 m (index de geol_classes.CLASSES, 0 = inconnu), d'après la carte
+    géologique harmonisée au 1/50 000 du BRGM (BD Charm-50, Licence Ouverte 2.0), sur disque (memmap)."""
+    import geol_classes as gc
+
+    path = os.path.join(FINE, "geology-20m.u8")
+    done = path + ".ok"
+    if os.path.exists(done):
+        return np.memmap(path, dtype=np.uint8, mode="r", shape=(H, W))
+    arr = np.memmap(path, dtype=np.uint8, mode="w+", shape=(H, W))
+    for p in sorted(glob.glob(os.path.join(CACHE, "geol", "*", "*_S_FGEOL_2154.shp"))):
+        shapes = [(sr.shape.__geo_interface__, gc.CLASSES.index(gc.classify(sr.record["DESCR"])))
+                  for sr in shapefile.Reader(p, encoding="latin-1").iterShapeRecords()]
+        for r0 in range(0, H, BLOCK):
+            h = min(BLOCK, H - r0)
+            part = rasterize(shapes, out_shape=(h, W), transform=from_origin(X0, Y1 - r0 * RES, RES, RES), fill=0, dtype="uint8")
+            band = arr[r0 : r0 + h]
+            np.copyto(band, part, where=(part > 0) & (band == 0))
+        log(f"géologie {os.path.basename(p)[:16]} : {len(shapes)} polygones rasterisés à 20 m")
     arr.flush()
     open(done, "w").close()
     return arr
@@ -186,7 +212,7 @@ def tcd_block(r0, c0, h, w):
     return out
 
 
-def habitat_block(forest, alt, ph, wc, mask, slope_deg, aspect_deg, tcd):
+def habitat_block(forest, alt, ph, wc, mask, slope_deg, aspect_deg, tcd, geol=None):
     """Habitats (7, h, w) entre 0 et 1 : arbres hôtes (proches) x ouverture du bois x sol x altitude x pente x
     exposition, règles de build-habitat.py (HOSTS, OPENNESS, PH, ALT, SLOPE, ASPECT, SMALL_WOODS…)."""
     group = forest & 0x7F
@@ -221,18 +247,27 @@ def habitat_block(forest, alt, ph, wc, mask, slope_deg, aspect_deg, tcd):
             meadow = grass & ~is_forest
             host = np.where(meadow, np.where(trees_under, host * hb.MEADOW_FACTOR, 0), host)
         else:
-            # Coulemelle : prairie à moins de ~100 m d'arbres, lisières (± 40 m), forêts ouvertes, landes.
+            # Coulemelle : prairie (surtout près d'arbres), lisières (± 40 m), forêts ouvertes, landes, et sous-bois.
+            # Révision du 30/10/2026 : 45 % des observations de la région sont SOUS les arbres (forêts claires ou non,
+            # Krieglsteiner : « presque toutes les forêts mésophiles ») et les prairies loin des arbres comptent aussi
+            # (rapport prairie 1,8) ; la 1re version donnait 0 aux deux.
             trees = cover >= 20
             near_trees = maximum_filter(trees, size=11) > 0
             edge = (maximum_filter(trees, size=5) > 0) & (maximum_filter(~trees, size=5) > 0)
             host = np.maximum.reduce([
                 0.9 * (grass & near_trees),
+                0.75 * grass,
                 0.7 * edge,
                 0.6 * open_forest,
+                0.55 * is_forest,
                 0.4 * (group == GROUPS.index("lande")),
             ]).astype(np.float32)
         openness = hb.curve(cover, hb.OPENNESS[sp])
         ph_f = np.maximum(hb.curve(ph, hb.PH[sp]), hb.PH_FLOOR)
+        if geol is not None:
+            # Carte géologique (plus fine que SoilGrids) : son facteur REMPLACE la courbe de pH dans les classes listées.
+            for cls, f in hb.GEOL.get(sp, {}).items():
+                ph_f = np.where(geol == GEOL_CLASSES.index(cls), f, ph_f)
         alt_f = hb.curve(alt, hb.ALT[sp])
         if sp in hb.ASPECT:
             best, depth = hb.ASPECT[sp]
@@ -255,13 +290,84 @@ def pack(habitats):
 
 
 FULL = os.path.join(FINE, "habitat-20m-7b.tif")  # 7 bandes (habitat x 255), pour la carte d'ensemble à 250 m
+# Variables du milieu à 20 m, calculées UNE fois (WorldCover est lu à distance, le relief reprojeté…) : un nouveau
+# réglage des règles se recalcule ensuite en quelques minutes, et la validation lit les mêmes valeurs aux points
+# d'observation. uint8 : forêt (groupe | 0x80 forêt ouverte), géologie, pente x 4, exposition / 2, pH x 20, WorldCover,
+# couvert % (255 = sans donnée), masque région ; uint16 à part : altitude (m).
+COV = os.path.join(FINE, "covariates-20m.tif")
+COV_ALT = os.path.join(FINE, "altitude-20m.tif")
+COV_BANDS = ["forest", "geol", "slope4", "aspect2", "ph20", "wc", "tcd", "mask"]
+
+
+def covariate_raster():
+    if os.path.exists(COV) and os.path.exists(COV_ALT):
+        return
+    forest = forest_raster()
+    geol = geology_raster()
+    profile = dict(driver="GTiff", width=W, height=H, count=len(COV_BANDS), dtype="uint8", crs="EPSG:2154", transform=TRANSFORM,
+                   compress="deflate", predictor=2, tiled=True, blockxsize=512, blockysize=512, BIGTIFF="YES")
+    nb = math.ceil(H / BLOCK) * math.ceil(W / BLOCK)
+    k = 0
+    with rasterio.open(COV + ".tmp.tif", "w", **profile) as dst, \
+            rasterio.open(COV_ALT + ".tmp.tif", "w", **dict(profile, count=1, dtype="uint16")) as dalt:
+        for r0 in range(0, H, BLOCK):
+            for c0 in range(0, W, BLOCK):
+                k += 1
+                h, w = min(BLOCK, H - r0), min(BLOCK, W - c0)
+                # Bloc avec marge (pente), recadré ensuite.
+                R0, C0 = max(0, r0 - MARGIN), max(0, c0 - MARGIN)
+                R1, C1 = min(H, r0 + h + MARGIN), min(W, c0 + w + MARGIN)
+                hh, ww = R1 - R0, C1 - C0
+                mask = region_mask_block(R0, C0, hh, ww)
+                if not mask.any():
+                    log(f"variables : bloc {k}/{nb} hors région")
+                    continue
+                alt = np.nan_to_num(dem_block(R0, C0, hh, ww), nan=0)
+                gy, gx = np.gradient(alt, RES)  # gy : vers le sud (ligne 0 = nord)
+                slope_deg = np.degrees(np.arctan(np.hypot(gx, gy)))
+                aspect_deg = np.degrees(np.arctan2(-gx, gy)) % 360  # direction de la descente, 0 = nord
+                tcd = tcd_block(R0, C0, hh, ww)
+                bands = [
+                    np.asarray(forest[R0:R1, C0:C1]),
+                    np.asarray(geol[R0:R1, C0:C1]),
+                    np.clip(np.rint(slope_deg * 4), 0, 255),
+                    np.rint(aspect_deg / 2) % 180,
+                    np.clip(np.rint(ph_block(R0, C0, hh, ww) * 20), 0, 255),
+                    worldcover_block(R0, C0, hh, ww),
+                    np.where(np.isnan(tcd), 255, np.clip(np.rint(tcd), 0, 100)),
+                    mask,
+                ]
+                sl = (slice(r0 - R0, r0 - R0 + h), slice(c0 - C0, c0 - C0 + w))
+                dst.write(np.stack([b[sl] for b in bands]).astype(np.uint8), window=Window(c0, r0, w, h))
+                dalt.write(np.clip(np.rint(alt[sl]), 0, 65535).astype(np.uint16)[None], window=Window(c0, r0, w, h))
+                log(f"variables : bloc {k}/{nb}")
+    os.replace(COV + ".tmp.tif", COV)
+    os.replace(COV_ALT + ".tmp.tif", COV_ALT)
+
+
+def read_covariates(r0, c0, h, w):
+    """Variables du milieu sur une fenêtre (lignes, colonnes de la grille 20 m), comme dict de tableaux."""
+    win = Window(c0, r0, w, h)
+    with rasterio.open(COV) as src:
+        b = dict(zip(COV_BANDS, src.read(window=win, boundless=True, fill_value=0)))
+    with rasterio.open(COV_ALT) as src:
+        alt = src.read(1, window=win, boundless=True, fill_value=0).astype(np.float32)
+    tcd = b["tcd"].astype(np.float32)
+    return dict(
+        forest=b["forest"], geol=b["geol"], alt=alt, slope=b["slope4"] / 4.0, aspect=b["aspect2"] * 2.0,
+        ph=b["ph20"] / 20.0, wc=b["wc"], tcd=np.where(b["tcd"] == 255, np.nan, tcd), mask=b["mask"],
+    )
+
+
+def habitat_from_cov(c):
+    return habitat_block(c["forest"], c["alt"], c["ph"], c["wc"], c["mask"], c["slope"], c["aspect"], c["tcd"], c["geol"])
 
 
 def build_raster():
     out = os.path.join(FINE, "habitat-20m.tif")
     if os.path.exists(out):
         return out
-    forest = forest_raster()
+    covariate_raster()
     profile = dict(driver="GTiff", width=W, height=H, count=3, dtype="uint8", crs="EPSG:2154", transform=TRANSFORM,
                    compress="deflate", tiled=True, blockxsize=512, blockysize=512, BIGTIFF="IF_SAFER")
     nb = math.ceil(H / BLOCK) * math.ceil(W / BLOCK)
@@ -272,25 +378,15 @@ def build_raster():
             for c0 in range(0, W, BLOCK):
                 k += 1
                 h, w = min(BLOCK, H - r0), min(BLOCK, W - c0)
-                # Bloc avec marge (pente, lisières), recadré ensuite.
-                R0, C0 = max(0, r0 - MARGIN), max(0, c0 - MARGIN)
-                R1, C1 = min(H, r0 + h + MARGIN), min(W, c0 + w + MARGIN)
-                hh, ww = R1 - R0, C1 - C0
-                mask = region_mask_block(R0, C0, hh, ww)
-                if not mask.any():
+                # Bloc avec marge (lisières, voisinage), recadré ensuite.
+                R0, C0 = r0 - MARGIN, c0 - MARGIN
+                cov = read_covariates(R0, C0, h + 2 * MARGIN, w + 2 * MARGIN)
+                if not cov["mask"].any():
                     log(f"bloc {k}/{nb} hors région")
                     continue
-                f = np.asarray(forest[R0:R1, C0:C1])
-                alt = dem_block(R0, C0, hh, ww)
-                a = np.nan_to_num(alt, nan=0)
-                gy, gx = np.gradient(a, RES)  # gy : vers le sud (ligne 0 = nord)
-                slope_deg = np.degrees(np.arctan(np.hypot(gx, gy)))
-                aspect_deg = np.degrees(np.arctan2(-gx, gy)) % 360  # direction de la descente, 0 = nord
-                ph = ph_block(R0, C0, hh, ww)
-                wc = worldcover_block(R0, C0, hh, ww)
-                tcd = tcd_block(R0, C0, hh, ww)
-                hab = habitat_block(f, a, ph, wc, mask, slope_deg, aspect_deg, tcd)
-                crop = hab[:, r0 - R0 : r0 - R0 + h, c0 - C0 : c0 - C0 + w]
+                mask = cov["mask"]
+                hab = habitat_from_cov(cov)
+                crop = hab[:, MARGIN : MARGIN + h, MARGIN : MARGIN + w]
                 dst.write(pack(crop), window=Window(c0, r0, w, h))
                 full.write(np.rint(crop * 255).astype(np.uint8), window=Window(c0, r0, w, h))
                 log(f"bloc {k}/{nb} : " + ", ".join(f"{sp} {hab[i][mask > 0].mean():.2f}" for i, sp in enumerate(SPECIES)))
@@ -347,7 +443,7 @@ def build_tiles(raster, zooms=(10, 11, 12, 13)):
         "maxZoom": max(zooms),
         "resolutionM": RES,
         "tiles": count,
-        "sources": "BD Forêt V2 (IGN, Etalab 2.0), Copernicus DEM GLO-30, SoilGrids 2.0 (ISRIC, CC BY 4.0), ESA WorldCover 2021 (CC BY 4.0)",
+        "sources": "BD Forêt V2 (IGN, Etalab 2.0), Copernicus DEM GLO-30, SoilGrids 2.0 (ISRIC, CC BY 4.0), ESA WorldCover 2021 (CC BY 4.0), Copernicus Tree Cover Density 2024, carte géologique harmonisée 1/50 000 BD Charm-50 (BRGM, Licence Ouverte 2.0)",
     }
     json.dump(meta, open(os.path.join(TILES, "habitat-tiles.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 

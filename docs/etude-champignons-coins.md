@@ -6,13 +6,14 @@ Espèces : cèpe d'été (*Boletus reticulatus*), cèpe bronzé (*B. aereus*), c
 
 **Mise à jour du 30/10/2026 (soir)** : le réseau de la session a été élargi. Deux sources ont pu être lues **en texte intégral** (étude turque d'Artvin, article Frontiers sur le cèpe en châtaigneraie) et **GBIF** a servi à tester le modèle sur ~2 200 observations réelles (section 3). Restent illisibles (proxy 403/429) : bioRxiv, Springer, PMC — les chiffres qui en viennent restent de seconde main.
 
-- **Recherche web uniquement** : aucune page n'a pu être lue en entier (bioRxiv, Springer, Wikipédia, PMC… hors des domaines autorisés de la session). Les chiffres viennent de **résumés rendus par le moteur de recherche**, donc de seconde main.
+- **Mise à jour du 30/10/2026 (nuit, sur le poste)** : textes intégraux lus en plus (préprint bioRxiv sur les déclencheurs du cèpe de Bordeaux, thèse Simmel avec les indices d'Ellenberg des champignons, mémoire SLU, Sánchez-González 2019, Alday 2017, Salerni 2023, Kauserud 2008, fiches du Wikipédia allemand tirées de Krieglsteiner). Voir sections 5 à 7 : **révision complète du modèle, validée sur observations réelles**.
+- **Première passe (cloud)** : recherche web uniquement, chiffres tirés de **résumés rendus par le moteur de recherche**, donc de seconde main.
 - **Double vérification** : chaque espèce a été cherchée **deux fois, avec des requêtes indépendantes** (anglais scientifique, puis français naturaliste/forestier), puis un second tour a ciblé les points contradictoires.
 - **Niveaux de confiance** :
   - **A** : confirmé par au moins deux sources indépendantes dont une scientifique ou institutionnelle (revue à comité de lecture, UICN, base de données nationale).
   - **B** : au moins deux guides de vulgarisation concordent, pas de source scientifique.
   - **C** : source unique, ou sources qui se contredisent.
-- **Rien n'est validé sur le terrain** (GBIF inaccessible). Les sources de vulgarisation (cueillette, boutiques) sont de qualité inégale ; je les signale comme telles.
+- **Rien n'est validé sur le terrain par nous-mêmes** : la validation se fait sur les observations publiques GBIF (sections 3, 5, 6). Les sources de vulgarisation (cueillette, boutiques) sont de qualité inégale ; je les signale comme telles.
 - **Piège de transfert** : les modèles météo de girolle trouvés (Saskatchewan) portent sur des chanterelles nord-américaines, **autres espèces** que *C. cibarius* (européenne). Je ne les utilise pas.
 
 ## Corrections de mes affirmations précédentes
@@ -160,16 +161,87 @@ Classées par **gain mesuré hors échantillon** puis par solidité de la litté
 
 **Pour appliquer 1 à 4** : modifier `ALT` et `HOSTS` dans `scripts/build-habitat.py`, puis relancer `build-habitat-fine.py` **sur votre PC** (fichiers lourds absents du cloud) et repousser la branche `habitat`. Les **saisons (5)** se règlent dans `build-pousse.py` (`SPECIES[...]["saison"]`) et s'appliquent au prochain passage de `maps.yml`. Après modification, relancer `docs/validation-gbif/` pour vérifier le gain.
 
-## Validation : faite pour le milieu, pas encore pour la météo
+## 5. Révision du milieu (30/10/2026, sur le poste) — à 20 m, validée sur observations
 
-Voir la section 3. Restent à tester : la **pousse** (pluie/température avant chaque observation) et, avec le couvert et l'exposition à 20 m, la courbe de densité et l'exposition.
+**Ce qui a changé dans la méthode de validation** (scripts versionnés dans `scripts/validation/`) :
+- Le fond de comparaison de la section 3 (« tous champignons ») contenait les **lichens**, observés sur rochers, murs et troncs isolés : il biaisait la comparaison (rochers calcaires, villages, altitude). Nouveau fond : **champignons du sol à chapeau** (Agaricales, Boletales, Russulales, Cantharellales, Gomphales, Thelephorales ; 149 000 observations dans le Sud-Ouest, `fetch_bg2.py`).
+- Le milieu est maintenant évalué **à 20 m** (grille de `build-habitat-fine.py`) et non plus à 250 m : fenêtre de ± 200 m autour de chaque observation (`extract_points.py`), score moyen sur 60 m (tolère l'imprécision des coordonnées).
+- Variables du milieu calculées une fois pour toutes (`covariates-20m.tif` : essence, géologie, pente, exposition, pH, WorldCover, couvert, altitude) : un nouveau réglage se recalcule en ~5 min et la validation lit exactement les mêmes valeurs que la carte.
 
-## État d'avancement et suite (pour reprendre en local)
+**Nouvelle donnée : la roche.** Carte géologique harmonisée au 1/50 000 du BRGM (BD Charm-50, Licence Ouverte 2.0, 8 départements, 128 000 polygones), classée par mots-clés en siliceux / décalcifié sur calcaire (argiles à silex, sidérolithique…) / marnes-molasses / calcaire / basique / alluvions (`scripts/geol_classes.py`). Bien plus fine que le pH SoilGrids (250 m lissé). Elle remplace la courbe de pH dans les classes renseignées (`GEOL` dans `build-habitat.py`).
 
-- **Fait** : recherche documentaire croisée (2 requêtes indépendantes par espèce + second tour sur les contradictions), 2 sources lues en entier (étude turque d'Artvin, article Frontiers), validation sur ~2 200 observations GBIF (section 3), scripts dans `docs/validation-gbif/`.
-- **Pas fait** : aucune modification de `build-habitat.py` ni de `build-pousse.py` ; branche `etude-cepe-bordeaux` non fusionnée, pas de pull request.
-- **Prochaines étapes, par ordre de gain** : (1) courbe d'altitude du cèpe de Bordeaux puis de la girolle ; (2) poids des essences du cèpe de Bordeaux (chêne ~0,3-0,5) ; (3) saisons (coulemelle, trompette, cèpe des pins) ; (4) relancer `build-habitat-fine.py` sur le poste, repousser la branche `habitat`, relancer la validation pour mesurer le gain ; (5) tester la pousse (pluie/température avant chaque observation, archives de la branche `data`) ; (6) afficher le milieu comme un indice relatif, jamais 100 %.
-- **Sources encore illisibles depuis le cloud** : bioRxiv (préprint des déclencheurs météo), Springer (modèles de rendement en pinèdes, production par classe d'âge), PMC (génétique et âge du peuplement). À relire en local pour confirmer les chiffres de seconde main (optimum de surface terrière, 13,2 °C, exposition nord dans les Pyrénées).
+**Rapports observations / fond dans les bois de la région** (1 = indifférent ; n entre parenthèses) :
+
+| | Siliceux | Décalcifié | Marnes | Calcaire | Alluvions | Châtaignier | Hêtre | Chêne | Couvert 95-100 % | Versant N |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Cèpe d'été (77) | 1,49 | 1,07 | 1,16 | 0,82 | 0,60 | 5,8 | 0,97 | 1,10 | 2,2 | 1,02 (SO 2,09) |
+| Cèpe bronzé (56) | 1,61 | 3,45 | 1,14 | 0,38 | 0,44 | 4,8 | 0,19 | 1,51 | 0,6 | 0,91 |
+| Cèpe de Bordeaux (140) | 1,94 | 0,79 | 0,73 | 0,40 | 0,64 | 2,5 | 1,53 | 0,72 | 2,9 | 0,77 |
+| Girolle (81) | 0,64 | 1,70 | 1,50 | 0,78 | 1,08 | 1,1 | 0,79 | 0,94 | 1,3 | 0,56 |
+| Trompette (86) | 1,37 | 2,89 | 1,19 | 0,49 | 0,64 | 3,1 | 1,99 | 1,57 | 1,1 | 0,86 |
+
+**Validation hors zone** (`habitat_fit.py` : ajustement automatique sur 4/5 de la région par carrés de 0,25°, mesure sur le 1/5 restant) : cèpe de Bordeaux 0,55 → 0,66 (altitude + roche), girolle 0,55 → 0,64 (altitude), cèpe d'été 0,60 → 0,64, cèpe bronzé déjà bon (0,77). La roche n'aide pas la girolle (0,47) : signal contradictoire (confusion possible avec *Cantharellus pallens*, calcicole), le pH SoilGrids reste sa règle de sol.
+
+**Règles retenues** (littérature + données, ramenées vers 1 quand l'effectif est faible ; `build-habitat.py`) :
+1. **Altitude** (`ALT`) : cèpe de Bordeaux optimum 850-1 050 m, 0,15 en plaine (concorde avec Krieglsteiner : 7 % des stations sous 350 m) ; girolle optimum 450-600 m, 0,6 à 1 000 m ; cèpe d'été optimum 400-850 m ; cèpe des pins faible sous 500 m ; trompette 500-1 400 m ; cèpe bronzé inchangé (confirmé).
+2. **Roche** (`GEOL`) : calcaire massif pénalisé pour les cèpes (Bordeaux 0,25, bronzé 0,35, pins 0,1, été 0,75) ; décalcifié favorable au bronzé ; alluvions (fonds de vallée) 0,5-0,7.
+3. **Trompette** : pénalité des sols acides **retirée**. La littérature d'Europe centrale (Ellenberg R7, Krieglsteiner : calcaire, marne, basalte) ne se vérifie pas ici : sur-représentée sur siliceux et décalcifié, sous hêtre (Pyrénées, Montagne Noire).
+4. **Exposition** : préférence nord **retirée** pour cèpe de Bordeaux, girolle, trompette (versants nord sous-représentés pour les trois ; littérature contradictoire, section 1). Sud-ouest gardé pour le cèpe d'été.
+5. **Bois fermés** non pénalisés pour cèpes de Bordeaux et des pins (couvert 95-100 % : rapport 2,9).
+6. **Essences** : châtaignier 1 pour cèpes d'été, de Bordeaux et trompette ; chêne 0,65 pour le cèpe de Bordeaux.
+7. **Terrains plats** (0-3°) un peu pénalisés (0,75) : sous-représentés pour les 7 espèces (sols engorgés, fonds de vallée).
+8. **Coulemelle** : sous-bois (0,55) et prairies loin des arbres (0,75) comptent désormais (45 % des observations sous les arbres ; la 1re version leur donnait 0).
+
+**AUC dans les bois, avant → après** (mêmes données qui ont servi à régler, donc un peu optimiste ; la validation hors zone ci-dessus indique ~0,03-0,04 de moins) : cèpe de Bordeaux 0,55 → 0,70, cèpe d'été 0,60 → 0,67, girolle 0,55 → 0,67, trompette 0,52 → 0,61, cèpe bronzé 0,77 → 0,82, cèpe des pins 0,60 → 0,76 (15 observations seulement), coulemelle 0,56 → 0,60.
+
+## 6. Révision de la météo de pousse (30/10/2026) — validée sur 3 800 observations datées
+
+**Données** : observations GBIF datées des 7 espèces dans le Sud-Ouest (lat 42,3-46,5 ; lon -2-4,5 ; 1995-2026) et météo **ERA5** (0,25°, horaire → journalier, 1995 → 24/10/2026) lue sur le stockage public d'Open-Meteo (`.cache-habitat/era5/fetch_era5.py`, ~50 min, aucun quota). Température ramenée à l'altitude du point (−6,5 °C/km) quand elle est connue.
+
+**Test** (`pousse_eval.py`), toujours au **même lieu** (le milieu ne joue pas) :
+- AUC « années » : le jour d'observation contre le même jour des autres années (la saison est identique, seule la météo diffère) ;
+- AUC « semaines » : contre les jours décalés de 10 à 45 jours la même année (saison + météo).
+
+**Constat principal** (`pousse_eval.py scan`) : la pluie des 3 à 7 derniers jours n'explique **rien** (AUC ≈ 0,50 pour toutes les espèces) ; ce qui compte est le **cumul de pluie sur 2 à 6 semaines, terminé 0 à 14 jours avant**. Concorde avec le préprint allemand (cèpe de Bordeaux : pluie sur 26 jours, température sur 20 jours, optimum 13 °C) et avec Karavani 2018 (effet de la pluie avec un mois de décalage).
+
+**Nouveau modèle** (`build-pousse.py`, ajusté par `pousse_fit.py`, paramètres choisis sur les années paires et mesurés sur les impaires, et inversement) : pluie cumulée sur une fenêtre propre à l'espèce × température moyenne × gel × saison, puis **calibration** en « chance relative » (1 = meilleures périodes ; plancher 0,2-0,4 par temps sec : la météo n'explique pas tout).
+
+| Espèce | Fenêtre de pluie | Température | Saison (GBIF) | AUC années / semaines, ancien → nouveau |
+|---|---|---|---|---|
+| Cèpe d'été | 21 j finie 7 j avant | optimum 19 °C (20 j) | mai-sept. | 0,60/0,64 → 0,66/0,68 |
+| Cèpe bronzé | 21 j finie 7 j avant | 18 °C, large | **sept.-oct.** | 0,64/0,69 → 0,71/0,75 |
+| Cèpe de Bordeaux | 30 j finie 5 j avant | 13,5 °C, large | sept.-oct. | 0,58/0,64 → 0,60/0,72 |
+| Cèpe des pins | 28 j finie 7 j avant | 14 °C | **avril-juin** + sept.-oct. | 0,59/0,64 → 0,62/0,71 |
+| Girolle | 21 j finie 2 j avant | 16 °C | juin-oct. | 0,57/0,59 → 0,61/0,65 |
+| Coulemelle | 21 j finie 7 j avant | aucun effet | **sept.-nov.** | 0,65/0,69 → 0,66/0,74 |
+| Trompette | 45 j finie 14 j avant | 13 °C, très large | oct.-nov. | 0,61/0,63 → 0,62/0,68 |
+
+Au passage : le **cèpe bronzé** est surtout observé en septembre-octobre dans le Sud-Ouest (rapports au fond 1,0 et 0,93) — la remarque de l'utilisateur du 25/10/2026 (« c'est encore la saison ») était juste ; le **cèpe des pins** a une vraie poussée d'avril-juin ; la **coulemelle** était surestimée en juillet-août. Le gel ne change presque rien (gardé pour la cohérence physique). Le « choc thermique » n'a pas été retenu.
+
+**Historique météo** : 65 jours gardés sur la branche `data` (40 avant), 60 utilisés (trompette : pluie de J-58 à J-14) ; les jours manquants sont repris une fois à l'API Open-Meteo au premier passage.
+
+## 7. Bilan : note finale (milieu × météo)
+
+`combined_eval.py` : observations datées de la région contre le fond « champignons du sol » observé aux mêmes périodes (mêmes cueilleurs, mêmes chemins). AUC ancienne → nouvelle version :
+
+| | Milieu | Météo | **Note finale** |
+|---|---|---|---|
+| Cèpe d'été (91) | 0,64 → 0,69 | 0,69 → 0,75 | **0,72 → 0,77** |
+| Cèpe bronzé (76) | 0,73 → 0,77 | 0,73 → 0,80 | **0,78 → 0,85** |
+| Cèpe de Bordeaux (147) | 0,64 → 0,72 | 0,59 → 0,67 | **0,62 → 0,74** |
+| Girolle (105) | 0,58 → 0,64 | 0,58 → 0,61 | **0,58 → 0,65** |
+| Coulemelle (108) | 0,58 → 0,61 | 0,60 → 0,67 | **0,61 → 0,69** |
+| Trompette (99) | 0,58 → 0,64 | 0,64 → 0,68 | **0,64 → 0,71** |
+
+Cèpe des pins : trop peu d'observations datées dans la région (15) pour ce bilan.
+
+**Limites** : effectifs modestes dans la région (77 à 147 observations par espèce en forêt) ; milieu réglé sur ces mêmes observations (le chiffre hors zone est ~0,03-0,04 plus bas) ; observations d'amateurs (identifications imparfaites, coordonnées à ± 1 km parfois) ; ERA5 à 25 km (la carte réelle utilise AROME à 1,3 km, corrigé par les pluviomètres : plus précis, non testable sur 30 ans) ; âge des peuplements et surface terrière (facteurs reconnus, Sánchez-González 2019) non cartographiables avec nos données.
+
+## État d'avancement et suite
+
+- **Fait (30/10/2026)** : sections 5 à 7. Milieu reconstruit à 20 m (5 273 tuiles, 167 Mo, `.cache-habitat/tiles/`) ; anciennes sorties gardées dans `.cache-habitat/old-20261030/`.
+- **À faire pour publier** : pousser la branche `habitat` (tuiles) ET fusionner le code (`build-pousse.py` est lu par `maps.yml` sur `master`) — les deux ensemble, sinon l'appli mélange l'ancien milieu et la nouvelle météo.
+- **Pistes** : élargir la validation du milieu aux départements voisins (plus d'observations ; il faudrait BD Forêt, géologie et couvert de ces départements) ; tester la température corrigée de l'altitude dans la carte réelle (limite connue, section 3.4ter de CLAUDE.md).
 
 ## Sources
 
@@ -188,3 +260,7 @@ Girolle : <https://www.mycora.fr/champignons/girolles> · <https://mycobota.org/
 Coulemelle : <https://champiscope.fr/guide-champignons/coulemelle> · <https://champimap.com/champignon/coulemelle/> · <https://myboletus.com/en/funghi/mazze-tamburo/> · <https://www.first-nature.com/fungi/macrolepiota-procera.php>
 
 Trompette : <https://redlist.info/iucn/species_view/153130/> · <https://svampe.databasen.org/en/taxon/12750> · <https://en.wikipedia.org/wiki/Craterellus_cornucopioides> · <https://www.mycora.fr/champignons/trompettes-de-la-mort> · <https://champiscope.fr/guide-champignons/trompette-de-la-mort> · <https://sporia.eu/champignons/trompette-de-la-mort>
+
+Ajoutées le 30/10/2026 (lues en texte intégral) : Brejon Lamartinière & Hoffman, préprint bioRxiv <https://doi.org/10.64898/2025.12.12.693895> · Simmel, Bässler & Poschlod 2017, Fungal Ecology 27 (indices d'Ellenberg des macromycètes), via la thèse <https://epub.uni-regensburg.de/35124/> · van Lent 2026, mémoire SLU <https://stud.epsilon.slu.se/22323/> · Sánchez-González et al. 2019, Forest Ecosystems 6:52 <https://doi.org/10.1186/s40663-019-0211-1> · Alday et al. 2017, Sci Rep 7:45824 <https://pmc.ncbi.nlm.nih.gov/articles/PMC5382911/> · Salerni, Paoli & Perini 2023, Italian Journal of Mycology 52 <https://doi.org/10.6092/issn.2531-7342/16464> · Kauserud et al. 2008, PNAS · Wikipédia allemand (d'après Krieglsteiner, *Die Großpilze Baden-Württembergs*) : Gemeiner Steinpilz, Sommer-Steinpilz, Schwarzhütiger Steinpilz, Kiefern-Steinpilz, Echter Pfifferling, Herbsttrompete, Gemeiner Riesenschirmling.
+
+Données : GBIF.org (occurrences consultées le 30/10/2026 ; seuls des agrégats sont publiés ici) · ERA5 (Copernicus) via Open-Meteo (CC BY 4.0) · BRGM BD Charm-50 (Licence Ouverte 2.0).

@@ -1,6 +1,7 @@
-# Validation du modèle de milieu sur observations GBIF
+# Validation du modèle de milieu sur observations GBIF (première passe, 30/10/2026)
 
-Scripts utilisés pour `docs/etude-champignons-coins.md` (section 3). À lancer depuis un dossier de travail (les fichiers `gbif.json` et `bg.json` y sont écrits), avec `HABITAT_DIR` pointant vers `public/habitat/` du dépôt.
+Scripts de la section 3 de `docs/etude-champignons-coins.md` (milieu à 250 m, fond « tous champignons »).
+**Remplacés** par `scripts/validation/` (sections 5 à 7) : milieu à 20 m, fond sans lichens, météo ERA5.
 
 1. `fetch.py` : observations des 7 espèces dans l'emprise → `gbif.json`.
 2. `bg.py` : observations de champignons quelconques (fond de comparaison) → `bg.json`.

@@ -4,15 +4,15 @@ Lancé par .github/workflows/maps.yml JUSTE APRÈS build-rain-maps.py (même run
 modèles lus sur le stockage public d'Open-Meteo : zéro appel d'API en régime normal).
 
 1. Historique météo jour par jour (pluie, température moyenne et minimale) sur la grille des cartes de pluie,
-   gardé 40 jours dans weather/ sur la branche data. Chaque run relit l'historique publié, recalcule les jours
+   gardé 65 jours dans weather/ sur la branche data. Chaque run relit l'historique publié, recalcule les jours
    encore disponibles sur le stockage public (7 jours de rétention) et complète. Les jours plus anciens
    manquants (premier lancement, longue panne) sont repris UNE fois à l'API « historical forecast »
    d'Open-Meteo sur une grille de 0,1° (~1 000 points, sous le quota gratuit).
 2. Pour chaque jour J (aujourd'hui + 6 jours prévus) et chaque espèce : un score météo de 0 à 1 =
-     développement depuis une grosse pluie (degrés-jours depuis l'épisode, fenêtre propre à l'espèce)
-   x humidité du sol (réservoir simple : pluie - évaporation selon la température)
-   x température des 5 derniers jours  x  absence de gel  x  saison.
-   Règles lisibles, tirées de la littérature mycologique (pas calées sur un service tiers).
+     pluie cumulée sur une fenêtre propre à l'espèce (2 à 6 semaines, terminée 0 à 14 jours avant J)
+   x température moyenne des derniers jours  x  absence de gel  x  saison.
+   Règles lisibles, ajustées et validées sur des observations réelles datées (GBIF) avec la météo ERA5
+   (scripts/validation/pousse_fit.py) — pas calées sur un service tiers.
 3. Sorties publiées (OUT_DIR) : pousse-<espèce>-d<k>.png (score x 255, ligne 0 = nord), pousse-info-d<k>.png
    (R = pluie des 15 derniers jours / 2 mm, G = jours depuis la dernière grosse pluie (255 = aucune),
    B = (température moyenne des 5 derniers jours + 10) x 6), pousse.json, et weather/ (historique).
@@ -40,9 +40,9 @@ _spec.loader.exec_module(rm)
 OUT_DIR, WORK_DIR = rm.OUT_DIR, rm.WORK_DIR
 REPO = os.environ.get("GITHUB_REPOSITORY", "drugpad/meteochampignon")
 ARCHIVE_URL = os.environ.get("WEATHER_ARCHIVE_URL", f"https://raw.githubusercontent.com/{REPO}/data/weather")
-KEEP_DAYS = 40
+KEEP_DAYS = 65
 LONG_DAYS = 15  # courbe de potentiel : aujourd'hui + 14 jours
-HISTORY_DAYS = 35  # profondeur utilisée par le modèle de pousse
+HISTORY_DAYS = 60  # profondeur utilisée par le modèle de pousse (trompette : pluie de J-58 à J-14)
 log = rm.log
 
 
@@ -377,51 +377,66 @@ def write_rain_days(archive, today, rows, cols):
 
 
 # --------------------------------------------------------------------------------------------------
-# Modèle de pousse (règles par espèce).
+# Modèle de pousse « à fenêtres » (révision du 30/10/2026, docs/etude-champignons-coins.md, section 6).
+# Ajusté et validé sur 3 800 observations datées du Sud-Ouest (GBIF, 1995-2026) avec la météo ERA5 : pour un même
+# lieu et un même jour de l'année, le score doit être plus haut l'année de l'observation que les autres années
+# (validation croisée années paires / impaires). Constat : la pluie des 3-7 derniers jours n'explique RIEN (les
+# champignons mettent 1 à 3 semaines à sortir) ; ce qui compte est le cumul de pluie sur 2 à 6 semaines, terminé 0
+# à 14 jours avant, et qui « sature » vite (au-delà de 30-50 mm, plus de pluie n'aide plus). Même forme que
+# Brejon Lamartinière & Hoffman (bioRxiv 2025, cèpe de Bordeaux : pluie sur 26 j, température sur 20 j, optimum 13 °C).
+#   pluie  : R = cumul du jour J-(L+w-1) au jour J-L ; f = 1 - exp(-R / R0)
+#   temp.  : T = moyenne des v derniers jours ; f = exp(-((T - Topt) / s)^2 / 2)  (s = 50 : sans effet)
+#   saison : facteur mensuel (janvier -> décembre) tiré des mois des observations du Sud-Ouest
+#   gel    : minimum < -1 °C dans les 3 derniers jours -> x 0,3
+# AUC hors années (années / semaines), ancien modèle -> nouveau : cèpe d'été 0,60/0,64 -> 0,66/0,69 ; bronzé
+# 0,64/0,69 -> 0,72/0,73 ; Bordeaux 0,58/0,64 -> 0,60/0,70 ; pins 0,59/0,64 -> 0,63/0,71 ; girolle 0,57/0,59 ->
+# 0,61/0,64 ; coulemelle 0,65/0,69 -> 0,66/0,71 ; trompette 0,61/0,63 -> 0,62/0,67.
 SPECIES = {
-    # seuil : pluie sur 3 jours qui déclenche une pousse (mm) ; dd : degrés-jours (base 4 °C) depuis
-    # l'épisode -> début, pic, fin de la fenêtre de pousse ; temp : courbe de la température moyenne des
-    # 5 derniers jours ; saison : facteur par mois (janvier -> décembre).
-    # Cèpes de chaleur : sortent 7 à 10 jours après un gros orage par temps chaud (fenêtre décalée le 25/10/2026 :
-    # la 1re version les faisait sortir dès le 4e jour à 20 °C), de juin à septembre.
-    "cepe_ete": {"seuil": 25, "dd": (100, 150, 260), "temp": [(10, 0), (14, 0.6), (17, 1), (26, 1), (30, 0.5)],
-                 "saison": [0, 0, 0, 0, 0.4, 0.9, 1, 1, 0.8, 0.3, 0.05, 0]},
-    # Réglage intermédiaire (revu le 25/10/2026 après vérification) : espèce thermophile d'été et de début d'automne,
-    # encore un peu en octobre les automnes doux, rare en novembre. L'assouplissement du 24/10 (octobre 0,9,
-    # novembre 0,35, à l'aise dès 15 °C) allait trop loin.
-    "cepe_bronze": {"seuil": 25, "dd": (100, 150, 260), "temp": [(9, 0), (12, 0.5), (16, 1), (25, 1), (29, 0.5)],
-                    "saison": [0, 0, 0, 0, 0.1, 0.4, 0.8, 1, 1, 0.7, 0.15, 0]},
-    # Cèpes d'automne : il leur faut de la fraîcheur (nuits qui rafraîchissent), septembre à novembre.
-    # Cèpes d'automne : premiers 10-12 jours après la grosse pluie à ~12 °C, pic vers 14 j (fenêtre avancée le 25/10/2026).
-    "cepe_bordeaux": {"seuil": 30, "dd": (70, 115, 230), "temp": [(4, 0), (7, 0.5), (10, 1), (17, 1), (21, 0.5), (25, 0.15)],
-                      "saison": [0, 0, 0, 0, 0.1, 0.2, 0.2, 0.4, 0.9, 1, 0.7, 0.15]},
-    "cepe_pins": {"seuil": 30, "dd": (70, 115, 230), "temp": [(4, 0), (7, 0.5), (10, 1), (18, 1), (22, 0.5)],
-                  "saison": [0, 0, 0, 0, 0.1, 0.3, 0.5, 0.6, 1, 1, 0.5, 0.1]},
-    "girolle": {"seuil": 20, "dd": (100, 180, 380), "temp": [(6, 0), (10, 0.6), (14, 1), (22, 1), (26, 0.5)],
-                "saison": [0, 0, 0, 0, 0.3, 0.8, 1, 1, 1, 0.8, 0.4, 0.1]},
-    # Coulemelle : sortie rapide, 6 à 10 jours après une bonne pluie (fenêtre avancée le 25/10/2026).
-    "coulemelle": {"seuil": 15, "dd": (50, 85, 190), "temp": [(6, 0), (10, 0.6), (13, 1), (22, 1), (26, 0.5)],
-                   "saison": [0, 0, 0, 0, 0.1, 0.4, 0.8, 1, 1, 0.9, 0.4, 0.05]},
-    "trompette": {"seuil": 25, "dd": (100, 160, 300), "temp": [(3, 0), (6, 0.6), (9, 1), (16, 1), (20, 0.6), (24, 0.3)],
-                  "saison": [0.2, 0.05, 0, 0, 0, 0, 0.3, 0.6, 0.9, 1, 1, 0.5]},
-}
-W_MAX = 60  # réserve d'eau utile de la litière et du sol superficiel (mm)
-
-# Besoin d'humidité du sol (réservoir W en mm -> facteur), propre à chaque espèce (révision du 25/10/2026) :
-# les cèpes de chaleur sortent sur un gros orage et supportent que le sol ressèche un peu ; la girolle et la
-# trompette exigent un sol humide durablement (pousse lente et étalée) et s'arrêtent net quand il s'assèche.
-MOISTURE_DEFAULT = [(0, 0.1), (5, 0.25), (10, 0.6), (20, 1), (W_MAX, 1)]  # cèpes d'automne, coulemelle
-MOISTURE = {
-    "cepe_ete": [(0, 0.15), (5, 0.4), (10, 0.75), (16, 1), (W_MAX, 1)],
-    "cepe_bronze": [(0, 0.15), (5, 0.4), (10, 0.75), (16, 1), (W_MAX, 1)],
-    "girolle": [(0, 0.05), (8, 0.2), (15, 0.55), (28, 1), (W_MAX, 1)],
-    "trompette": [(0, 0.05), (8, 0.2), (15, 0.55), (28, 1), (W_MAX, 1)],
+    # Cèpe d'été : pluie de 3 semaines finie une semaine avant, chaleur (optimum ~19 °C sur 20 jours).
+    "cepe_ete": {"pluie": (7, 21, 50), "temp": (19, 3.5, 20),
+                 "saison": [0, 0, 0, 0.05, 0.4, 0.9, 1, 1, 0.9, 0.4, 0.1, 0]},
+    # Cèpe bronzé : surtout septembre-octobre dans le Sud-Ouest (rapports au fond 1,0 et 0,93).
+    "cepe_bronze": {"pluie": (7, 21, 18), "temp": (18, 9, 30),
+                    "saison": [0, 0, 0, 0.05, 0.15, 0.4, 0.7, 0.8, 1, 1, 0.3, 0.05]},
+    # Cèpe de Bordeaux : pluie d'un mois, optimum de température 13,5 °C (préprint ; effet faible dans nos données).
+    "cepe_bordeaux": {"pluie": (5, 30, 15), "temp": (13.5, 10, 20),
+                      "saison": [0.05, 0, 0, 0.05, 0.1, 0.2, 0.35, 0.55, 0.95, 1, 0.6, 0.15]},
+    # Cèpe des pins : poussée de printemps-début d'été réelle (avril-juin), puis automne.
+    "cepe_pins": {"pluie": (7, 28, 12), "temp": (14, 9, 20),
+                  "saison": [0, 0, 0, 0.3, 0.45, 0.6, 0.5, 0.6, 1, 1, 0.35, 0.05]},
+    # Girolle : réagit plus vite (pluie de 3 semaines jusqu'à l'avant-veille), juin à octobre.
+    "girolle": {"pluie": (2, 21, 15), "temp": (16, 9, 30),
+                "saison": [0.05, 0, 0, 0.1, 0.3, 0.85, 0.9, 0.85, 1, 0.8, 0.45, 0.1]},
+    # Coulemelle : pluie de 3 semaines finie une semaine avant ; septembre-novembre (juillet-août surestimés avant).
+    # Pas d'effet de température (il dégradait la prévision) : saison et gel suffisent.
+    "coulemelle": {"pluie": (7, 21, 8), "temp": (15, 50, 14),
+                   "saison": [0, 0, 0, 0.05, 0.1, 0.15, 0.3, 0.65, 1, 1, 0.65, 0.15]},
+    # Trompette : humidité de fond (pluie de 6 semaines finie 2 semaines avant), octobre-novembre.
+    "trompette": {"pluie": (14, 45, 18), "temp": (13, 16, 20),
+                  "saison": [0.15, 0.05, 0, 0, 0, 0.05, 0.25, 0.5, 0.85, 1, 0.75, 0.35]},
 }
 
 
-def curve(x, pts):
-    xs, ys = zip(*pts)
-    return np.interp(x, xs, ys)
+# Calibration (30/10/2026) : le produit pluie x température x gel « sature » près de 1 (la forme a été choisie pour
+# bien CLASSER les jours, pas pour être lue telle quelle). On le convertit en chance relative : rapport entre la part
+# des observations et la part des mêmes jours des autres années dans chaque dixième de score, rendu croissant puis
+# ramené à 1 pour le meilleur dixième (scripts/validation, calibration). Lecture : 1 = conditions des meilleures
+# périodes ; 0,3 = environ trois fois moins de chances. Le plancher (0,2-0,4) dit que la météo n'explique pas tout.
+# Exemple coulemelle : 0,2 sous ~21 mm de pluie (sur 3 semaines finies 7 jours avant), 0,57 vers 40 mm, 1 vers 75 mm.
+CALIB = {
+    "cepe_ete": [(0.0, 0.32), (0.2366, 0.32), (0.3129, 0.38), (0.3802, 0.47), (0.4535, 0.59), (0.5266, 0.75), (0.6024, 0.84), (0.6941, 0.97), (0.8109, 1.0), (1.0, 1.0)],
+    "cepe_bronze": [(0.0, 0.18), (0.73, 0.18), (0.7891, 0.21), (0.8366, 0.29), (0.8762, 0.39), (0.9075, 0.49), (0.9374, 0.64), (0.9662, 0.84), (0.9884, 1.0), (1.0, 1.0)],
+    "cepe_bordeaux": [(0.0, 0.37), (0.5224, 0.37), (0.8184, 0.43), (0.8826, 0.51), (0.9172, 0.61), (0.942, 0.64), (0.9611, 0.71), (0.9751, 0.71), (0.9853, 0.75), (0.9927, 0.86), (0.9981, 1.0), (1.0, 1.0)],
+    "cepe_pins": [(0.0, 0.38), (0.835, 0.38), (0.8878, 0.4), (0.9211, 0.47), (0.9452, 0.61), (0.9624, 0.65), (0.9868, 0.65), (0.994, 0.75), (0.9987, 1.0), (1.0, 1.0)],
+    "girolle": [(0.0, 0.39), (0.3415, 0.39), (0.6728, 0.45), (0.7861, 0.53), (0.8503, 0.59), (0.895, 0.7), (0.9276, 0.75), (0.9525, 0.84), (0.9719, 0.88), (0.9856, 0.98), (0.9958, 1.0), (1.0, 1.0)],
+    "coulemelle": [(0.0, 0.2), (0.5159, 0.2), (0.9262, 0.23), (0.9751, 0.32), (0.9881, 0.41), (0.9929, 0.57), (0.9958, 0.72), (0.9975, 0.82), (0.9987, 0.84), (0.9994, 0.89), (0.9999, 1.0), (1.0, 1.0)],
+    "trompette": [(0.0, 0.41), (0.4978, 0.41), (0.9025, 0.47), (0.9352, 0.53), (0.9536, 0.6), (0.9672, 0.62), (0.9782, 0.67), (0.9865, 0.7), (0.9925, 0.85), (0.9966, 0.95), (0.9992, 1.0), (1.0, 1.0)],
+}
+
+
+def calibrate(sp, raw):
+    xs, ys = zip(*CALIB[sp])
+    return np.interp(raw, xs, ys)
 
 
 def season_factor(sp, d):
@@ -433,80 +448,20 @@ def season_factor(sp, d):
     return s[i] * (1 - frac) + s[(i + 1) % 12] * frac
 
 
-# Révision du 25/10/2026 (scénarios testés) :
-# - une vraie gelée (minimum <= -2 °C) détruit la poussée en cours : les épisodes antérieurs sont annulés pour les
-#   cèpes et la coulemelle, réduits de 60 % pour la girolle et la trompette (plus résistantes) ;
-# - girolle et trompette ont un second déclencheur, l'humidité ENTRETENUE : un sol resté bien humide en moyenne sur
-#   14 jours fait produire même sans grosse pluie (avant : 12 mm par semaine en juillet laissaient retomber la girolle
-#   de 0,75 à 0,09) ;
-# - degrés-jours à partir de 2 °C pour la trompette (la plus tolérante au froid ; avant, plus rien en décembre).
-WEAK_RATIO = 0.6  # en dessous de 60 % du seuil d'une espèce, pas de poussée
-FROST_RESET = -2.0
-FROST_TOLERANT = {"girolle": 0.4, "trompette": 0.4}  # part des poussées gardée après une gelée
-# Humidité moyenne sur 21 jours : début, plein, plafond. 21 jours et seuil de 20 mm : une seule grosse pluie ne suffit
-# pas (la 1re version, sur 14 jours dès 15 mm, faisait sortir la trompette à J+6 au lieu de 2-3 semaines).
-SUSTAINED = {"girolle": (20, 35, 0.85), "trompette": (20, 35, 0.85)}
-SUSTAINED_DAYS = 21
-DD_BASE = {"trompette": 2.0}
-
-
 def pousse(series, dates, k_target, sp):
     """Score 0-1 pour le jour dates[k_target] à partir des séries (jours, lignes, colonnes)."""
     P, Tm, Tn = series
     cfg = SPECIES[sp]
-    start_dd, peak_dd, end_dd = cfg["dd"]
-    base = DD_BASE.get(sp, 4.0)
-    k0 = max(0, k_target - HISTORY_DAYS)
-    W = np.full(P.shape[1:], 20.0, np.float32)
-    w_hist = []
-    for k in range(k0, k_target + 1):
-        # Évaporation de la litière sous couvert (mm/jour) : ~1,1 à 10 °C, ~1,4 à 12 °C, ~2,5 à 20 °C, ~3,2 à 25 °C.
-        et = np.maximum(0.3, 0.14 * Tm[k] - 0.3)
-        W = np.clip(W + P[k] - et, 0, W_MAX)
-        w_hist.append(W)
-    # Dernière gelée (par case) : jour le plus récent avec un minimum <= -2 °C, -1 si aucune.
-    last_frost = np.full(P.shape[1:], -1, np.int32)
-    for k in range(k0, k_target + 1):
-        last_frost = np.where(Tn[k] <= FROST_RESET, k, last_frost)
-    keep_after_frost = FROST_TOLERANT.get(sp, 0.0)
-    dev = np.zeros(P.shape[1:], np.float32)
-    # Épisodes de pluie : chaque jour e où la pluie sur 3 jours dépasse le seuil ouvre une fenêtre ; on garde la
-    # meilleure fenêtre en cours (degrés-jours depuis e, pondérés par la force de l'épisode).
-    seuil = cfg["seuil"]
-    for e in range(k0 + 4, k_target + 1):
-        # Épisode = pluie des 5 derniers jours, compté à sa FIN (jour e lui-même pluvieux, >= 2 mm) : plusieurs jours de
-        # pluie qui se suivent mouillent le sol comme un seul épisode. Révision du 25/10/2026 (cas de Cérizols : 25 mm
-        # en petites pluies étalées, 17,6 mm au mieux sur 3 jours, donnaient 0 % pour le cèpe de Bordeaux).
-        p5 = P[e - 4 : e + 1].sum(axis=0)
-        strong = (p5 >= WEAK_RATIO * seuil) & (P[e] >= 2)
-        if not strong.any():
-            continue
-        dd = np.maximum(0, Tm[e + 1 : k_target + 1] - base).sum(axis=0) if e < k_target else np.zeros_like(p5)
-        f = np.where(
-            dd < start_dd,
-            0,
-            np.where(dd < peak_dd, (dd - start_dd) / (peak_dd - start_dd), np.clip(1 - (dd - peak_dd) / (end_dd - peak_dd), 0, 1)),
-        )
-        # Seuil progressif : de 60 % à 100 % du seuil, petite poussée (force 0,3 à 0,6) ; au-delà, 0,6 à 1.
-        force = np.where(
-            p5 >= seuil,
-            0.6 + 0.4 * np.clip(p5 / (seuil * 2), 0, 1),
-            0.3 + 0.3 * np.clip((p5 - WEAK_RATIO * seuil) / ((1 - WEAK_RATIO) * seuil), 0, 1),
-        )
-        frost_after = last_frost >= e  # une gelée est survenue après l'épisode
-        f = np.where(frost_after, f * keep_after_frost, f)
-        dev = np.maximum(dev, np.where(strong, f * force, 0))
-    if sp in SUSTAINED:
-        lo, full, cap = SUSTAINED[sp]
-        w_mean = np.mean(w_hist[-SUSTAINED_DAYS:], axis=0)
-        sustained = np.clip((w_mean - lo) / (full - lo), 0, 1) * cap
-        sustained = np.where(last_frost >= k_target - 3, sustained * keep_after_frost, sustained)
-        dev = np.maximum(dev, sustained)
-    moist = curve(W, MOISTURE.get(sp, MOISTURE_DEFAULT))
-    t5 = Tm[max(0, k_target - 4) : k_target + 1].mean(axis=0)
-    temp = curve(t5, cfg["temp"])
+    lag, width, r0 = cfg["pluie"]
+    topt, spread, tdays = cfg["temp"]
+    end = k_target - lag + 1
+    rain = P[max(0, end - width) : max(0, end)].sum(axis=0)
+    f_rain = 1 - np.exp(-rain / r0)
+    t = Tm[max(0, k_target - tdays + 1) : k_target + 1].mean(axis=0)
+    f_temp = np.exp(-0.5 * ((t - topt) / spread) ** 2)
     frost = np.where(Tn[max(0, k_target - 2) : k_target + 1].min(axis=0) < -1, 0.3, 1.0)
-    return np.clip(dev * moist * temp * frost * season_factor(sp, dates[k_target]), 0, 1)
+    raw = f_rain * f_temp * frost
+    return np.clip(calibrate(sp, raw) * season_factor(sp, dates[k_target]), 0, 1).astype(np.float32)
 
 
 def info_layer(series, dates, k_target):
