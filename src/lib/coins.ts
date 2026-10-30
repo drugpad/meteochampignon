@@ -254,8 +254,10 @@ export function paintZones(
 
 // Échelle de couleurs du mode « Milieu seul » : le milieu atteint facilement 60-90 %, alors que la palette est
 // calée sur le score avec météo (bien plus bas) ; sans cette conversion, toute la forêt sortait en rouge foncé.
-// Jaune à partir de 35 % de milieu, rouge foncé seulement au-delà de 90 %. Le pourcentage affiché reste le vrai.
-const MILIEU_SCALE: [number, number][] = [[0, 0], [0.35, 0.12], [0.5, 0.2], [0.65, 0.35], [0.8, 0.5], [0.9, 0.7], [1, 1]]
+// Jaune pâle dès 15 % de milieu (31/10/2026 : avant, rien sous 35 % ; au Fréchet, coteaux du Comminges à ~370 m,
+// le cèpe de Bordeaux est noté 12 fois à moins de 20 km avec un milieu de 14-30 % : « possible » mais invisible, alors
+// que la fiche affichait un pourcentage), rouge foncé seulement au-delà de 90 %. Le pourcentage affiché reste le vrai.
+const MILIEU_SCALE: [number, number][] = [[0, 0], [0.12, 0.12], [0.15, 0.17], [0.35, 0.21], [0.5, 0.25], [0.65, 0.37], [0.8, 0.5], [0.9, 0.7], [1, 1]]
 export function displayValue(res: CoinsResult, v: number): number {
   if (!res.habitatOnly) return v
   for (let i = 1; i < MILIEU_SCALE.length; i++) {
