@@ -6,9 +6,9 @@ import { useEffect, useRef } from 'react'
 import { useMap } from 'react-leaflet'
 import { displayValue, FINE_MAX_ZOOM, FINE_MIN_ZOOM, fineLevel, loadFineTile, paintZones, type CoinsResult } from '../lib/coins'
 
-type Props = { result: CoinsResult; speciesIndex: number }
+type Props = { result: CoinsResult; speciesIndex: number; opacity: number }
 
-export function CoinsFineLayer({ result, speciesIndex }: Props) {
+export function CoinsFineLayer({ result, speciesIndex, opacity }: Props) {
   const map = useMap()
   const stateRef = useRef({ result, speciesIndex })
   const layerRef = useRef<L.GridLayer | null>(null)
@@ -138,7 +138,7 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
       minZoom: FINE_MIN_ZOOM,
       maxNativeZoom: 18,
       maxZoom: 20,
-      opacity: 0.85,
+      opacity,
       className: 'coins-fine',
     })
     layer.addTo(map)
@@ -148,6 +148,11 @@ export function CoinsFineLayer({ result, speciesIndex }: Props) {
       layerRef.current = null
     }
   }, [map])
+
+  // Curseur d'opacité du panneau : sans redessiner les tuiles.
+  useEffect(() => {
+    layerRef.current?.setOpacity(opacity)
+  }, [opacity])
 
   // Espèce ou jour changés : on repeint (les tuiles d'habitat restent en mémoire, seul le calcul est refait).
   useEffect(() => {

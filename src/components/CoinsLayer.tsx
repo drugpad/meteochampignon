@@ -9,9 +9,9 @@ const rankIcon = (n: number) =>
   L.divIcon({ className: '', html: `<div class="coins-rank-marker">${n}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] })
 
 // hideFromZoom : la carte à 250 m s'efface à partir de ce zoom (les tuiles à 20 m prennent le relais).
-type Props = { result: CoinsResult; spots: NamedSpot[]; onSelectSpot: (s: NamedSpot) => void; hideFromZoom?: number }
+type Props = { result: CoinsResult; spots: NamedSpot[]; onSelectSpot: (s: NamedSpot) => void; hideFromZoom?: number; opacity: number }
 
-export function CoinsLayer({ result, spots, onSelectSpot, hideFromZoom }: Props) {
+export function CoinsLayer({ result, spots, onSelectSpot, hideFromZoom, opacity }: Props) {
   const map = useMap()
   const overlayRef = useRef<L.ImageOverlay | null>(null)
 
@@ -23,18 +23,18 @@ export function CoinsLayer({ result, spots, onSelectSpot, hideFromZoom }: Props)
       overlayRef.current.setUrl(url)
       overlayRef.current.setBounds(bounds)
     } else {
-      overlayRef.current = L.imageOverlay(url, bounds, { opacity: 0.85, interactive: false, className: 'coins-overlay' }).addTo(map)
+      overlayRef.current = L.imageOverlay(url, bounds, { opacity, interactive: false, className: 'coins-overlay' }).addTo(map)
     }
   }, [result, map])
 
   useEffect(() => {
-    const update = () => overlayRef.current?.setOpacity(hideFromZoom !== undefined && map.getZoom() >= hideFromZoom ? 0 : 0.85)
+    const update = () => overlayRef.current?.setOpacity(hideFromZoom !== undefined && map.getZoom() >= hideFromZoom ? 0 : opacity)
     update()
     map.on('zoomend', update)
     return () => {
       map.off('zoomend', update)
     }
-  }, [map, hideFromZoom, result])
+  }, [map, hideFromZoom, result, opacity])
 
   useEffect(
     () => () => {

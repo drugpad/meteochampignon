@@ -32,11 +32,14 @@ type Props = {
   observations: boolean
   onObservations: (on: boolean) => void
   obsCount: number | null
+  // Opacité de la carte des coins (0,2 à 1), réglée par un curseur.
+  opacity: number
+  onOpacity: (v: number) => void
 }
 
 export type CoinsView = 'meteo' | 'milieu'
 
-export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, status, error, onRetry, spots, onSelectSpot, view, onView, moon, onMoon, observations, onObservations, obsCount }: Props) {
+export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, status, error, onRetry, spots, onSelectSpot, view, onView, moon, onMoon, observations, onObservations, obsCount, opacity, onOpacity }: Props) {
   const [collapsed, setCollapsed] = useState(false)
   // Mobile : replié quand on touche la carte ou qu'une fiche s'ouvre (lib/usePanelCollapse.ts).
   usePanelCollapse(useCallback(() => setCollapsed(true), []))
@@ -153,6 +156,19 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
             <span className="coins__zone-swatch" aria-hidden="true" />
             Milieu favorable à l'espèce (quelle que soit la météo)
           </div>
+          <label className="coins__opacity">
+            <span>Opacité</span>
+            <input
+              type="range"
+              min={20}
+              max={100}
+              step={5}
+              value={Math.round(opacity * 100)}
+              onChange={(e) => onOpacity(Number(e.target.value) / 100)}
+              aria-label="Opacité de la carte des coins"
+            />
+            <span className="coins__opacity-value">{Math.round(opacity * 100)} %</span>
+          </label>
 
           {status === 'ready' && (
             <button type="button" className="coins__top-toggle" onClick={() => setShowTop((v) => !v)} aria-expanded={showTop}>

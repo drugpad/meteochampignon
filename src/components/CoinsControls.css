@@ -170,6 +170,27 @@
   margin: 2px 0 10px;
 }
 
+.coins__opacity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.coins__opacity input {
+  flex: 1;
+  min-width: 0;
+  accent-color: #b45309;
+}
+
+.coins__opacity-value {
+  width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .coins__zone-legend {
   display: flex;
   align-items: center;

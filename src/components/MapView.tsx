@@ -275,6 +275,22 @@ export function MapView() {
     setObservationsState(on)
     setObservationsEnabled(on)
   }, [])
+  const [coinsOpacity, setCoinsOpacityState] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem('mc-coins-opacity'))
+      return v >= 0.2 && v <= 1 ? v : 0.85
+    } catch {
+      return 0.85
+    }
+  })
+  const setCoinsOpacity = useCallback((v: number) => {
+    setCoinsOpacityState(v)
+    try {
+      localStorage.setItem('mc-coins-opacity', String(v))
+    } catch {
+      // mémorisation facultative
+    }
+  }, [])
   const [obsMeta, setObsMeta] = useState<ObservationsMeta | null>(null)
   useEffect(() => {
     if (mode === 'coins' && observations) void loadObservations().then(setObsMeta)
@@ -604,6 +620,8 @@ export function MapView() {
             onMoon={setMoon}
             observations={observations}
             onObservations={setObservations}
+            opacity={coinsOpacity}
+            onOpacity={setCoinsOpacity}
             obsCount={obsMeta ? (obsMeta.species[coinsSpecies]?.length ?? 0) : null}
             onSelectSpot={(s) => {
               map?.flyTo([s.lat, s.lon], Math.max(map.getZoom(), 13))
@@ -720,10 +738,11 @@ export function MapView() {
             spots={spots}
             onSelectSpot={(s) => openSpot(s.lat, s.lon, s.name)}
             hideFromZoom={fineIndex >= 0 ? FINE_MIN_ZOOM : undefined}
+            opacity={coinsOpacity}
           />
         )}
         {mode === 'coins' && coinsResult && coinsStatus === 'ready' && fineIndex >= 0 && (
-          <CoinsFineLayer result={coinsResult} speciesIndex={fineIndex} />
+          <CoinsFineLayer result={coinsResult} speciesIndex={fineIndex} opacity={coinsOpacity} />
         )}
         {mode === 'coins' && observations && obsMeta && <ObservationsLayer meta={obsMeta} species={coinsSpecies} />}
         {mode === 'coins' && spot && <ForecastCross point={{ lat: spot.lat, lon: spot.lon }} />}
