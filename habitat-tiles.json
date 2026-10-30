@@ -1,0 +1,18 @@
+{
+ "species": [
+  "cepe_ete",
+  "cepe_bronze",
+  "cepe_bordeaux",
+  "cepe_pins",
+  "girolle",
+  "coulemelle",
+  "trompette"
+ ],
+ "levels": 8,
+ "packing": "v = R<<16 | G<<8 | B ; niveau de l'espèce i = (v >> 3i) & 7 ; habitat = niveau / 7",
+ "minZoom": 10,
+ "maxZoom": 13,
+ "resolutionM": 20,
+ "tiles": 5273,
+ "sources": "BD Forêt V2 (IGN, Etalab 2.0), Copernicus DEM GLO-30, SoilGrids 2.0 (ISRIC, CC BY 4.0), ESA WorldCover 2021 (CC BY 4.0), Copernicus Tree Cover Density 2024, carte géologique harmonisée 1/50 000 BD Charm-50 (BRGM, Licence Ouverte 2.0)"
+}
