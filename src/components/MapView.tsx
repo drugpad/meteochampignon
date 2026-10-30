@@ -31,6 +31,8 @@ import { LocateControl } from './LocateControl'
 import { CoinsCodeDialog } from './CoinsCodeDialog'
 import { coinsUnlocked } from '../lib/coinsLock'
 import { moonEnabled, setMoonEnabled } from '../lib/moon'
+import { loadObservations, observationsEnabled, setObservationsEnabled, type ObservationsMeta } from '../lib/observations'
+import { ObservationsLayer } from './ObservationsLayer'
 import { collapsePanels } from '../lib/usePanelCollapse'
 import './MapView.css'
 import { ModeSwitch } from './ModeSwitch'
@@ -268,6 +270,15 @@ export function MapView() {
     setMoonState(on)
     setMoonEnabled(on)
   }, [])
+  const [observations, setObservationsState] = useState(observationsEnabled)
+  const setObservations = useCallback((on: boolean) => {
+    setObservationsState(on)
+    setObservationsEnabled(on)
+  }, [])
+  const [obsMeta, setObsMeta] = useState<ObservationsMeta | null>(null)
+  useEffect(() => {
+    if (mode === 'coins' && observations) void loadObservations().then(setObsMeta)
+  }, [mode, observations])
   const [coinsView, setCoinsViewState] = useState<CoinsView>(() => {
     try {
       return localStorage.getItem('mc-coins-view') === 'milieu' ? 'milieu' : 'meteo'
@@ -591,6 +602,9 @@ export function MapView() {
             onView={setCoinsView}
             moon={moon}
             onMoon={setMoon}
+            observations={observations}
+            onObservations={setObservations}
+            obsCount={obsMeta ? (obsMeta.species[coinsSpecies]?.length ?? 0) : null}
             onSelectSpot={(s) => {
               map?.flyTo([s.lat, s.lon], Math.max(map.getZoom(), 13))
               openSpot(s.lat, s.lon, s.name)
@@ -711,6 +725,7 @@ export function MapView() {
         {mode === 'coins' && coinsResult && coinsStatus === 'ready' && fineIndex >= 0 && (
           <CoinsFineLayer result={coinsResult} speciesIndex={fineIndex} />
         )}
+        {mode === 'coins' && observations && obsMeta && <ObservationsLayer meta={obsMeta} species={coinsSpecies} />}
         {mode === 'coins' && spot && <ForecastCross point={{ lat: spot.lat, lon: spot.lon }} />}
 
         {mode === 'previsions' && <ForecastCross point={forecastState.status === 'idle' ? null : forecastState.point} />}

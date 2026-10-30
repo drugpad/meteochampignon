@@ -449,8 +449,11 @@ def build_tiles(raster, zooms=(10, 11, 12, 13)):
 
 
 def build_coarse():
-    """Carte d'ensemble à 250 m (public/habitat/<espèce>.png) = MOYENNE de l'habitat à 20 m sur chaque case :
-    une seule source de vérité, la carte d'ensemble et les tuiles fines racontent la même chose."""
+    """Carte d'ensemble à 250 m (public/habitat/<espèce>.png) tirée de l'habitat à 20 m : une seule source de vérité.
+    Valeur d'une case = 3e QUARTILE de ses cases de 20 m (révision du 31/10/2026) : la case s'allume dès qu'un quart de
+    sa surface est un bon milieu. La MOYENNE d'avant diluait les bons bois dans les prés et champs voisins : 1,5 % de la
+    région au-dessus de 0,5 pour le cèpe de Bordeaux, contre 3,9 % à 20 m (l'Aubrac, zone la mieux confirmée par les
+    observations, disparaissait au dézoom) ; 2,8 % avec le 3e quartile ; le maximum (5,4 %) aurait exagéré."""
     from PIL import Image
     from rasterio.transform import from_bounds
 
@@ -460,7 +463,7 @@ def build_coarse():
     with rasterio.open(FULL) as src:
         for i, sp in enumerate(SPECIES):
             dst = np.zeros((rows, cols), np.float32)
-            reproject(rasterio.band(src, i + 1), dst, dst_transform=tr, dst_crs="EPSG:4326", resampling=Resampling.average,
+            reproject(rasterio.band(src, i + 1), dst, dst_transform=tr, dst_crs="EPSG:4326", resampling=Resampling.q3,
                       src_nodata=None, dst_nodata=0)
             Image.fromarray(np.clip(np.rint(dst), 0, 255).astype(np.uint8), mode="L").save(os.path.join(outdir, f"{sp}.png"), optimize=True)
             log(f"carte d'ensemble {sp} : moyenne {dst[dst > 0].mean() / 255:.3f}, cases >= 0,5 : {(dst >= 128).mean() * 100:.1f} %")

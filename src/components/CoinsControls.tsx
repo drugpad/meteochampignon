@@ -28,11 +28,15 @@ type Props = {
   // Clin d'œil « lune » (croyance populaire, lib/moon.ts), désactivé par défaut.
   moon: boolean
   onMoon: (on: boolean) => void
+  // Couche des trouvailles réelles (GBIF) ; obsCount = nombre de points pour l'espèce (null tant que non chargé).
+  observations: boolean
+  onObservations: (on: boolean) => void
+  obsCount: number | null
 }
 
 export type CoinsView = 'meteo' | 'milieu'
 
-export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, status, error, onRetry, spots, onSelectSpot, view, onView, moon, onMoon }: Props) {
+export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, status, error, onRetry, spots, onSelectSpot, view, onView, moon, onMoon, observations, onObservations, obsCount }: Props) {
   const [collapsed, setCollapsed] = useState(false)
   // Mobile : replié quand on touche la carte ou qu'une fiche s'ouvre (lib/usePanelCollapse.ts).
   usePanelCollapse(useCallback(() => setCollapsed(true), []))
@@ -176,6 +180,21 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
               ))}
             </ol>
           )}
+
+          <label className="coins__moon coins__obs">
+            <input type="checkbox" checked={observations} onChange={(e) => onObservations(e.target.checked)} />
+            <span>
+              📍 Observations réelles <small>(GBIF)</small>
+              {observations && (
+                <small className="coins__moon-phase">
+                  {obsCount === null
+                    ? 'Chargement…'
+                    : `${obsCount} trouvailles publiques de l’espèce dans la région (points blancs, toucher pour la date et la source).`}{' '}
+                  Pas de point ne veut pas dire pas de champignons : beaucoup de cueilleurs ne publient pas leurs coins.
+                </small>
+              )}
+            </span>
+          </label>
 
           <label className="coins__moon">
             <input type="checkbox" checked={moon} onChange={(e) => onMoon(e.target.checked)} />
