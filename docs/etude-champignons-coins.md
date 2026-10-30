@@ -2,6 +2,16 @@
 
 Espèces : cèpe d'été (*Boletus reticulatus*), cèpe bronzé (*B. aereus*), cèpe de Bordeaux (*B. edulis*), cèpe des pins (*B. pinophilus*), girolle (*Cantharellus cibarius*), coulemelle (*Macrolepiota procera*), trompette de la mort (*Craterellus cornucopioides*).
 
+## En bref (ce qui a été découvert, 30/10/2026)
+
+1. **La pluie qui compte est celle d'il y a 1 à 6 semaines, pas celle d'hier** : la pluie des 3-7 derniers jours n'explique rien ; c'est le cumul sur 2 à 6 semaines, terminé 0 à 14 jours avant, qui fait sortir les champignons (girolle la plus rapide, trompette la plus lente). Au-delà de 30-50 mm, plus de pluie n'aide plus beaucoup.
+2. **Le cèpe de Bordeaux est un cèpe de moyenne montagne** (optimum 800-1 000 m, sol acide, hêtres, sapins, châtaigniers), rare en plaine sous les chênes : ce qui y pousse, ce sont surtout les cèpes d'été et bronzés.
+3. **La roche compte** : sur calcaire massif, les cèpes sont 2 à 5 fois moins observés ; sur roches siliceuses, beaucoup plus (carte géologique BRGM au 1/50 000).
+4. **Trois idées reçues ne tiennent pas dans la région** : versants nord (cèpe de Bordeaux, girolle, trompette), trompette « calcicole », bois denses mauvais pour le cèpe de Bordeaux.
+5. **Le châtaignier est l'arbre champion** pour tous les cèpes et la trompette.
+6. **Saisons corrigées** : cèpe bronzé surtout septembre-octobre ; cèpe des pins aussi au printemps (avril-juin) ; coulemelle surtout septembre-novembre.
+7. **Résultat** : sur des trouvailles réelles, la note finale (milieu × météo) progresse pour les 6 espèces mesurables, le plus pour le cèpe de Bordeaux (0,62 → 0,74, sur une échelle où 0,5 = hasard et 1 = parfait). Détails : sections 5 à 8.
+
 ## Méthode et limites (à lire d'abord)
 
 **Mise à jour du 30/10/2026 (soir)** : le réseau de la session a été élargi. Deux sources ont pu être lues **en texte intégral** (étude turque d'Artvin, article Frontiers sur le cèpe en châtaigneraie) et **GBIF** a servi à tester le modèle sur ~2 200 observations réelles (section 3). Restent illisibles (proxy 403/429) : bioRxiv, Springer, PMC — les chiffres qui en viennent restent de seconde main.
@@ -237,11 +247,40 @@ Cèpe des pins : trop peu d'observations datées dans la région (15) pour ce bi
 
 **Limites** : effectifs modestes dans la région (77 à 147 observations par espèce en forêt) ; milieu réglé sur ces mêmes observations (le chiffre hors zone est ~0,03-0,04 plus bas) ; observations d'amateurs (identifications imparfaites, coordonnées à ± 1 km parfois) ; ERA5 à 25 km (la carte réelle utilise AROME à 1,3 km, corrigé par les pluviomètres : plus précis, non testable sur 30 ans) ; âge des peuplements et surface terrière (facteurs reconnus, Sánchez-González 2019) non cartographiables avec nos données.
 
+## 8. Affichage, comparaison avec le concurrent, observations (30-31/10/2026, après publication)
+
+**Question de l'utilisateur : « la couverture du cèpe de Bordeaux est bien plus vaste chez Chasseurs de champignons, comment l'expliquer ? »** (sans chercher à copier : leur méthode reste inconnue et n'est pas reprise). Vérification sur les observations, par zone (bois, rapport au fond « champignons du sol ») :
+
+| Zone | Cèpes de Bordeaux observés | Rapport | Ce que montrait notre carte |
+|---|---|---|---|
+| Aubrac-Lévézou | 32 | **3,3** (la mieux confirmée) | presque rien au dézoom |
+| Ségala-Châtaigneraie | 4 | 1,3 | rien (aucun bois ≥ 0,5) |
+| Pyrénées | 60 | 0,9 | très mis en avant |
+| Gers, plaine | 2 | 0,2 | rien (justifié) |
+| Bouriane, Montagne Noire | 0 | — | invérifiable (personne ne publie ses coins) |
+
+Trois explications, dans l'ordre :
+1. **Défaut d'affichage de la vue d'ensemble** : la case de 250 m prenait la MOYENNE des cases de 20 m, qui diluait les bons bois dans les prés. 3,9 % de la région ≥ 0,5 à 20 m, mais 1,5 % au dézoom ; l'Aubrac disparaissait. Corrigé : **3e quartile** (la case s'allume dès qu'un quart de sa surface est un bon milieu) : 2,8 % ; le maximum (5,4 %) aurait exagéré. Le n° 1 du palmarès « milieu » du cèpe de Bordeaux est désormais en Aubrac.
+2. **Seuil d'affichage trop haut en « Milieu seul »** : rien n'était coloré sous 35 % de milieu. Cas réel : **Le Fréchet** (coteaux du Comminges, 43,19° N, 0,91° E, ~380 m, feuillus sur roche siliceuse) : le concurrent affiche 68/100 ; notre milieu y vaut 24 % pour le cèpe de Bordeaux, invisible alors que la fiche donnait un pourcentage. Il y a pourtant **12 trouvailles de cèpe de Bordeaux à moins de 20 km** (360-460 m, milieu 14-30 %). Corrigé : jaune pâle dès 15 %, plus soutenu jusqu'à 35 %. Le modèle, lui, n'est pas en cause : sur toute la région le cèpe de Bordeaux est ~6 fois moins observé à 200-400 m qu'à son optimum, et notre courbe ne divise que par 2 à 3.
+3. **Choix assumés, appuyés par les données** : plaines (rapport 0,2) et calcaire massif (0,4) restent faibles. Au Fréchet, ce sont les **cèpes d'été (56 %), bronzés (54 %) et la trompette (66 %)** qui ressortent, avec des trouvailles des trois aux mêmes endroits : chaque cèpe a sa carte, le concurrent ne les distingue peut-être pas autant.
+
+**Autres changements d'affichage publiés** :
+- **Contours nets aux forts zooms** (remarque « contours flous ») : au-delà du zoom 13, les tuiles étaient agrandies par le navigateur (escaliers flous). Elles sont redessinées à la résolution de l'écran jusqu'au zoom 18, niveau d'habitat lissé (noyau 1-2-1) et interpolé entre les cases de 20 m, contour au seuil 3,5/7, trait de 2 px dès le zoom 15.
+- **Couche « 📍 Observations réelles »** (case à cocher) : ~1 700 trouvailles GBIF des 7 espèces (`public/observations.json`, `scripts/build-observations.py`), bulle avec date, précision de position, jeu de données et licence (CC BY 4.0 pour 43 jeux sur 48, CC BY-NC 4.0 pour 4, CC0 pour 1), sans nom d'observateur ; rappel que pas de point ≠ pas de champignons. Principales sources pour le cèpe de Bordeaux : CRPF Midi-Pyrénées (231), Association mycologique de Bigorre (73), iNaturalist (70), Société mycologique du Béarn (44), Conservatoire botanique des Pyrénées et de Midi-Pyrénées (63).
+- **Curseur d'opacité** (20 à 100 %, retenu sur l'appareil).
+
+**Lecture de la carte** (question de l'utilisateur, « qu'est-ce qui est entouré de noir ? ») : le trait brun foncé entoure les zones où le MILIEU convient (≥ 50 %), quelle que soit la météo, avec un léger voile brun ; la couleur donne la note (milieu × météo du jour, ou milieu seul). Entouré et coloré = meilleurs coins du moment ; entouré mais pâle = bon milieu, météo défavorable ; coloré sans contour = milieu moyen (l'espèce y pousse, moins souvent) ; rien = milieu peu favorable.
+
 ## État d'avancement et suite
 
-- **Fait (30/10/2026)** : sections 5 à 7. Milieu reconstruit à 20 m (5 273 tuiles, 167 Mo, `.cache-habitat/tiles/`) ; anciennes sorties gardées dans `.cache-habitat/old-20261030/`.
-- **À faire pour publier** : pousser la branche `habitat` (tuiles) ET fusionner le code (`build-pousse.py` est lu par `maps.yml` sur `master`) — les deux ensemble, sinon l'appli mélange l'ancien milieu et la nouvelle météo.
-- **Pistes** : élargir la validation du milieu aux départements voisins (plus d'observations ; il faudrait BD Forêt, géologie et couvert de ces départements) ; tester la température corrigée de l'altitude dans la carte réelle (limite connue, section 3.4ter de CLAUDE.md).
+- **Fait et publié (30-31/10/2026)** : sections 5 à 8. Code sur `master` (commits « Coins v4 » puis correctifs d'affichage), tuiles à 20 m sur la branche `habitat` (un seul commit, remplacé à chaque version), cartes de pousse recalculées par `maps.yml` avec le nouveau modèle (historique météo de 60 jours complet). Anciennes sorties gardées dans `.cache-habitat/old-20261030/` (547 Mo, à effacer une fois la nouvelle version jugée bonne ; le disque C: du poste n'a plus que ~5 Go libres).
+- **Pistes, par intérêt** :
+  1. Élargir la validation du milieu aux départements voisins (plus d'observations ; il faudrait BD Forêt, géologie BRGM et couvert Copernicus de ces départements).
+  2. Ségala et coteaux à 400-600 m : vérifier, avec plus d'observations, si le cèpe de Bordeaux y est sous-estimé (4 observations seulement aujourd'hui).
+  3. Pyrénées peut-être un peu sur-représentées pour le cèpe de Bordeaux (rapport 0,9 seulement) : à revoir si de nouvelles observations le confirment.
+  4. Température de pousse corrigée de l'altitude dans la carte réelle (AROME à 1,3 km, 2-3 °C d'écart possible en montagne ; limite connue, CLAUDE.md 3.4ter).
+  5. Explications de la fiche d'un coin : la grille d'essences à 250 m (« hors forêt cartographiée ») peut contredire le milieu à 20 m du point (petit bois, haie) ; passer la fiche aux variables à 20 m (`covariates-20m.tif`).
+  6. Rafraîchir les observations GBIF de temps en temps (`scripts/validation/gbif_fetch_all.py`, puis `scripts/build-observations.py` et la validation).
 
 ## Sources
 
