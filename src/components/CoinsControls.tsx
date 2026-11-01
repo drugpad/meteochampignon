@@ -1,4 +1,6 @@
 // Mode « Coins » : choix de l'espèce et du jour, légende, palmarès des meilleurs secteurs (voir lib/coins.ts).
+// Mise en page revue le 01/11/2026 (« long et mal organisé ») : Espèce, Quand ? (le « Milieu seul » est un choix
+// parmi les jours), légende sur une ligne, palmarès, puis les réglages secondaires repliés dans « Options ».
 import { usePanelCollapse } from '../lib/usePanelCollapse'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CHOICES, COINS_LEGEND, scoreLabel, type CoinsChoice, type PousseMeta } from '../lib/coins'
@@ -44,6 +46,7 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
   // Mobile : replié quand on touche la carte ou qu'une fiche s'ouvre (lib/usePanelCollapse.ts).
   usePanelCollapse(useCallback(() => setCollapsed(true), []))
   const [showTop, setShowTop] = useState(false)
+  const [showOptions, setShowOptions] = useState(false)
   // Sur mobile, le panneau se replie une fois les coins calculés (une seule fois, sinon impossible de le
   // rouvrir) : il cachait la moitié de la carte.
   const autoCollapsed = useRef(false)
@@ -70,68 +73,59 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
 
       {!collapsed && (
         <div className="coins__body">
-          <div className="coins__view" role="radiogroup" aria-label="Affichage">
-            {(
-              [
-                ['meteo', '🌦️ Avec la météo'],
-                ['milieu', '🌳 Milieu seul'],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                role="radio"
-                aria-checked={view === key}
-                className={view === key ? 'coins__view-btn coins__view-btn--on' : 'coins__view-btn'}
-                onClick={() => onView(key)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <p className="coins__hint">
-            {view === 'milieu'
-              ? 'Les meilleurs coins dans l’absolu : arbres, ouverture du bois, sol, altitude et exposition, sans tenir compte de la météo.'
-              : 'Le milieu, multiplié par la pluie tombée et la météo prévue : où ça pousse en ce moment.'}
-          </p>
           {(['cepe', 'autre'] as const).map((group) => (
-            <div key={group} className="coins__group" role="radiogroup" aria-label={group === 'cepe' ? 'Cèpes' : 'Autres espèces'}>
-              <div className="coins__group-title">{group === 'cepe' ? 'Cèpes' : 'Autres'}</div>
-              <div className={group === 'cepe' ? 'coins__chips' : 'coins__chips coins__chips--3'}>
-                {CHOICES.filter((s) => s.group === group).map((s) => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    role="radio"
-                    aria-checked={s.key === species}
-                    className={`coins__chip${s.key === species ? ' coins__chip--on' : ''}${s.key === 'cepes' ? ' coins__chip--wide' : ''}`}
-                    onClick={() => onSpecies(s.key)}
-                  >
-                    {s.short}
-                  </button>
-                ))}
-              </div>
+            <div key={group} className="coins__chips" role="radiogroup" aria-label={group === 'cepe' ? 'Cèpes' : 'Autres espèces'}>
+              {group === 'cepe' && <span className="coins__row-label">Cèpe</span>}
+              {CHOICES.filter((s) => s.group === group).map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={s.key === species}
+                  className={s.key === species ? 'coins__chip coins__chip--on' : 'coins__chip'}
+                  onClick={() => onSpecies(s.key)}
+                >
+                  {s.key === 'cepes' ? 'tous' : s.short}
+                </button>
+              ))}
             </div>
           ))}
           <p className="coins__hint">{sp.hint}</p>
 
-          {meta && view === 'meteo' && (
-            <div className="coins__days">
-              {meta.days.map((d, i) =>
-                // Jours 8 à 15 (AIFS seul, peu fiables) : seulement dans la courbe de la fiche, pas en carte.
-                d.date < today || d.reliable === false ? null : (
-                  <button
-                    key={d.date}
-                    type="button"
-                    className={i === dayIndex ? 'coins__day coins__day--on' : 'coins__day'}
-                    onClick={() => onDay(i)}
-                  >
-                    {dayLabel(d.date)}
-                  </button>
-                ),
-              )}
-            </div>
-          )}
+          <div className="coins__section-title">Quand ?</div>
+          <div className="coins__days" role="radiogroup" aria-label="Jour ou milieu seul">
+            {meta?.days.map((d, i) =>
+              // Jours 8 à 15 (AIFS seul, peu fiables) : seulement dans la courbe de la fiche, pas en carte.
+              d.date < today || d.reliable === false ? null : (
+                <button
+                  key={d.date}
+                  type="button"
+                  role="radio"
+                  aria-checked={view === 'meteo' && i === dayIndex}
+                  className={view === 'meteo' && i === dayIndex ? 'coins__day coins__day--on' : 'coins__day'}
+                  onClick={() => {
+                    onView('meteo')
+                    onDay(i)
+                  }}
+                >
+                  {dayLabel(d.date)}
+                </button>
+              ),
+            )}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={view === 'milieu'}
+              className={view === 'milieu' ? 'coins__day coins__day--milieu coins__day--on' : 'coins__day coins__day--milieu'}
+              onClick={() => onView('milieu')}
+              title="Le milieu seul, sans tenir compte de la météo"
+            >
+              🌳 Milieu
+            </button>
+          </div>
+          <p className="coins__hint coins__hint--muted">
+            {view === 'milieu' ? 'Les meilleurs bois dans l’absolu, sans la météo.' : 'Milieu × pluie tombée et prévue : où ça pousse ce jour-là.'}
+          </p>
 
           {status === 'loading' && <div className="coins__status">Calcul des coins…</div>}
           {status === 'error' && (
@@ -143,36 +137,24 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
             </>
           )}
 
-          <div className="coins__legend" aria-hidden="true">
-            {COINS_LEGEND.map((l) => (
-              <span key={l.label} style={{ background: l.color }} title={l.label} />
-            ))}
-          </div>
-          <div className="coins__legend-labels">
+          <div className="coins__legend-row">
             <span>possible</span>
+            <div className="coins__legend" aria-hidden="true">
+              {COINS_LEGEND.map((l) => (
+                <span key={l.label} style={{ background: l.color }} title={l.label} />
+              ))}
+            </div>
             <span>excellent</span>
           </div>
           <div className="coins__zone-legend">
             <span className="coins__zone-swatch" aria-hidden="true" />
-            Milieu favorable à l'espèce (quelle que soit la météo)
+            Bon milieu (même sans pousse)
           </div>
-          <label className="coins__opacity">
-            <span>Opacité</span>
-            <input
-              type="range"
-              min={20}
-              max={100}
-              step={5}
-              value={Math.round(opacity * 100)}
-              onChange={(e) => onOpacity(Number(e.target.value) / 100)}
-              aria-label="Opacité de la carte des coins"
-            />
-            <span className="coins__opacity-value">{Math.round(opacity * 100)} %</span>
-          </label>
 
           {status === 'ready' && (
             <button type="button" className="coins__top-toggle" onClick={() => setShowTop((v) => !v)} aria-expanded={showTop}>
-              🏆 {view === 'milieu' ? 'Les 10 meilleurs milieux' : 'Les 10 meilleurs coins'} {showTop ? '▾' : '▸'}
+              <span>🏆 {view === 'milieu' ? 'Les 10 meilleurs milieux' : 'Les 10 meilleurs coins'}</span>
+              <span className="coins__chevron">{showTop ? '▾' : '▸'}</span>
             </button>
           )}
           {status === 'ready' && showTop && (
@@ -197,47 +179,74 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
             </ol>
           )}
 
-          <label className="coins__moon coins__obs">
-            <input type="checkbox" checked={observations} onChange={(e) => onObservations(e.target.checked)} />
+          {meta && meta.history.missing.length > 3 && view === 'meteo' && (
+            <p className="coins__warning">⚠ Historique météo incomplet ({meta.history.missing.length} jours manquants).</p>
+          )}
+
+          <button type="button" className="coins__options-toggle" onClick={() => setShowOptions((v) => !v)} aria-expanded={showOptions}>
             <span>
-              📍 Observations réelles <small>(GBIF)</small>
-              {observations && (
-                <small className="coins__moon-phase">
-                  {obsCount === null
-                    ? 'Chargement…'
-                    : `${obsCount} trouvailles publiques de l’espèce dans la région (points blancs, toucher pour la date et la source).`}{' '}
-                  Pas de point ne veut pas dire pas de champignons : beaucoup de cueilleurs ne publient pas leurs coins.
-                </small>
+              ⚙️ Options
+              {/* Rappel des options actives, panneau d'options replié. */}
+              {!showOptions && (observations || moon || opacity < 1) && (
+                <span className="coins__options-active">
+                  {' ·'}
+                  {observations && ' 📍'}
+                  {moon && ' 🌙'}
+                  {opacity < 1 && ` ${Math.round(opacity * 100)} %`}
+                </span>
               )}
             </span>
-          </label>
+            <span className="coins__chevron">{showOptions ? '▾' : '▸'}</span>
+          </button>
+          {showOptions && (
+            <div className="coins__options">
+              <label className="coins__opacity">
+                <span>Opacité</span>
+                <input
+                  type="range"
+                  min={20}
+                  max={100}
+                  step={5}
+                  value={Math.round(opacity * 100)}
+                  onChange={(e) => onOpacity(Number(e.target.value) / 100)}
+                  aria-label="Opacité de la carte des coins"
+                />
+                <span className="coins__opacity-value">{Math.round(opacity * 100)} %</span>
+              </label>
 
-          <label className="coins__moon">
-            <input type="checkbox" checked={moon} onChange={(e) => onMoon(e.target.checked)} />
-            <span>
-              🌙 Lune <small>(croyance populaire)</small>
-              {moon && day && view === 'meteo' && (
-                <small className="coins__moon-phase">
-                  {moonPhase(day.date).emoji} {moonPhase(day.date).label} : {moonPhase(day.date).effect}. Selon la tradition des
-                  cueilleurs, sans preuve scientifique.
-                </small>
-              )}
-              {moon && view === 'milieu' && <small className="coins__moon-phase">Sans effet en « Milieu seul » (pas de pousse à moduler).</small>}
-            </span>
-          </label>
+              <label className="coins__check">
+                <input type="checkbox" checked={observations} onChange={(e) => onObservations(e.target.checked)} />
+                <span>
+                  📍 Observations réelles <small>(GBIF)</small>
+                  {observations && (
+                    <small className="coins__check-detail">
+                      {obsCount === null ? 'Chargement…' : `${obsCount} trouvailles publiques (points blancs).`} Pas de point ≠ pas de champignons.
+                    </small>
+                  )}
+                </span>
+              </label>
 
-          {meta && (
-            <p className="coins__note">
-              {view === 'milieu' ? (
-                'Indice du milieu : essences (BD Forêt IGN), densité des arbres (Copernicus 2024), roche (carte géologique BRGM), sol, altitude, pente. Règles vérifiées sur des observations réelles (GBIF).'
-              ) : (
-                <>
-                  Indice : milieu × météo (pluie tombée, corrigée par les pluviomètres, et prévisions). Calculé{' '}
-                  {formatRelativeAge(new Date(meta.generatedAt).getTime())}.
-                  {meta.history.missing.length > 3 && ` Historique météo incomplet (${meta.history.missing.length} jours manquants).`}
-                </>
+              <label className="coins__check">
+                <input type="checkbox" checked={moon} onChange={(e) => onMoon(e.target.checked)} />
+                <span>
+                  🌙 Lune <small>(croyance, non prouvée)</small>
+                  {moon && day && view === 'meteo' && (
+                    <small className="coins__check-detail">
+                      {moonPhase(day.date).emoji} {moonPhase(day.date).label} : {moonPhase(day.date).effect}.
+                    </small>
+                  )}
+                  {moon && view === 'milieu' && <small className="coins__check-detail">Sans effet en « Milieu ».</small>}
+                </span>
+              </label>
+
+              {meta && (
+                <p className="coins__note">
+                  {view === 'milieu'
+                    ? 'Milieu : essences (BD Forêt IGN), densité des arbres (Copernicus 2024), roche (BRGM), sol, altitude, pente ; règles vérifiées sur des observations réelles (GBIF).'
+                    : `Indice = milieu × météo (pluie tombée corrigée par les pluviomètres, prévisions). Calculé ${formatRelativeAge(new Date(meta.generatedAt).getTime())}.`}
+                </p>
               )}
-            </p>
+            </div>
           )}
         </div>
       )}

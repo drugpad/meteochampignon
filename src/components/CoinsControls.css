@@ -42,36 +42,16 @@
   overflow-y: auto;
 }
 
-.coins__view {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.coins__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
-  padding: 3px;
-  margin-bottom: 8px;
-  border-radius: 12px;
-  background: #f3f4f6;
+  margin-bottom: 6px;
 }
 
-.coins__view-btn {
-  border: none;
-  border-radius: 9px;
-  background: transparent;
-  padding: 8px 4px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: #4b5563;
-  cursor: pointer;
-}
-
-.coins__view-btn--on {
-  background: white;
-  color: #92400e;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
-}
-
-.coins__group-title {
-  margin: 2px 0 4px;
+.coins__row-label {
+  margin-right: 2px;
   color: #6b7280;
   font-size: 11px;
   font-weight: 700;
@@ -79,38 +59,37 @@
   letter-spacing: 0.04em;
 }
 
-.coins__chips {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.coins__chip--wide {
-  grid-column: 1 / -1;
-}
-
-.coins__chips--3 {
-  grid-template-columns: repeat(3, 1fr);
+.coins__section-title {
+  margin: 4px 0 4px;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .coins__hint {
-  margin: -2px 0 10px;
+  margin: 0 0 8px;
   color: #92400e;
   font-size: 11px;
   line-height: 1.35;
+}
+
+.coins__hint--muted {
+  color: #6b7280;
 }
 
 .coins__chip,
 .coins__day {
   border: 1px solid #e5e7eb;
   background: white;
-  border-radius: 10px;
-  padding: 8px 4px;
+  border-radius: 999px;
+  padding: 6px 10px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   cursor: pointer;
   color: inherit;
+  white-space: nowrap;
 }
 
 .coins__chip--on,
@@ -121,17 +100,33 @@
   font-weight: 600;
 }
 
+/* 7 jours + « Milieu » = 2 lignes de 4. */
 .coins__days {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
 }
 
 .coins__day {
   padding: 6px 2px;
+  border-radius: 10px;
   font-size: 12px;
   text-transform: capitalize;
+}
+
+.coins__day--milieu {
+  border-style: dashed;
+  border-color: #16a34a;
+  color: #166534;
+  text-transform: none;
+}
+
+.coins__day--milieu.coins__day--on {
+  background: #166534;
+  border-color: #166534;
+  border-style: solid;
+  color: white;
 }
 
 .coins__status {
@@ -155,8 +150,18 @@
   cursor: pointer;
 }
 
+.coins__legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b7280;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
 .coins__legend {
   display: flex;
+  flex: 1;
   height: 10px;
   border-radius: 5px;
   overflow: hidden;
@@ -166,19 +171,63 @@
   flex: 1;
 }
 
-.coins__legend-labels {
+.coins__zone-legend {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
   color: #6b7280;
   font-size: 11px;
-  margin: 2px 0 10px;
+}
+
+.coins__zone-swatch {
+  flex: none;
+  width: 22px;
+  height: 12px;
+  border: 2px solid rgba(92, 40, 10, 0.85);
+  background: rgba(120, 53, 15, 0.13);
+  border-radius: 3px;
+}
+
+.coins__top-toggle,
+.coins__options-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 9px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.coins__options-toggle {
+  margin-top: 6px;
+  background: #f3f4f6;
+  color: #374151;
+  font-weight: 600;
+}
+
+.coins__options-active {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.coins__options {
+  padding-top: 8px;
 }
 
 .coins__opacity {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 10px;
+  margin: 0 0 6px;
   color: #6b7280;
   font-size: 12px;
 }
@@ -195,36 +244,38 @@
   font-variant-numeric: tabular-nums;
 }
 
-.coins__zone-legend {
+.coins__check {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  margin: -4px 0 10px;
-  color: #6b7280;
-  font-size: 11px;
-}
-
-.coins__zone-swatch {
-  flex: none;
-  width: 22px;
-  height: 12px;
-  border: 2px solid rgba(92, 40, 10, 0.85);
-  background: rgba(120, 53, 15, 0.13);
-  border-radius: 3px;
-}
-
-.coins__top-toggle {
-  width: 100%;
-  border: none;
-  border-radius: 10px;
-  background: #fef3c7;
-  color: #92400e;
-  padding: 9px;
-  font: inherit;
-  font-weight: 700;
+  padding: 6px 2px;
+  color: #1f2937;
   font-size: 13px;
   cursor: pointer;
-  text-align: left;
+}
+
+.coins__check input {
+  flex: none;
+  margin: 2px 0 0;
+  width: 17px;
+  height: 17px;
+  accent-color: #b45309;
+}
+
+.coins__check small {
+  color: #6b7280;
+}
+
+.coins__check-detail {
+  display: block;
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.coins__warning {
+  margin: 8px 0 0;
+  color: #b45309;
+  font-size: 11px;
 }
 
 .coins__top {
@@ -286,7 +337,7 @@
 }
 
 .coins__note {
-  margin: 10px 0 0;
+  margin: 6px 0 0;
   color: #6b7280;
   font-size: 11px;
   line-height: 1.35;
@@ -323,48 +374,4 @@
   .coins__body {
     max-height: calc(100dvh - 260px);
   }
-}
-
-.coins__moon {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: #f5f3ff;
-  color: #4c1d95;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.coins__moon input {
-  flex: none;
-  margin: 2px 0 0;
-  width: 17px;
-  height: 17px;
-  accent-color: #6d28d9;
-}
-
-.coins__moon small {
-  color: #6d28d9;
-}
-
-.coins__obs {
-  background: #f1f5f9;
-  color: #1e293b;
-}
-
-.coins__obs input {
-  accent-color: #1e293b;
-}
-
-.coins__obs small {
-  color: #475569;
-}
-
-.coins__moon-phase {
-  display: block;
-  margin-top: 3px;
-  line-height: 1.35;
 }
