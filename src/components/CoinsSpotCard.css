@@ -87,8 +87,9 @@
 
 .spot-card__score {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 2px 8px;
   margin: 8px 0;
 }
 
@@ -253,4 +254,11 @@
 .spot-card__check--unknown {
   background: #f3f4f6;
   color: #4b5563;
+}
+
+.spot-card__rank {
+  flex-basis: 100%;
+  margin-top: 1px;
+  color: #92400e;
+  font-weight: 600;
 }

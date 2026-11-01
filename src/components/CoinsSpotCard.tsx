@@ -22,6 +22,15 @@ type Props = {
 }
 
 const DAY = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric' })
+
+// L'indice n'est pas une probabilité : 100 = milieu idéal par la meilleure météo, presque jamais atteint. Le rang dans la
+// région dit ce qu'il vaut ce jour-là.
+function rankText(rank: number, milieuOnly: boolean): string {
+  const when = milieuOnly ? '' : " aujourd'hui"
+  if (rank >= 0.995) return `Parmi les meilleurs endroits de la région${when} (mieux que 99,5 % des bois et prairies).`
+  if (rank >= 0.9) return `Dans les ${Math.max(1, Math.round((1 - rank) * 100))} % meilleurs endroits de la région${when}.`
+  return `Mieux que ${Math.round(rank * 100)} % des bois et prairies de la région${when}.`
+}
 const isMobile = () => window.matchMedia('(max-width: 640px)').matches
 
 export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series, milieuOnly = false, onClose }: Props) {
@@ -73,7 +82,7 @@ export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series
               <>
                 {' · '}
                 <span className="spot-card__badge">
-                  {Math.round(detail.score * 100)} % · {scoreLabel(detail.score)}
+                  {Math.round(detail.score * 100)}/100 · {scoreLabel(detail.score)}
                 </span>
               </>
             )}
@@ -108,9 +117,14 @@ export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series
         <>
           <div className="spot-card__score spot-card__muted">
             {milieuOnly
-              ? `Potentiel du milieu ${Math.round(detail.habitat * 100)} % (sans la météo)`
-              : `Potentiel ${Math.round(detail.score * 100)} % = milieu ${Math.round(detail.habitat * 100)} % × météo ${Math.round(detail.pousse * 100)} %`}{' '}
+              ? `Indice du milieu ${Math.round(detail.habitat * 100)}/100 (sans la météo)`
+              : `Indice ${Math.round(detail.score * 100)}/100 = milieu ${Math.round(detail.habitat * 100)} % × météo ${Math.round(detail.pousse * 100)} %`}{' '}
             · {lat.toFixed(4)}, {lon.toFixed(4)}
+            {detail.score > 0.02 && (
+              <div className="spot-card__rank">
+                {rankText(detail.regionRank, milieuOnly)}
+              </div>
+            )}
           </div>
           <ul className="spot-card__facts">
             <li>

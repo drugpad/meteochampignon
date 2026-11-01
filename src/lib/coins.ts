@@ -384,6 +384,31 @@ export type SpotDetail = {
   // « Tous les cèpes » : espèce décrite (la plus probable ici) et note de chacune, de la meilleure à la moins bonne.
   bestSpecies?: Species
   ranking?: { species: Species; score: number }[]
+  // Part des endroits de la région (bois et prairies notés) qui ont un indice plus bas ce jour-là (0-1).
+  regionRank: number
+}
+
+// Rang d'un indice parmi les endroits de la région (01/11/2026, question utilisateur : « 51 % alors que ça dit très
+// bon ? ») : l'indice n'est pas une probabilité (100 = milieu idéal par la meilleure météo, rarement atteint), le rang
+// dit ce qu'il vaut ce jour-là. Mesuré le 30/10 : 51 % de cèpe de Bordeaux = mieux que 98,7 % des cases (max 65 %).
+const sortedScores = new WeakMap<CoinsResult, Float32Array>()
+export function regionRank(res: CoinsResult, value: number): number {
+  let s = sortedScores.get(res)
+  if (!s) {
+    const vals: number[] = []
+    for (let i = 0; i < res.score.length; i++) if (res.habitat.values[i] > 12) vals.push(res.score[i])
+    s = Float32Array.from(vals).sort()
+    sortedScores.set(res, s)
+  }
+  if (s.length === 0) return 0
+  let lo = 0
+  let hi = s.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (s[mid] < value) lo = mid + 1
+    else hi = mid
+  }
+  return lo / s.length
 }
 
 // Compare la pluie du modèle (15 jours) à ce que la station la plus comparable (distance + altitude) a mesuré, ramené à
@@ -489,8 +514,10 @@ export async function describeSpot(res: CoinsResult, lat: number, lon: number): 
   if (res.habitatOnly && habitat >= 0.6) reasons.unshift(`Très bon milieu pour l'espèce (${GROUP_LABELS[group] ?? group}), indépendamment de la météo.`)
   if (reasons.length === 0 && !res.habitatOnly && check.status !== 'lower' && (fine !== null ? habitat * pousse : res.score[i]) >= 0.35) reasons.push(`Bon milieu, ${rain15} mm de pluie en 15 jours et ${temp5.toFixed(0)} °C de moyenne : conditions réunies selon le modèle${check.status === 'ok' ? ', confirmées par les stations proches' : ''}.`)
 
+  const score = res.habitatOnly ? habitat : fine !== null ? Math.min(1, habitat * pousseAt(res, lat, lon) * res.moonFactor) : res.score[i]
   return {
-    score: res.habitatOnly ? habitat : fine !== null ? Math.min(1, habitat * pousseAt(res, lat, lon) * res.moonFactor) : res.score[i],
+    score,
+    regionRank: regionRank(res, score),
     habitat,
     pousse,
     trees: GROUP_LABELS[group] ?? group,
@@ -634,7 +661,8 @@ export async function potentialSeries(res: CoinsResult, lat: number, lon: number
 export type Outlook = { headline: string; detail: string; tone: 'go' | 'soon' | 'no' }
 
 const OUTLOOK_MIN = 0.12
-const pct = (v: number) => `${Math.round(v * 100)} %`
+// Indice sur 100 (pas un pourcentage de chances : voir regionRank).
+const pct = (v: number) => `${Math.round(v * 100)}/100`
 const DAY_NAME = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
 
 function dayName(iso: string, today: string): string {
@@ -687,7 +715,7 @@ export function outlook(series: SeriesPoint[], today: string): Outlook | null {
     const peak = peakOf(series)
     return {
       headline: `Pas de bon moment prévu d'ici le ${dayName(last.date, today)}`,
-      detail: `Potentiel de ${pct(now.value)} aujourd'hui${peak.date === now.date ? '' : `, au mieux ${pct(peak.value)} ${dayName(peak.date, today)}${trend(peak)}`} : sauf nouvelle pluie importante, ça ne pousse pas ici.`,
+      detail: `Indice de ${pct(now.value)} aujourd'hui${peak.date === now.date ? '' : `, au mieux ${pct(peak.value)} ${dayName(peak.date, today)}${trend(peak)}`} : sauf nouvelle pluie importante, ça ne pousse pas ici.`,
       tone: 'no',
     }
   }
