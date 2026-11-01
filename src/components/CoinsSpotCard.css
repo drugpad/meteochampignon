@@ -5,15 +5,43 @@
   transform: translateX(-50%);
   z-index: 1000;
   width: min(380px, calc(100vw - 24px));
-  max-height: 55dvh;
-  overflow-y: auto;
+  max-height: 70dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   box-sizing: border-box;
-  padding: 12px 14px;
+  padding: 0;
   background: white;
   color: #1f2937;
   border-radius: 14px;
   box-shadow: 0 2px 14px rgba(15, 23, 42, 0.25);
   font: 13px/1.4 system-ui, sans-serif;
+}
+
+/* En-tête fixe : on la tient pour déplacer la fiche ; seul le contenu dessous défile (la croix reste visible). */
+.spot-card__grip {
+  flex: none;
+  padding: 10px 14px 6px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.spot-card--dragging .spot-card__grip {
+  cursor: grabbing;
+}
+
+.spot-card--dragging {
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.35);
+}
+
+.spot-card__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 14px 12px;
 }
 
 .spot-card__head {
@@ -35,7 +63,7 @@
   font: inherit;
   color: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: inherit;
 }
 
 .spot-card__title {
@@ -53,7 +81,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 6px;
 }
 
 .spot-card__more {
@@ -69,6 +96,13 @@
   cursor: pointer;
 }
 
+.spot-card__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 6px;
+}
+
 .spot-card__sub,
 .spot-card__muted {
   color: #6b7280;
@@ -76,6 +110,10 @@
 }
 
 .spot-card__close {
+  flex: none;
+  min-width: 36px;
+  min-height: 36px;
+  margin: -6px -8px 0 0;
   border: none;
   background: none;
   font-size: 24px;
@@ -83,14 +121,6 @@
   color: #6b7280;
   cursor: pointer;
   padding: 0 2px;
-}
-
-.spot-card__score {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 8px;
-  margin: 8px 0;
 }
 
 .spot-card__badge {
@@ -103,20 +133,47 @@
   font-size: 12px;
 }
 
-.spot-card__facts,
+.spot-card__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin: 8px 0 6px;
+}
+
+.spot-card__stats > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 6px 6px;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.spot-card__stats span {
+  color: #6b7280;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.spot-card__stats b {
+  font-size: 15px;
+}
+
+.spot-card__stats small {
+  color: #6b7280;
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+
 .spot-card__reasons {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.spot-card__facts li {
-  margin: 3px 0;
-}
-
 .spot-card__reasons {
-  margin-top: 8px;
-  padding: 8px 10px;
+  margin-top: 6px;
+  padding: 7px 10px;
   border-radius: 10px;
   background: #fff7ed;
   color: #7c2d12;
@@ -124,6 +181,28 @@
 
 .spot-card__reasons li + li {
   margin-top: 4px;
+}
+
+.spot-card__details {
+  margin-top: 8px;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.spot-card__details summary {
+  cursor: pointer;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.spot-card__details p,
+.spot-card__details ul {
+  margin: 6px 0 0;
+}
+
+.spot-card__details ul {
+  padding-left: 0;
+  list-style: none;
 }
 
 .spot-card__nav {
@@ -139,7 +218,9 @@
 }
 
 .spot-card__warn {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
+  font-size: 11px;
+  text-align: center;
 }
 
 /* Mobile : tiroir posé en bas de l'écran, pleine largeur, poignée en haut. Replié : ~110 px, la carte reste
@@ -152,10 +233,18 @@
     width: auto;
     transform: none;
     max-height: 70dvh;
-    padding: 4px 16px calc(14px + env(safe-area-inset-bottom));
+    padding: 0 0 env(safe-area-inset-bottom);
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -4px 18px rgba(15, 23, 42, 0.22);
     z-index: 1100;
+  }
+
+  .spot-card__grip {
+    padding: 2px 16px 6px;
+  }
+
+  .spot-card__body {
+    padding: 8px 16px 14px;
   }
 
   .spot-card__handle {
@@ -212,7 +301,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin: 8px 0;
+  margin: 0 0 6px;
   padding: 8px 10px;
   border-radius: 8px;
   font-size: 13px;
@@ -235,7 +324,7 @@
 }
 
 .spot-card__check {
-  margin: 4px 0 6px;
+  margin: 0;
   padding: 6px 8px;
   border-radius: 6px;
   font-size: 12px;
@@ -257,8 +346,6 @@
 }
 
 .spot-card__rank {
-  flex-basis: 100%;
-  margin-top: 1px;
   color: #92400e;
   font-weight: 600;
 }

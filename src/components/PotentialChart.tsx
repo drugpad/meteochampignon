@@ -27,7 +27,7 @@ export function PotentialChart({ series, today }: { series: SeriesPoint[]; today
       .map((p, k) => `${k === 0 ? 'M' : 'L'}${x(from + k).toFixed(1)},${y(p.value).toFixed(1)}`)
       .join(' ')
   const best = series.reduce((b, p, i) => (p.value > series[b].value ? i : b), 0)
-  const ticks = series.map((p, i) => ({ i, p })).filter(({ i }) => i === 0 || i === series.length - 1 || i % 3 === 0)
+  const ticks = series.map((p, i) => ({ i, p })).filter(({ i }) => i === 0 || i === series.length - 1 || (i % 3 === 0 && i < series.length - 3))
 
   return (
     <figure className="potential">

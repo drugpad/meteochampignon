@@ -417,22 +417,23 @@ export function regionRank(res: CoinsResult, value: number): number {
 // Compare la pluie du modèle (15 jours) à ce que la station la plus comparable (distance + altitude) a mesuré, ramené à
 // 15 jours (la collecte n'en a parfois que 10 ou 11). Seuil : écart d'au moins 10 mm ET d'au moins 40 % — en dessous,
 // on ne conclut rien. Une seule station ne prouve pas tout (la pluie varie vite en montagne) : le texte reste prudent.
-export type RainCheck = { status: 'ok' | 'lower' | 'higher' | 'unknown'; text: string }
+// short : une ligne pour la fiche (le texte complet reste dans « Détails »).
+export type RainCheck = { status: 'ok' | 'lower' | 'higher' | 'unknown'; text: string; short: string }
 
 export function rainCheck(modelRain15: number, nearby: NearbyMeasure[]): RainCheck {
   const ref = nearby.find((m) => m.days >= 5)
-  if (!ref) return { status: 'unknown', text: 'Aucune station Météo-France comparable à moins de 30 km : la pluie est une estimation du modèle, non vérifiée sur place.' }
+  if (!ref) return { status: 'unknown', short: 'Pluie non vérifiée (aucune station proche)', text: 'Aucune station Météo-France comparable à moins de 30 km : la pluie est une estimation du modèle, non vérifiée sur place.' }
   const measured15 = (ref.rainMm * 15) / ref.days
   const gap = modelRain15 - measured15
   const fr = (v: number) => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
   const where = `${ref.name} (${ref.altitude !== undefined ? ref.altitude + ' m, ' : ''}${ref.km} km)`
   if (gap >= 10 && measured15 < 0.6 * modelRain15) {
-    return { status: 'lower', text: `⚠ Écart : le modèle compte ${modelRain15} mm sur 15 jours, mais ${where} n'a mesuré que ${fr(ref.rainMm)} mm en ${ref.days} jours (≈ ${Math.round(measured15)} mm sur 15). La pousse est probablement surestimée ici : à prendre avec prudence.` }
+    return { status: 'lower', short: `⚠ Pluie surestimée ? ${ref.name} : ≈ ${Math.round(measured15)} mm mesurés, modèle ${modelRain15} mm`, text: `⚠ Écart : le modèle compte ${modelRain15} mm sur 15 jours, mais ${where} n'a mesuré que ${fr(ref.rainMm)} mm en ${ref.days} jours (≈ ${Math.round(measured15)} mm sur 15). La pousse est probablement surestimée ici : à prendre avec prudence.` }
   }
   if (-gap >= 10 && measured15 > 1.4 * modelRain15) {
-    return { status: 'higher', text: `⚠ Écart : ${where} a mesuré ${fr(ref.rainMm)} mm en ${ref.days} jours (≈ ${Math.round(measured15)} mm sur 15), plus que les ${modelRain15} mm du modèle. La pousse est peut-être sous-estimée ici.` }
+    return { status: 'higher', short: `⚠ Plus de pluie mesurée à ${ref.name} : ≈ ${Math.round(measured15)} mm, modèle ${modelRain15} mm`, text: `⚠ Écart : ${where} a mesuré ${fr(ref.rainMm)} mm en ${ref.days} jours (≈ ${Math.round(measured15)} mm sur 15), plus que les ${modelRain15} mm du modèle. La pousse est peut-être sous-estimée ici.` }
   }
-  return { status: 'ok', text: `✓ Cohérent avec ${where} : ${fr(ref.rainMm)} mm mesurés en ${ref.days} jours (modèle : ${modelRain15} mm sur 15 jours).` }
+  return { status: 'ok', short: `✓ Pluie confirmée par ${ref.name} (≈ ${Math.round(measured15)} mm)`, text: `✓ Cohérent avec ${where} : ${fr(ref.rainMm)} mm mesurés en ${ref.days} jours (modèle : ${modelRain15} mm sur 15 jours).` }
 }
 
 export async function describeSpot(res: CoinsResult, lat: number, lon: number): Promise<SpotDetail | null> {
