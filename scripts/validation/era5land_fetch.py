@@ -47,10 +47,11 @@ def assemble():
         if f.endswith("sm-daily.npz"):
             continue
         z = np.load(f)
-        for k in range(z["data"].shape[2]):
-            v = z["data"][:, :, k]
+        data, d0 = z["data"], z["d0"]  # lus UNE fois (z["data"] relit tout le fichier à chaque accès)
+        for k in range(data.shape[2]):
+            v = data[:, :, k]
             if not np.isnan(v).all():
-                days[z["d0"] + np.timedelta64(k, "D")] = v
+                days[d0 + np.timedelta64(k, "D")] = v
     dates = sorted(days)
     np.savez_compressed(os.path.join(HERE, "sm-daily.npz"), dates=np.array(dates), SM=np.stack([days[d] for d in dates]),
                         lat0=LAT0, lon0=LON0, step=0.1)

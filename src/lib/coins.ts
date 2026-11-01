@@ -9,7 +9,7 @@ import { moonPhase } from './moon'
 import { fetchDataJson, fetchPixels } from './rainMaps'
 
 // Les quatre cèpes sont séparés : ils ne poussent ni aux mêmes endroits ni à la même saison.
-export type Species = 'cepe_ete' | 'cepe_bronze' | 'cepe_bordeaux' | 'cepe_pins' | 'girolle' | 'coulemelle' | 'trompette'
+export type Species = 'cepe_ete' | 'cepe_bronze' | 'cepe_bordeaux' | 'cepe_pins' | 'girolle' | 'coulemelle' | 'trompette' | 'pied_mouton' | 'chanterelle_tube'
 export const SPECIES: { key: Species; label: string; short: string; group: 'cepe' | 'autre'; hint: string }[] = [
   { key: 'cepe_ete', label: "Cèpe d'été", short: "d'été", group: 'cepe', hint: 'chênes, châtaigniers ; juin-septembre, chaleur' },
   { key: 'cepe_bronze', label: 'Cèpe bronzé', short: 'bronzé', group: 'cepe', hint: 'tête de nègre ; chênes, châtaigniers, sols siliceux, coteaux chauds ; juillet-octobre' },
@@ -18,6 +18,9 @@ export const SPECIES: { key: Species; label: string; short: string; group: 'cepe
   { key: 'girolle', label: 'Girolle', short: 'Girolle', group: 'autre', hint: 'feuillus et conifères, sol acide, surtout 300-900 m' },
   { key: 'coulemelle', label: 'Coulemelle', short: 'Coulemelle', group: 'autre', hint: 'prairies, lisières, bois clairs ; fin d’été-automne' },
   { key: 'trompette', label: 'Trompette', short: 'Trompette', group: 'autre', hint: 'hêtres, chênes, châtaigniers ; sous-bois frais' },
+  // Espèces de fin de saison (01/11/2026) : pic en octobre, jusqu'en décembre-janvier.
+  { key: 'pied_mouton', label: 'Pied de mouton', short: 'Pied de mouton', group: 'autre', hint: 'hêtres, sapins, chênes ; collines et montagne ; septembre-décembre, supporte les premières gelées' },
+  { key: 'chanterelle_tube', label: 'Chanterelle en tube', short: 'Chant. en tube', group: 'autre', hint: 'sapins, épicéas, hêtres ; sols acides et humides, versants nord ; octobre-décembre' },
 ]
 export const isSpecies = (v: unknown): v is Species => SPECIES.some((s) => s.key === v)
 
@@ -540,17 +543,33 @@ export const FINE_TILES_URL: string =
 export const FINE_MIN_ZOOM = 10
 export const FINE_MAX_ZOOM = 13
 
-let fineMeta: Promise<{ species: Species[] } | null> | null = null
-export function loadFineMeta(): Promise<{ species: Species[] } | null> {
+// Familles de tuiles (01/11/2026) : une tuile RGB range au plus 8 espèces ; les 7 premières dans la famille d'origine
+// (préfixe vide), les suivantes sous « b/ ». Ancien index sans « families » : une seule famille.
+export type FineMeta = { species: Species[]; families?: { prefix: string; species: Species[] }[] }
+export type FineSlot = { prefix: string; index: number }
+export const FINE_PREFIXES = ['', 'b/']
+
+let fineMeta: Promise<FineMeta | null> | null = null
+export function loadFineMeta(): Promise<FineMeta | null> {
   fineMeta ??= fetch(`${FINE_TILES_URL}/habitat-tiles.json`)
-    .then((r) => (r.ok ? (r.json() as Promise<{ species: Species[] }>) : null))
+    .then((r) => (r.ok ? (r.json() as Promise<FineMeta>) : null))
     .catch(() => null)
   return fineMeta
 }
 
+// Où lire une espèce dans les tuiles : famille (préfixe du chemin) et rang dans la famille ; null si absente.
+export function fineSlot(meta: FineMeta | null, sp: Species): FineSlot | null {
+  if (!meta) return null
+  for (const f of meta.families ?? [{ prefix: '', species: meta.species }]) {
+    const index = f.species.indexOf(sp)
+    if (index >= 0) return { prefix: f.prefix, index }
+  }
+  return null
+}
+
 const fineTiles = new Map<string, Promise<Rgb | null>>()
-export function loadFineTile(z: number, x: number, y: number): Promise<Rgb | null> {
-  const key = `${z}/${x}/${y}`
+export function loadFineTile(z: number, x: number, y: number, prefix = ''): Promise<Rgb | null> {
+  const key = `${prefix}${z}/${x}/${y}`
   if (!fineTiles.has(key)) {
     // 404 = pas d'habitat dans cette tuile (hors région) : tuile vide, pas une erreur.
     const p = fetchPixels(`${FINE_TILES_URL}/${key}.png`).catch(() => null)
@@ -587,7 +606,8 @@ export function fineTileUrlsFor(b: { south: number; west: number; north: number;
     const n = 2 ** z
     const tx = (lon: number) => Math.floor(((lon + 180) / 360) * n)
     const ty = (lat: number) => Math.floor(((1 - Math.asinh(Math.tan((lat * Math.PI) / 180)) / Math.PI) / 2) * n)
-    for (let x = tx(b.west); x <= tx(b.east); x++) for (let y = ty(b.north); y <= ty(b.south); y++) urls.push(`${FINE_TILES_URL}/${z}/${x}/${y}.png`)
+    for (let x = tx(b.west); x <= tx(b.east); x++)
+      for (let y = ty(b.north); y <= ty(b.south); y++) for (const prefix of FINE_PREFIXES) urls.push(`${FINE_TILES_URL}/${prefix}${z}/${x}/${y}.png`)
   }
   return urls
 }
@@ -599,18 +619,17 @@ export const fineLevel = (rgba: Uint8ClampedArray, i: number, speciesIndex: numb
 
 // Habitat à 20 m d'un point (0-1), ou null si les tuiles fines sont indisponibles.
 export async function sampleFineHabitat(sp: Species, lat: number, lon: number): Promise<number | null> {
-  const meta = await loadFineMeta()
-  const idx = meta?.species.indexOf(sp) ?? -1
-  if (idx < 0) return null
+  const slot = fineSlot(await loadFineMeta(), sp)
+  if (!slot) return null
   const z = FINE_MAX_ZOOM
   const n = 2 ** z
   const fx = ((lon + 180) / 360) * n
   const fy = ((1 - Math.asinh(Math.tan((lat * Math.PI) / 180)) / Math.PI) / 2) * n
-  const tile = await loadFineTile(z, Math.floor(fx), Math.floor(fy))
+  const tile = await loadFineTile(z, Math.floor(fx), Math.floor(fy), slot.prefix)
   if (!tile) return 0
   const px = Math.min(255, Math.floor((fx % 1) * 256))
   const py = Math.min(255, Math.floor((fy % 1) * 256))
-  return fineLevel(tile.rgba, py * 256 + px, idx) / 7
+  return fineLevel(tile.rgba, py * 256 + px, slot.index) / 7
 }
 
 // Météo de pousse (0-1) à un point, interpolée comme pour la carte.

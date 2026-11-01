@@ -56,6 +56,17 @@ HOSTS = {
         "hetre": 1, "chene": 0.9, "chataignier": 0.9, "feuillus": 0.7, "mixte": 0.6, "sapin_epicea": 0.4,
         "chene_vert": 0.4, "pins": 0.15, "autres_conif": 0.2, "robinier": 0.1, "peuplier": 0.1, "lande": 0.05,
     },
+    # Ajoutés le 01/11/2026 (espèces de fin de saison). Littérature : Simmel 2017 (Ellenberg) et Krieglsteiner (via le
+    # Wikipédia allemand), recoupés sur les trouvailles GBIF de la région (docs/etude-champignons-coins.md, section 11).
+    "pied_mouton": {  # Hydnum repandum + H. rufescens : hêtre et sapin/épicéa surtout, aussi chênes et pins
+        "hetre": 1, "sapin_epicea": 1, "mixte": 0.9, "chene": 0.8, "chataignier": 0.6, "feuillus": 0.7, "pins": 0.7,
+        # Chênes verts : sur-représentés dans la région (7 trouvailles, rapport 7) ; connu en Méditerranée.
+        "autres_conif": 0.7, "chene_vert": 0.8, "lande": 0.1, "robinier": 0.05, "peuplier": 0.05,
+    },
+    "chanterelle_tube": {  # Craterellus tubaeformis : sapins, épicéas, hêtres ; feuillus de plaine plus rarement
+        "sapin_epicea": 1, "mixte": 1, "hetre": 0.8, "autres_conif": 0.7, "pins": 0.6, "chataignier": 0.6, "chene": 0.4,
+        "feuillus": 0.5, "chene_vert": 0.1, "lande": 0.1,
+    },
 }
 
 # Courbes (points (x, facteur), interpolation linéaire, constantes au-delà).
@@ -70,6 +81,8 @@ PH = {
     # l'AUC hors zone de 0,52 à 0,57). La littérature d'Europe centrale (calcicole, Ellenberg R7) ne se vérifie pas ici.
     "trompette": [(3.5, 1), (8.5, 1)],
     "coulemelle": [(3.5, 1), (8.5, 1)],  # indifférente
+    "pied_mouton": [(3.5, 1), (8.5, 1)],  # indifférent (Ellenberg R « x », sols riches comme pauvres en bases)
+    "chanterelle_tube": [(3.5, 1), (4.5, 1), (5.5, 0.8), (6.5, 0.4), (7.5, 0.2)],  # acidophile (Ellenberg R4)
 }
 # Altitude : révision du 30/10/2026 (observations GBIF de la région, rapports au fond « champignons du sol »,
 # ajustement validé hors zone ; voir docs/etude-champignons-coins.md, section 5). Littérature concordante pour le
@@ -87,6 +100,9 @@ ALT = {
     "girolle": [(0, 0.3), (250, 0.55), (450, 1), (600, 1), (800, 0.75), (1000, 0.6), (1300, 0.55), (1600, 0.35), (2000, 0.1)],
     "trompette": [(0, 0.6), (300, 0.9), (500, 1), (1400, 1), (1700, 0.6), (2000, 0.15)],
     "coulemelle": [(0, 1), (1500, 0.85), (1900, 0.3), (2200, 0)],
+    # Pied de mouton : rare en plaine (0-200 m : 0,3 ; 200-400 m : 0,6), de 400 m à la montagne ; ajusté sur les trouvailles.
+    "pied_mouton": [(0, 0.3), (250, 0.55), (450, 1), (800, 0.9), (1100, 0.8), (1600, 0.9), (1900, 0.4), (2200, 0.05)],
+    "chanterelle_tube": [(0, 0.1), (250, 0.4), (450, 0.8), (600, 1), (1700, 1), (2000, 0.4)],  # forêts fraîches, surtout en montagne
 }
 # Pente : falaises et éboulis (peu de sol) ; ET terrains plats (fonds de vallée, sols engorgés) un peu moins bons :
 # pentes de 0-3° sous-représentées pour les 7 espèces (rapports 0,2 à 0,7) dans les bois de la région.
@@ -113,8 +129,12 @@ GEOL = {
     "girolle": {},
     "trompette": {"ACID": 1, "DECALC": 1, "MARL": 1, "BASIC": 1, "CALC": 0.8, "ALLUV": 0.7},
     "coulemelle": {"ALLUV": 0.85},
+    "pied_mouton": {"ALLUV": 0.7},
+    "chanterelle_tube": {"ACID": 1, "DECALC": 0.8, "MARL": 0.4, "BASIC": 0.6, "CALC": 0.25, "ALLUV": 0.6},
 }
-SPECIES = ["cepe_ete", "cepe_bronze", "cepe_bordeaux", "cepe_pins", "girolle", "coulemelle", "trompette"]
+# Ordre = ordre de rangement dans les tuiles à 20 m (8 espèces par famille de tuiles : les 7 premières dans la famille
+# d'origine, les suivantes dans la famille « b/ », voir build-habitat-fine.py). NE PAS réordonner sans republier les tuiles.
+SPECIES = ["cepe_ete", "cepe_bronze", "cepe_bordeaux", "cepe_pins", "girolle", "coulemelle", "trompette", "pied_mouton", "chanterelle_tube"]
 
 # --- Règles ajoutées le 25/10/2026 (habitat à 20 m avec le couvert Copernicus 2024, build-habitat-fine.py) ---
 # Plancher des courbes de sol : le pH est une estimation à 250 m, lissée ; il ne doit pas condamner seul un bois.
@@ -137,14 +157,17 @@ OPENNESS = {
     "girolle": [(0, 0.35), (15, 0.6), (35, 1), (88, 1), (100, 0.85)],
     "trompette": [(0, 0.3), (20, 0.5), (50, 0.8), (75, 1), (100, 1)],
     "coulemelle": [(0, 1), (40, 1), (75, 0.8), (100, 0.6)],  # adouci le 30/10/2026 (sous-bois fréquent)
+    "pied_mouton": [(0, 0.4), (20, 0.6), (50, 1), (100, 1)],
+    "chanterelle_tube": [(0, 0.3), (30, 0.5), (60, 0.9), (80, 1), (100, 1)],  # ombre (Ellenberg L2)
 }
 # Espèces liées aux arbres (mycorhiziennes) : un arbre doit se trouver à moins de ~30 m (une à deux hauteurs
 # d'arbre, portée des racines), sinon 0. La coulemelle (saprotrophe) en est dispensée.
-MYCORRHIZAL = ["cepe_ete", "cepe_bronze", "cepe_bordeaux", "cepe_pins", "girolle", "trompette"]
+MYCORRHIZAL = ["cepe_ete", "cepe_bronze", "cepe_bordeaux", "cepe_pins", "girolle", "trompette", "pied_mouton", "chanterelle_tube"]
 TREES_NEAR_M = 30
 # Haies, bosquets, arbres isolés absents de la BD Forêt (elle ignore tout ce qui fait moins d'un demi-hectare) :
 # essence inconnue, majoritairement des chênes et châtaigniers dans le bocage de la région.
-SMALL_WOODS = {"cepe_ete": 0.6, "cepe_bronze": 0.55, "cepe_bordeaux": 0.45, "cepe_pins": 0.1, "girolle": 0.4, "trompette": 0.3}
+SMALL_WOODS = {"cepe_ete": 0.6, "cepe_bronze": 0.55, "cepe_bordeaux": 0.45, "cepe_pins": 0.1, "girolle": 0.4, "trompette": 0.3,
+               "pied_mouton": 0.3, "chanterelle_tube": 0.15}
 # Milieux exclus (ESA WorldCover 2021) : bâti (50), cultures (40, le labour détruit le mycélium), eau (80) : 0 pour
 # toutes les espèces. Constaté le 25/10/2026 : jardins, rives et champs bordés de haies sortaient à 0,1-0,4.
 EXCLUDED_LANDCOVER = [40, 50, 80]
@@ -160,7 +183,9 @@ CUT_EDGE_FACTOR = 0.5  # coupe, juste sous un arbre restant
 # Révision du 30/10/2026 : la préférence nord du cèpe de Bordeaux, de la girolle et de la trompette est RETIRÉE
 # (littérature contradictoire ; dans la région les versants nord sont sous-représentés pour les trois : rapports
 # 0,56 à 0,86). Le cèpe d'été garde le sud-ouest (rapports SO 2,1, O 1,6).
-ASPECT = {"cepe_ete": (215, 0.15), "cepe_bronze": (200, 0.1)}
+ASPECT = {"cepe_ete": (215, 0.15), "cepe_bronze": (200, 0.1),
+          # Chanterelle en tube : versants nord nettement plus favorables (rapports N 1,3 ; S, SE, SO 0,5), espèce d'humidité.
+          "chanterelle_tube": (10, 0.3)}
 
 
 

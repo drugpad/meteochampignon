@@ -4,16 +4,16 @@
 import L from 'leaflet'
 import { useEffect, useRef } from 'react'
 import { useMap } from 'react-leaflet'
-import { displayValue, FINE_MAX_ZOOM, FINE_MIN_ZOOM, fineLevel, loadFineTile, paintZones, type CoinsResult } from '../lib/coins'
+import { displayValue, FINE_MAX_ZOOM, FINE_MIN_ZOOM, fineLevel, loadFineTile, paintZones, type CoinsResult, type FineSlot } from '../lib/coins'
 
-// speciesIndices : rang de chaque espèce du choix dans les tuiles (une seule, ou les 4 cèpes : on garde le meilleur).
+// slots : où lire chaque espèce du choix dans les tuiles (famille + rang ; une seule, ou les 4 cèpes : on garde le meilleur).
 // onLoading : vrai tant que des tuiles visibles sont en cours de calcul (pastille « Calcul des coins… »).
 // onReady : vrai dès que la carte fine est dessinée à un zoom ≥ 10 (la carte d'ensemble peut alors s'effacer), faux
 // en repassant sous le zoom 10. Un nouveau chargement à fort zoom ne le remet pas à faux : les tuiles du zoom
 // précédent restent affichées pendant ce temps.
-type Props = { result: CoinsResult; speciesIndices: number[]; opacity: number; onLoading?: (loading: boolean) => void; onReady?: (ready: boolean) => void }
+type Props = { result: CoinsResult; slots: FineSlot[]; opacity: number; onLoading?: (loading: boolean) => void; onReady?: (ready: boolean) => void }
 
-export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading, onReady }: Props) {
+export function CoinsFineLayer({ result, slots, opacity, onLoading, onReady }: Props) {
   const map = useMap()
   const loadingRef = useRef(onLoading)
   const readyRef = useRef(onReady)
@@ -21,7 +21,7 @@ export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading, onR
     loadingRef.current = onLoading
     readyRef.current = onReady
   }, [onLoading, onReady])
-  const stateRef = useRef({ result, speciesIndices })
+  const stateRef = useRef({ result, slots })
   const layerRef = useRef<L.GridLayer | null>(null)
 
   useEffect(() => {
@@ -34,8 +34,11 @@ export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading, onR
         // du zoom 13 (revu le 30/10/2026 : le navigateur agrandissait les images, bords flous et en escalier).
         const scale = 2 ** Math.max(0, z - FINE_MAX_ZOOM)
         const src = { z: Math.min(z, FINE_MAX_ZOOM), x: Math.floor(x / scale), y: Math.floor(y / scale) }
-        void loadFineTile(src.z, src.x, src.y).then((px) => {
-          if (px) paint(tile, px.rgba, z, x, y, scale)
+        // Une tuile par famille utilisée par le choix (en général une seule).
+        const prefixes = [...new Set(stateRef.current.slots.map((s) => s.prefix))]
+        void Promise.all(prefixes.map((p) => loadFineTile(src.z, src.x, src.y, p))).then((tiles) => {
+          const byPrefix = new Map(prefixes.map((p, i) => [p, tiles[i]?.rgba ?? null]))
+          if (tiles.some(Boolean)) paint(tile, byPrefix, z, x, y, scale)
           done(undefined, tile)
         })
         return tile
@@ -91,8 +94,8 @@ export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading, onR
       return out
     }
 
-    const paint = (tile: HTMLCanvasElement, rgba: Uint8ClampedArray, z: number, x: number, y: number, scale: number) => {
-      const { result: res, speciesIndices } = stateRef.current
+    const paint = (tile: HTMLCanvasElement, byPrefix: Map<string, Uint8ClampedArray | null>, z: number, x: number, y: number, scale: number) => {
+      const { result: res, slots } = stateRef.current
       const ctx = tile.getContext('2d')!
       const img = ctx.createImageData(256, 256)
       const n = 2 ** z
@@ -111,8 +114,10 @@ export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading, onR
       const score = new Float32Array(256 * 256)
       // Niveau retenu pour le contour des zones : le meilleur milieu parmi les espèces du choix.
       const levels = new Float32Array(256 * 256)
-      speciesIndices.forEach((idx, k) => {
-        const own = levelsFor(rgba, idx, x, y, scale)
+      slots.forEach((slot, k) => {
+        const rgba = byPrefix.get(slot.prefix)
+        if (!rgba) return
+        const own = levelsFor(rgba, slot.index, x, y, scale)
         const v = (res.members[k] ?? res.members[0]).pousse.values
         for (let r = 0; r < 256; r++) {
           const y0 = Math.floor(gy[r])
@@ -193,9 +198,9 @@ export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading, onR
 
   // Espèce ou jour changés : on repeint (les tuiles d'habitat restent en mémoire, seul le calcul est refait).
   useEffect(() => {
-    stateRef.current = { result, speciesIndices }
+    stateRef.current = { result, slots }
     layerRef.current?.redraw()
-  }, [result, speciesIndices])
+  }, [result, slots])
 
   return null
 }

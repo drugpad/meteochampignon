@@ -24,7 +24,7 @@ import { CoinsControls, type CoinsView, type NamedSpot } from './CoinsControls'
 import { CoinsFineLayer } from './CoinsFineLayer'
 import { CoinsLayer } from './CoinsLayer'
 import { CoinsSpotCard } from './CoinsSpotCard'
-import { computeCoins, describeSpot, isChoice, isSpecies, loadFineMeta, loadPousseMeta, membersOf, potentialSeries, type SeriesPoint, topSpots, type CoinsChoice, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
+import { computeCoins, describeSpot, fineSlot, isChoice, isSpecies, loadFineMeta, loadPousseMeta, membersOf, potentialSeries, type SeriesPoint, topSpots, type CoinsChoice, type CoinsResult, type FineMeta, type PousseMeta, type SpotDetail } from '../lib/coins'
 import { reverseCity } from '../lib/geocoding'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import { LocateControl } from './LocateControl'
@@ -323,16 +323,15 @@ export function MapView() {
   const [coinsReload, setCoinsReload] = useState(0)
   const [spots, setSpots] = useState<NamedSpot[]>([])
   // Espèces présentes dans les tuiles d'habitat à 20 m (null tant qu'elles ne sont pas publiées).
-  const [fineSpecies, setFineSpecies] = useState<Species[] | null>(null)
+  const [fineMeta, setFineMeta] = useState<FineMeta | null>(null)
   useEffect(() => {
-    if (mode === 'coins') void loadFineMeta().then((m) => setFineSpecies(m?.species ?? null))
+    if (mode === 'coins') void loadFineMeta().then(setFineMeta)
   }, [mode])
   // Rang de chaque espèce du choix dans les tuiles à 20 m (null si l'une manque : on reste sur la carte à 250 m).
-  const fineIndices = useMemo(() => {
-    if (!fineSpecies) return null
-    const idx = membersOf(coinsSpecies).map((sp) => fineSpecies.indexOf(sp))
-    return idx.every((i) => i >= 0) ? idx : null
-  }, [fineSpecies, coinsSpecies])
+  const fineSlots = useMemo(() => {
+    const slots = membersOf(coinsSpecies).map((sp) => fineSlot(fineMeta, sp))
+    return slots.every((s) => s !== null) ? (slots as NonNullable<(typeof slots)[number]>[]) : null
+  }, [fineMeta, coinsSpecies])
   const [spot, setSpot] = useState<{
     lat: number
     lon: number
@@ -748,12 +747,12 @@ export function MapView() {
             result={coinsResult}
             spots={spots}
             onSelectSpot={(s) => openSpot(s.lat, s.lon, s.name)}
-            hidden={!!fineIndices && online && fineReady}
+            hidden={!!fineSlots && online && fineReady}
             opacity={coinsOpacity}
           />
         )}
-        {mode === 'coins' && coinsResult && coinsStatus === 'ready' && fineIndices && (
-          <CoinsFineLayer result={coinsResult} speciesIndices={fineIndices} opacity={coinsOpacity} onLoading={setFineLoading} onReady={setFineReady} />
+        {mode === 'coins' && coinsResult && coinsStatus === 'ready' && fineSlots && (
+          <CoinsFineLayer result={coinsResult} slots={fineSlots} opacity={coinsOpacity} onLoading={setFineLoading} onReady={setFineReady} />
         )}
         {mode === 'coins' && observations && obsMeta && <ObservationsLayer meta={obsMeta} species={coinsSpecies} />}
         {mode === 'coins' && spot && <ForecastCross point={{ lat: spot.lat, lon: spot.lon }} />}

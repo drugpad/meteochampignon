@@ -39,6 +39,8 @@ export const GUIDE_TO_COINS: Record<string, string> = {
   girolle: 'girolle',
   'lepiote-elevee': 'coulemelle',
   'trompette-de-la-mort': 'trompette',
+  'pied-de-mouton': 'pied_mouton',
+  'chanterelle-en-tube': 'chanterelle_tube',
 }
 
 export function MushroomGuide({ view, onOpenSpecies, onBack, onShowCoins }: Props) {

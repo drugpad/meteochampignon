@@ -282,6 +282,33 @@ Trois explications, dans l'ordre :
 
 Remarque : la carte du milieu ne couvre que les 8 départements de Midi-Pyrénées (BD Forêt, géologie, couvert téléchargés pour eux seuls) : au-delà de la limite (ex. lac de la Raviège côté Hérault), rien ne s'affiche.
 
+## 10. Pluie de montagne et humidité du sol testées (01/11/2026) — rien à changer
+
+**Pluie AROME en montagne** (`scripts/validation/rain_bias.py`, `rain_correction_fit.py`) : 9 jours complets (l'historique des stations n'en garde que 15), 2 077 comparaisons pluviomètre-jour.
+- Pas de surestimation en montagne : AROME sous-estime un peu partout (rapport modèle / mesure 0,91 sous 300 m, 0,76 à 300-600 m, 0,82 à 600-900 m, 0,90 à 900-1 600 m ; 0,52 au-dessus de 1 600 m sur 25 mesures). Le cas de Campan (pluie modèle ~2× les pluviomètres, 20-23/10) était un épisode isolé.
+- Validation « station mise de côté » (erreur à un endroit SANS pluviomètre) : modèle seul 0,75 mm/jour (montagne ≥ 900 m : 0,99), correction actuelle 0,59 (montagne 0,80, rapport 0,94 : biais quasi nul).
+- 160 variantes testées (portée 5-30 km, poids du modèle, prise en compte de l'écart d'altitude, correction multiplicative) : la meilleure gagne 5 % en moyenne (0,565) mais fait moins bien en montagne (0,83). **Correction actuelle conservée.** À refaire sur une saison entière si l'on garde un jour la comparaison modèle / pluviomètres au fil des jours.
+
+**Humidité du sol ERA5-Land** (0-7 cm, 9 km, reconstituée par modèle à partir de la météo observée : pas une mesure ; `era5land_fetch.py`, `sm_eval.py`, 2005-2026, ~3 200 trouvailles datées) :
+- humidité seule : AUC « années » comparable aux cumuls de pluie (meilleure pour la trompette, 0,67 contre 0,63) mais nettement moins bonne sur les semaines (elle suit mal la saison) ;
+- à la place de la pluie : moins bien pour presque toutes les espèces ;
+- en plus de la pluie (réglage sur les années paires, mesure sur les impaires et inversement) : gains faibles et irréguliers (cèpe des pins +0,03 une fois sur deux, girolle et trompette moins bien une fois sur deux).
+- **Non retenue** (et ERA5-Land arrive avec ~5 jours de retard, sans prévision).
+
+## 11. Deux espèces de fin de saison ajoutées (01/11/2026)
+
+**Pied de mouton** (*Hydnum repandum* + *H. rufescens*, cueillis ensemble) et **chanterelle en tube** (*Craterellus tubaeformis*), qui prennent le relais des cèpes en novembre-décembre. Même méthode que les autres : littérature, puis vérification sur les trouvailles GBIF (`gbif_fetch_add.py` : 1 586 et 518 dans le Sud-Ouest).
+
+| | Pied de mouton | Chanterelle en tube |
+|---|---|---|
+| Littérature | Ellenberg (Simmel) L3 T4 F5, R « indifférent », N4 ; Krieglsteiner : hêtre et sapin/épicéa surtout, aussi chênes et pins ; sols frais, riches ou pauvres en bases ; plus fréquent en colline et montagne ; résiste aux premières gelées (guides français) | Ellenberg L2 (ombre) T4 F6 (humide) R4 (acide) N4 ; Krieglsteiner : conifères (épicéa, sapin), hêtre ; sols acides pauvres, humides, mousses |
+| Trouvailles de la région | rare en plaine (0-200 m : 0,3), bon de 400 à 1 700 m ; roche indifférente (confirmé) ; chênes verts très favorables (7 trouvailles) | sapins/épicéas 2,1, forêts mixtes 1,8, chêne 0,4 ; **versants nord 1,3 contre sud 0,5** ; roche siliceuse 1,35, calcaire 0,7 |
+| Milieu (AUC dans les bois) | 0,56 → **0,60** (généraliste : tri modeste) | 0,65 → **0,67** |
+| Saison (mois GBIF) | pic en octobre, tient en novembre-décembre, encore en janvier | pic en octobre, novembre-décembre |
+| Météo (`pousse_fit.py`) | pluie de 6 semaines finie 7 jours avant, pas d'effet de température ; AUC années 0,59 / semaines 0,63 | pluie de 5 semaines finie 4 jours avant, optimum 13 °C ; AUC années 0,62 / semaines 0,70 |
+
+**Tuiles à 20 m** : une tuile RGB range au plus 8 espèces (3 bits chacune) ; les 7 espèces d'origine restent dans leurs tuiles (chemins inchangés), les nouvelles sont dans une seconde famille de tuiles sous `b/` (`FAMILIES` de `build-habitat-fine.py`, `families` dans `habitat-tiles.json`, `fineSlot` dans l'appli).
+
 ## État d'avancement et suite
 
 - **Fait et publié (30-31/10/2026)** : sections 5 à 8. Code sur `master` (commits « Coins v4 » puis correctifs d'affichage), tuiles à 20 m sur la branche `habitat` (un seul commit, remplacé à chaque version), cartes de pousse recalculées par `maps.yml` avec le nouveau modèle (historique météo de 60 jours complet). Anciennes sorties gardées dans `.cache-habitat/old-20261030/` (547 Mo, à effacer une fois la nouvelle version jugée bonne ; le disque C: du poste n'a plus que ~5 Go libres).

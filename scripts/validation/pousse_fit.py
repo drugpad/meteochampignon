@@ -136,7 +136,7 @@ def main():
         print(f"   tout : années {ay:.3f} semaines {aw:.3f}  paramètres {p_all}")
         print("   plis : " + " | ".join(str(c[1]) for c in cv))
         cur = pe.bp.SPECIES[sp]["saison"]
-        for name, tab in (("saison actuelle", cur), ("saison GBIF", NEW_SEASON[sp])):
+        for name, tab in (("saison actuelle", cur), ("saison GBIF", NEW_SEASON.get(sp, cur))):
             for fz in (False, True):
                 a = aucs(D, p_all, seas=tab, use_frost=fz)
                 print(f"   {name:16s} gel={'oui' if fz else 'non'} : années {a[0]:.3f} semaines {a[1]:.3f}")

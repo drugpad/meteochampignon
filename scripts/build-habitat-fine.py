@@ -281,7 +281,15 @@ def habitat_block(forest, alt, ph, wc, mask, slope_deg, aspect_deg, tcd, geol=No
     return np.stack(out)
 
 
+# Familles de tuiles : une tuile RGB (24 bits) range au plus 8 espèces à 3 bits. Les 7 premières espèces restent dans la
+# famille d'origine (chemins inchangés : {z}/{x}/{y}.png) ; les suivantes (pied de mouton, chanterelle en tube, ajoutés le
+# 01/11/2026) dans la famille « b/ » ({z}/{x}/{y}.png sous b/).
+FAMILIES = [("", SPECIES[:7]), ("b/", SPECIES[7:15])]
+FAMILIES = [(prefix, sps) for prefix, sps in FAMILIES if sps]
+
+
 def pack(habitats):
+    """(7 ou 8 espèces, h, w) -> (3, h, w) : niveau 0-7 de l'espèce i aux bits 3i..3i+2."""
     levels = np.clip(np.rint(habitats * 7), 0, 7).astype(np.uint32)
     v = np.zeros(habitats.shape[1:], np.uint32)
     for i in range(levels.shape[0]):
@@ -289,7 +297,7 @@ def pack(habitats):
     return np.stack([(v >> 16) & 255, (v >> 8) & 255, v & 255]).astype(np.uint8)
 
 
-FULL = os.path.join(FINE, "habitat-20m-7b.tif")  # 7 bandes (habitat x 255), pour la carte d'ensemble à 250 m
+FULL = os.path.join(FINE, "habitat-20m-7b.tif")  # une bande par espèce (habitat x 255), pour la carte d'ensemble à 250 m
 # Variables du milieu à 20 m, calculées UNE fois (WorldCover est lu à distance, le relief reprojeté…) : un nouveau
 # réglage des règles se recalcule ensuite en quelques minutes, et la validation lit les mêmes valeurs aux points
 # d'observation. uint8 : forêt (groupe | 0x80 forêt ouverte), géologie, pente x 4, exposition / 2, pH x 20, WorldCover,
@@ -368,7 +376,7 @@ def build_raster():
     if os.path.exists(out):
         return out
     covariate_raster()
-    profile = dict(driver="GTiff", width=W, height=H, count=3, dtype="uint8", crs="EPSG:2154", transform=TRANSFORM,
+    profile = dict(driver="GTiff", width=W, height=H, count=3 * len(FAMILIES), dtype="uint8", crs="EPSG:2154", transform=TRANSFORM,
                    compress="deflate", tiled=True, blockxsize=512, blockysize=512, BIGTIFF="IF_SAFER")
     nb = math.ceil(H / BLOCK) * math.ceil(W / BLOCK)
     k = 0
@@ -387,7 +395,12 @@ def build_raster():
                 mask = cov["mask"]
                 hab = habitat_from_cov(cov)
                 crop = hab[:, MARGIN : MARGIN + h, MARGIN : MARGIN + w]
-                dst.write(pack(crop), window=Window(c0, r0, w, h))
+                start = 0
+                packed = []
+                for _prefix, sps in FAMILIES:
+                    packed.append(pack(crop[start : start + len(sps)]))
+                    start += len(sps)
+                dst.write(np.concatenate(packed), window=Window(c0, r0, w, h))
                 full.write(np.rint(crop * 255).astype(np.uint8), window=Window(c0, r0, w, h))
                 log(f"bloc {k}/{nb} : " + ", ".join(f"{sp} {hab[i][mask > 0].mean():.2f}" for i, sp in enumerate(SPECIES)))
     os.replace(out + ".tmp.tif", out)
@@ -415,30 +428,33 @@ def build_tiles(raster, zooms=(10, 11, 12, 13)):
     count = 0
     total = 0
     with rasterio.open(raster) as src:
-        for z in zooms:
+        for f, (prefix, _sps) in enumerate(FAMILIES):
+          for z in zooms:
             x0, y0 = lonlat_to_tile(-0.4, 45.15, z)
             x1, y1 = lonlat_to_tile(3.4, 42.6, z)
             for x in range(x0, x1 + 1):
                 for y in range(y0, y1 + 1):
                     b = tile_bounds_merc(x, y, z)
                     dst = np.zeros((3, 256, 256), np.uint8)
-                    reproject(rasterio.band(src, (1, 2, 3)), dst, dst_transform=from_bounds(*b, 256, 256), dst_crs="EPSG:3857",
+                    reproject(rasterio.band(src, (3 * f + 1, 3 * f + 2, 3 * f + 3)), dst, dst_transform=from_bounds(*b, 256, 256), dst_crs="EPSG:3857",
                               # src_nodata=0 OBLIGATOIRE : sinon GDAL remplace chaque vrai 0 par 1 pour le distinguer
                               # du « sans donnée » de destination, et (1, 1, 1) se décodait en « cèpe de Bordeaux 4/7,
                               # coulemelle 2/7 » partout, hors région et champs compris (constaté le 24/10/2026).
                               resampling=Resampling.nearest, src_nodata=0, dst_nodata=0)
                     if not dst.any():
                         continue
-                    path = os.path.join(TILES, str(z), str(x), f"{y}.png")
+                    path = os.path.join(TILES, prefix, str(z), str(x), f"{y}.png")
                     os.makedirs(os.path.dirname(path), exist_ok=True)
                     Image.fromarray(np.moveaxis(dst, 0, -1), mode="RGB").save(path, optimize=True)
                     count += 1
                     total += os.path.getsize(path)
-            log(f"zoom {z} : {count} tuiles, {total / 1048576:.0f} Mo")
+            log(f"famille « {prefix or '(principale)'} », zoom {z} : {count} tuiles, {total / 1048576:.0f} Mo")
     meta = {
         "species": SPECIES,
+        # Famille de tuiles de chaque espèce : préfixe du chemin, et rang de l'espèce DANS cette famille pour le décodage.
+        "families": [{"prefix": prefix, "species": sps} for prefix, sps in FAMILIES],
         "levels": 8,
-        "packing": "v = R<<16 | G<<8 | B ; niveau de l'espèce i = (v >> 3i) & 7 ; habitat = niveau / 7",
+        "packing": "v = R<<16 | G<<8 | B ; niveau de l'espèce de rang i dans sa famille = (v >> 3i) & 7 ; habitat = niveau / 7",
         "minZoom": min(zooms),
         "maxZoom": max(zooms),
         "resolutionM": RES,
