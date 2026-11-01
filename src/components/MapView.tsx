@@ -24,7 +24,7 @@ import { CoinsControls, type CoinsView, type NamedSpot } from './CoinsControls'
 import { CoinsFineLayer } from './CoinsFineLayer'
 import { CoinsLayer } from './CoinsLayer'
 import { CoinsSpotCard } from './CoinsSpotCard'
-import { computeCoins, describeSpot, FINE_MIN_ZOOM, isChoice, isSpecies, loadFineMeta, loadPousseMeta, membersOf, potentialSeries, type SeriesPoint, topSpots, type CoinsChoice, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
+import { computeCoins, describeSpot, isChoice, isSpecies, loadFineMeta, loadPousseMeta, membersOf, potentialSeries, type SeriesPoint, topSpots, type CoinsChoice, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
 import { reverseCity } from '../lib/geocoding'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import { LocateControl } from './LocateControl'
@@ -294,6 +294,7 @@ export function MapView() {
     }
   }, [])
   const [fineLoading, setFineLoading] = useState(false)
+  const [fineReady, setFineReady] = useState(false)
   // Sans réseau, seules les zones enregistrées ont le milieu à 20 m : la carte d'ensemble reste affichée à tous les zooms.
   const online = useSyncExternalStore(subscribeOffline, isOnline)
   const [obsMeta, setObsMeta] = useState<ObservationsMeta | null>(null)
@@ -747,12 +748,12 @@ export function MapView() {
             result={coinsResult}
             spots={spots}
             onSelectSpot={(s) => openSpot(s.lat, s.lon, s.name)}
-            hideFromZoom={fineIndices && online ? FINE_MIN_ZOOM : undefined}
+            hidden={!!fineIndices && online && fineReady}
             opacity={coinsOpacity}
           />
         )}
         {mode === 'coins' && coinsResult && coinsStatus === 'ready' && fineIndices && (
-          <CoinsFineLayer result={coinsResult} speciesIndices={fineIndices} opacity={coinsOpacity} onLoading={setFineLoading} />
+          <CoinsFineLayer result={coinsResult} speciesIndices={fineIndices} opacity={coinsOpacity} onLoading={setFineLoading} onReady={setFineReady} />
         )}
         {mode === 'coins' && observations && obsMeta && <ObservationsLayer meta={obsMeta} species={coinsSpecies} />}
         {mode === 'coins' && spot && <ForecastCross point={{ lat: spot.lat, lon: spot.lon }} />}

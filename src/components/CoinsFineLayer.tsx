@@ -8,14 +8,19 @@ import { displayValue, FINE_MAX_ZOOM, FINE_MIN_ZOOM, fineLevel, loadFineTile, pa
 
 // speciesIndices : rang de chaque espèce du choix dans les tuiles (une seule, ou les 4 cèpes : on garde le meilleur).
 // onLoading : vrai tant que des tuiles visibles sont en cours de calcul (pastille « Calcul des coins… »).
-type Props = { result: CoinsResult; speciesIndices: number[]; opacity: number; onLoading?: (loading: boolean) => void }
+// onReady : vrai dès que la carte fine est dessinée à un zoom ≥ 10 (la carte d'ensemble peut alors s'effacer), faux
+// en repassant sous le zoom 10. Un nouveau chargement à fort zoom ne le remet pas à faux : les tuiles du zoom
+// précédent restent affichées pendant ce temps.
+type Props = { result: CoinsResult; speciesIndices: number[]; opacity: number; onLoading?: (loading: boolean) => void; onReady?: (ready: boolean) => void }
 
-export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading }: Props) {
+export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading, onReady }: Props) {
   const map = useMap()
   const loadingRef = useRef(onLoading)
+  const readyRef = useRef(onReady)
   useEffect(() => {
     loadingRef.current = onLoading
-  }, [onLoading])
+    readyRef.current = onReady
+  }, [onLoading, onReady])
   const stateRef = useRef({ result, speciesIndices })
   const layerRef = useRef<L.GridLayer | null>(null)
 
@@ -153,11 +158,22 @@ export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading }: P
       className: 'coins-fine',
     })
     // Sous le zoom 10, plus aucune tuile n'est demandée : « load » ne viendrait jamais, on coupe la pastille.
-    const busy = () => loadingRef.current?.(map.getZoom() >= FINE_MIN_ZOOM)
+    // Pas de test du zoom ici : le chargement démarre PENDANT l'animation du zoom, quand map.getZoom() donne encore
+    // l'ancien zoom (< 10) — la pastille ne s'affichait pas au premier passage du zoom 10 (constaté le 01/11/2026).
+    // Des tuiles ne sont demandées qu'à partir du zoom 10 (minZoom), donc « loading » suffit.
+    const busy = () => loadingRef.current?.(true)
     const idle = () => loadingRef.current?.(false)
-    const onZoom = () => map.getZoom() < FINE_MIN_ZOOM && idle()
+    const loaded = () => {
+      idle()
+      if (map.getZoom() >= FINE_MIN_ZOOM) readyRef.current?.(true)
+    }
+    const onZoom = () => {
+      if (map.getZoom() >= FINE_MIN_ZOOM) return
+      idle()
+      readyRef.current?.(false)
+    }
     layer.on('loading', busy)
-    layer.on('load', idle)
+    layer.on('load', loaded)
     map.on('zoomend', onZoom)
     layer.addTo(map)
     layerRef.current = layer
@@ -166,6 +182,7 @@ export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading }: P
       layer.remove()
       layerRef.current = null
       idle()
+      readyRef.current?.(false)
     }
   }, [map])
 
