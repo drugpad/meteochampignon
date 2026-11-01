@@ -21,6 +21,19 @@ export const SPECIES: { key: Species; label: string; short: string; group: 'cepe
 ]
 export const isSpecies = (v: unknown): v is Species => SPECIES.some((s) => s.key === v)
 
+// Choix de la carte : une espèce, ou « Tous les cèpes » (01/11/2026 : on cherche souvent « des cèpes », pas une espèce ;
+// au Fréchet, le cèpe de Bordeaux était faible mais les cèpes d'été et bronzés très bons). Score = le MEILLEUR des quatre
+// cèpes à chaque endroit ; la fiche dit lequel.
+export type CoinsChoice = Species | 'cepes'
+export const CEPES: Species[] = ['cepe_ete', 'cepe_bronze', 'cepe_bordeaux', 'cepe_pins']
+export const CHOICES: { key: CoinsChoice; label: string; short: string; group: 'cepe' | 'autre'; hint: string }[] = [
+  { key: 'cepes', label: 'Tous les cèpes', short: 'Tous les cèpes', group: 'cepe', hint: 'le meilleur des 4 cèpes à chaque endroit ; touchez la carte pour savoir lequel' },
+  ...SPECIES,
+]
+export const isChoice = (v: unknown): v is CoinsChoice => CHOICES.some((s) => s.key === v)
+export const membersOf = (c: CoinsChoice): Species[] => (c === 'cepes' ? CEPES : [c])
+export const choiceLabel = (c: CoinsChoice): string => CHOICES.find((s) => s.key === c)?.label ?? c
+
 type Bounds = { latMin: number; latMax: number; lonMin: number; lonMax: number }
 type HabitatMeta = { bounds: Bounds; rows: number; cols: number; groups: string[]; species: Species[] }
 // reliable = false : jours 8 à 15 (modèle AIFS seul), seulement pour la courbe de la fiche, en pointillés.
@@ -134,24 +147,46 @@ export type CoinsResult = {
   bounds: Bounds
   day: PousseDay
   meta: PousseMeta
-  species: Species
-  pousse: Grid // météo de pousse de l'espèce (~1 km), réutilisée par les tuiles à 20 m
-  habitat: Grid // habitat de l'espèce (250 m), pour le contour des zones favorables
+  species: CoinsChoice
+  pousse: Grid // météo de pousse (~1 km) de la 1re espèce du choix
+  habitat: Grid // habitat (250 m), pour le contour des zones favorables (« Tous les cèpes » : le meilleur des 4)
+  // Espèces du choix (une seule, ou les 4 cèpes) avec leur habitat et leur météo de pousse.
+  members: { species: Species; habitat: Grid; pousse: Grid }[]
   // « Milieu seul » : score = habitat, sans la météo (les meilleurs coins dans l'absolu, quelle que soit la saison).
   habitatOnly: boolean
   // Clin d'œil « lune » (croyance populaire, lib/moon.ts) : facteur appliqué au score de pousse, 1 si désactivé.
   moonFactor: number
 }
 
-export async function computeCoins(sp: Species, dayIndex: number, habitatOnly = false, moon = false): Promise<CoinsResult> {
+export async function computeCoins(choice: CoinsChoice, dayIndex: number, habitatOnly = false, moon = false): Promise<CoinsResult> {
   const [hmeta, meta] = await Promise.all([loadHabitatMeta(), loadPousseMeta()])
   const day = meta.days[Math.min(dayIndex, meta.days.length - 1)]
+  const species = membersOf(choice)
   // Espèce ajoutée dans l'appli mais pas encore calculée côté serveur (entre deux publications).
-  if (!day.files[sp]) throw new Error('espèce pas encore calculée')
-  const [hab, pou] = await Promise.all([loadHabitat(sp), loadPousse(day.files[sp])])
-  const { width, height } = hab
+  if (species.some((sp) => !day.files[sp])) throw new Error('espèce pas encore calculée')
+  const members = await Promise.all(
+    species.map(async (sp) => {
+      const [habitat, pousse] = await Promise.all([loadHabitat(sp), loadPousse(day.files[sp])])
+      return { species: sp, habitat, pousse }
+    }),
+  )
+  const { width, height } = members[0].habitat
   const score = new Float32Array(width * height)
   const moonFactor = moon && !habitatOnly ? moonPhase(day.date).factor : 1
+  for (const m of members) scoreInto(score, m.habitat, m.pousse, habitatOnly, moonFactor)
+  // Contour des zones : le meilleur milieu parmi les espèces du choix.
+  let habitat = members[0].habitat
+  if (members.length > 1) {
+    const values = new Uint8ClampedArray(width * height)
+    for (const m of members) for (let i = 0; i < values.length; i++) values[i] = Math.max(values[i], m.habitat.values[i])
+    habitat = { width, height, values }
+  }
+  return { score, width, height, bounds: hmeta.bounds, day, meta, species: choice, pousse: members[0].pousse, habitat, members, habitatOnly, moonFactor }
+}
+
+// Score d'une espèce (habitat x météo interpolée) gardé s'il dépasse celui déjà dans `score` (maximum sur le choix).
+function scoreInto(score: Float32Array, hab: Grid, pou: Grid, habitatOnly: boolean, moonFactor: number): void {
+  const { width, height } = hab
   const fx = pou.width / width
   const fy = pou.height / height
   for (let r = 0; r < height; r++) {
@@ -163,7 +198,7 @@ export async function computeCoins(sp: Species, dayIndex: number, habitatOnly = 
       const h = hab.values[r * width + c]
       if (h === 0) continue
       if (habitatOnly) {
-        score[r * width + c] = h / 255
+        score[r * width + c] = Math.max(score[r * width + c], h / 255)
         continue
       }
       const x = Math.min(Math.max((c + 0.5) * fx - 0.5, 0), pou.width - 1)
@@ -173,10 +208,9 @@ export async function computeCoins(sp: Species, dayIndex: number, habitatOnly = 
       const p =
         (pou.values[y0 * pou.width + x0] * (1 - wx) + pou.values[y0 * pou.width + x1] * wx) * (1 - wy) +
         (pou.values[y1 * pou.width + x0] * (1 - wx) + pou.values[y1 * pou.width + x1] * wx) * wy
-      score[r * width + c] = Math.min(1, (h / 255) * (p / 255) * moonFactor)
+      score[r * width + c] = Math.max(score[r * width + c], Math.min(1, (h / 255) * (p / 255) * moonFactor))
     }
   }
-  return { score, width, height, bounds: hmeta.bounds, day, meta, species: sp, pousse: pou, habitat: hab, habitatOnly, moonFactor }
 }
 
 // Palette : transparent sous 0,12, puis jaune -> orange -> rouge -> violet foncé.
@@ -347,6 +381,9 @@ export type SpotDetail = {
   nearby: NearbyMeasure[]
   // Le modèle est-il d'accord avec le pluviomètre proche le plus comparable ? (voir rainCheck)
   rainCheck: RainCheck
+  // « Tous les cèpes » : espèce décrite (la plus probable ici) et note de chacune, de la meilleure à la moins bonne.
+  bestSpecies?: Species
+  ranking?: { species: Species; score: number }[]
 }
 
 // Compare la pluie du modèle (15 jours) à ce que la station la plus comparable (distance + altitude) a mesuré, ramené à
@@ -370,7 +407,36 @@ export function rainCheck(modelRain15: number, nearby: NearbyMeasure[]): RainChe
   return { status: 'ok', text: `✓ Cohérent avec ${where} : ${fr(ref.rainMm)} mm mesurés en ${ref.days} jours (modèle : ${modelRain15} mm sur 15 jours).` }
 }
 
-export async function describeSpot(res: CoinsResult, sp: Species, lat: number, lon: number): Promise<SpotDetail | null> {
+export async function describeSpot(res: CoinsResult, lat: number, lon: number): Promise<SpotDetail | null> {
+  if (res.members.length > 1) {
+    // « Tous les cèpes » : on note chaque cèpe au point, puis on décrit le plus probable.
+    const { bounds, width, height } = res
+    const row = Math.floor(((bounds.latMax - lat) / (bounds.latMax - bounds.latMin)) * height)
+    const col = Math.floor(((lon - bounds.lonMin) / (bounds.lonMax - bounds.lonMin)) * width)
+    if (row < 0 || col < 0 || row >= height || col >= width) return null
+    const ranking = await Promise.all(
+      res.members.map(async (m) => {
+        const h = (await sampleFineHabitat(m.species, lat, lon)) ?? m.habitat.values[row * width + col] / 255
+        const value = res.habitatOnly ? h : Math.min(1, h * pousseAt({ ...res, pousse: m.pousse }, lat, lon) * res.moonFactor)
+        return { member: m, value }
+      }),
+    )
+    ranking.sort((a, b) => b.value - a.value)
+    const best = ranking[0].member
+    const detail = await describeSpot({ ...res, species: best.species, pousse: best.pousse, habitat: best.habitat, members: [best] }, lat, lon)
+    if (!detail) return null
+    // « cèpe d'été », « cèpe de Bordeaux » : minuscule au début seulement.
+    const lower = (sp: Species) => choiceLabel(sp).replace(/^C/, 'c')
+    const all = ranking.map((r) => ({ species: r.member.species, score: r.value }))
+    if (ranking[0].value < 0.05) {
+      detail.reasons.unshift('Aucun des quatre cèpes n’est probable ici.')
+      return { ...detail, ranking: all }
+    }
+    const others = ranking.slice(1).map((r) => `${lower(r.member.species)} ${Math.round(r.value * 100)} %`)
+    detail.reasons.unshift(`Le cèpe le plus probable ici : ${lower(best.species)} (${Math.round(ranking[0].value * 100)} %). Les autres : ${others.join(', ')}.`)
+    return { ...detail, bestSpecies: best.species, ranking: all }
+  }
+  const sp = res.members[0].species
   const { bounds, width, height } = res
   const row = Math.floor(((bounds.latMax - lat) / (bounds.latMax - bounds.latMin)) * height)
   const col = Math.floor(((lon - bounds.lonMin) / (bounds.lonMax - bounds.lonMin)) * width)
@@ -512,14 +578,20 @@ export function pousseAt(res: CoinsResult, lat: number, lon: number): number {
 // Courbe de potentiel d'un endroit : habitat (fixe) x météo de pousse de chaque jour publié (jusqu'à 15).
 export type SeriesPoint = { date: string; value: number; reliable: boolean }
 
-export async function potentialSeries(res: CoinsResult, sp: Species, lat: number, lon: number, habitat: number): Promise<SeriesPoint[]> {
-  const days = res.meta.days.filter((d) => d.files[sp])
-  const grids = await Promise.all(days.map((d) => loadPousse(d.files[sp]).catch(() => null)))
+export async function potentialSeries(res: CoinsResult, lat: number, lon: number, habitat: number): Promise<SeriesPoint[]> {
+  const species = res.members.map((m) => m.species)
+  // Habitat de chaque espèce au point (une seule espèce : celui déjà lu par la fiche). « Tous les cèpes » : chaque jour,
+  // le meilleur des quatre (le cèpe le plus probable peut changer d'un jour à l'autre).
+  const habitats = species.length === 1 ? [habitat] : await Promise.all(species.map(async (sp) => (await sampleFineHabitat(sp, lat, lon)) ?? 0))
+  const days = res.meta.days.filter((d) => species.every((sp) => d.files[sp]))
+  const grids = await Promise.all(days.map((d) => Promise.all(species.map((sp) => loadPousse(d.files[sp]).catch(() => null)))))
   return days.flatMap((d, k) => {
-    const g = grids[k]
-    if (!g) return []
     const moon = res.moonFactor !== 1 ? moonPhase(d.date).factor : 1
-    return [{ date: d.date, value: Math.min(1, habitat * pousseAt({ ...res, pousse: g }, lat, lon) * moon), reliable: d.reliable !== false }]
+    let value = -1
+    grids[k].forEach((g, j) => {
+      if (g) value = Math.max(value, Math.min(1, habitats[j] * pousseAt({ ...res, pousse: g }, lat, lon) * moon))
+    })
+    return value < 0 ? [] : [{ date: d.date, value, reliable: d.reliable !== false }]
   })
 }
 

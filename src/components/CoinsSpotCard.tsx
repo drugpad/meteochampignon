@@ -3,13 +3,13 @@
 // pour garder la carte visible, dépliée d'un appui sur l'en-tête (retour utilisateur : « des fois certaines
 // fenêtres cachent tout »). Sur grand écran, toujours dépliée.
 import { useEffect, useRef, useState } from 'react'
-import { outlook as buildOutlook, SPECIES, scoreLabel, type SeriesPoint, type Species, type SpotDetail } from '../lib/coins'
+import { choiceLabel, outlook as buildOutlook, scoreLabel, type CoinsChoice, type SeriesPoint, type SpotDetail } from '../lib/coins'
 import { useParisToday } from '../lib/useParisToday'
 import { PotentialChart } from './PotentialChart'
 import './CoinsSpotCard.css'
 
 type Props = {
-  species: Species
+  species: CoinsChoice
   lat: number
   lon: number
   name: string | null
@@ -27,7 +27,6 @@ const isMobile = () => window.matchMedia('(max-width: 640px)').matches
 export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series, milieuOnly = false, onClose }: Props) {
   const { today } = useParisToday()
   const [expanded, setExpanded] = useState(() => !isMobile())
-  const sp = SPECIES.find((s) => s.key === species)!
   const nav = `https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(5)},${lon.toFixed(5)}`
   const best = series?.length ? series.reduce((b, p) => (p.value > b.value ? p : b)) : null
   const rawOutlook = !milieuOnly && series ? buildOutlook(series, today) : null
@@ -68,7 +67,8 @@ export function CoinsSpotCard({ species, lat, lon, name, detail, loading, series
         <button type="button" className="spot-card__head-main" onClick={() => setExpanded((e) => !e)} aria-expanded={expanded}>
           <span className="spot-card__title">{name ?? 'Endroit choisi'}</span>
           <span className="spot-card__sub">
-            {sp.label}
+            {/* « Tous les cèpes » : le cèpe le plus probable ici. */}
+            {detail?.bestSpecies ? choiceLabel(detail.bestSpecies) : choiceLabel(species)}
             {detail && (
               <>
                 {' · '}

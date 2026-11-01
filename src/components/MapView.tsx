@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, LayersControl, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
@@ -24,7 +24,7 @@ import { CoinsControls, type CoinsView, type NamedSpot } from './CoinsControls'
 import { CoinsFineLayer } from './CoinsFineLayer'
 import { CoinsLayer } from './CoinsLayer'
 import { CoinsSpotCard } from './CoinsSpotCard'
-import { computeCoins, describeSpot, FINE_MIN_ZOOM, isSpecies, loadFineMeta, loadPousseMeta, potentialSeries, type SeriesPoint, topSpots, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
+import { computeCoins, describeSpot, FINE_MIN_ZOOM, isChoice, isSpecies, loadFineMeta, loadPousseMeta, membersOf, potentialSeries, type SeriesPoint, topSpots, type CoinsChoice, type CoinsResult, type PousseMeta, type Species, type SpotDetail } from '../lib/coins'
 import { reverseCity } from '../lib/geocoding'
 import { HistoryLayersControl, loadHistoryLayers, type HistoryLayers } from './HistoryLayersControl'
 import { LocateControl } from './LocateControl'
@@ -247,16 +247,16 @@ export function MapView() {
   }, [])
 
   // ---- Mode « Coins » : habitat x météo de pousse (lib/coins.ts). ----
-  const [coinsSpecies, setCoinsSpeciesState] = useState<Species>(() => {
+  const [coinsSpecies, setCoinsSpeciesState] = useState<CoinsChoice>(() => {
     try {
       const saved = localStorage.getItem('mc-coins-species')
-      if (isSpecies(saved)) return saved
+      if (isChoice(saved)) return saved
     } catch {
       // stockage indisponible
     }
     return 'cepe_bordeaux'
   })
-  const setCoinsSpecies = useCallback((sp: Species) => {
+  const setCoinsSpecies = useCallback((sp: CoinsChoice) => {
     setCoinsSpeciesState(sp)
     try {
       localStorage.setItem('mc-coins-species', sp)
@@ -321,7 +321,12 @@ export function MapView() {
   useEffect(() => {
     if (mode === 'coins') void loadFineMeta().then((m) => setFineSpecies(m?.species ?? null))
   }, [mode])
-  const fineIndex = fineSpecies ? fineSpecies.indexOf(coinsSpecies) : -1
+  // Rang de chaque espèce du choix dans les tuiles à 20 m (null si l'une manque : on reste sur la carte à 250 m).
+  const fineIndices = useMemo(() => {
+    if (!fineSpecies) return null
+    const idx = membersOf(coinsSpecies).map((sp) => fineSpecies.indexOf(sp))
+    return idx.every((i) => i >= 0) ? idx : null
+  }, [fineSpecies, coinsSpecies])
   const [spot, setSpot] = useState<{
     lat: number
     lon: number
@@ -373,16 +378,16 @@ export function MapView() {
         if (pt.y > h - 230 || pt.y < 190) map.panTo([lat, lon])
       }
       setSpot({ lat, lon, name: knownName, detail: null, loading: true, series: null })
-      void describeSpot(coinsResult, coinsSpecies, lat, lon).then(async (detail) => {
+      void describeSpot(coinsResult, lat, lon).then(async (detail) => {
         setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, detail, loading: false } : s))
         // Courbe sur 15 jours : même habitat que la fiche, météo de pousse de chaque jour publié.
         if (!detail) return
-        const series = await potentialSeries(coinsResult, coinsSpecies, lat, lon, detail.habitat)
+        const series = await potentialSeries(coinsResult, lat, lon, detail.habitat)
         setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, series } : s))
       })
       if (!knownName) void reverseCity(lat, lon).then((name) => setSpot((s) => (s && s.lat === lat && s.lon === lon ? { ...s, name } : s)))
     },
-    [coinsResult, coinsSpecies, map],
+    [coinsResult, map],
   )
   // Espèce ou jour changés : la fiche ouverte n'est plus valable.
   useEffect(() => setSpot(null), [coinsSpecies, coinsDay, mode, coinsView])
@@ -622,7 +627,7 @@ export function MapView() {
             onObservations={setObservations}
             opacity={coinsOpacity}
             onOpacity={setCoinsOpacity}
-            obsCount={obsMeta ? (obsMeta.species[coinsSpecies]?.length ?? 0) : null}
+            obsCount={obsMeta ? membersOf(coinsSpecies).reduce((n, sp) => n + (obsMeta.species[sp]?.length ?? 0), 0) : null}
             onSelectSpot={(s) => {
               map?.flyTo([s.lat, s.lon], Math.max(map.getZoom(), 13))
               openSpot(s.lat, s.lon, s.name)
@@ -737,12 +742,12 @@ export function MapView() {
             result={coinsResult}
             spots={spots}
             onSelectSpot={(s) => openSpot(s.lat, s.lon, s.name)}
-            hideFromZoom={fineIndex >= 0 ? FINE_MIN_ZOOM : undefined}
+            hideFromZoom={fineIndices ? FINE_MIN_ZOOM : undefined}
             opacity={coinsOpacity}
           />
         )}
-        {mode === 'coins' && coinsResult && coinsStatus === 'ready' && fineIndex >= 0 && (
-          <CoinsFineLayer result={coinsResult} speciesIndex={fineIndex} opacity={coinsOpacity} />
+        {mode === 'coins' && coinsResult && coinsStatus === 'ready' && fineIndices && (
+          <CoinsFineLayer result={coinsResult} speciesIndices={fineIndices} opacity={coinsOpacity} />
         )}
         {mode === 'coins' && observations && obsMeta && <ObservationsLayer meta={obsMeta} species={coinsSpecies} />}
         {mode === 'coins' && spot && <ForecastCross point={{ lat: spot.lat, lon: spot.lon }} />}

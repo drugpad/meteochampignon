@@ -2,10 +2,10 @@
 import L from 'leaflet'
 import { useEffect } from 'react'
 import { useMap } from 'react-leaflet'
-import { SPECIES, type Species } from '../lib/coins'
+import { choiceLabel, membersOf, type CoinsChoice } from '../lib/coins'
 import { formatObservationDate, type ObservationsMeta } from '../lib/observations'
 
-type Props = { meta: ObservationsMeta; species: Species }
+type Props = { meta: ObservationsMeta; species: CoinsChoice }
 
 const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
@@ -16,9 +16,10 @@ export function ObservationsLayer({ meta, species }: Props) {
     // Calque propre au-dessus des coins (350) et sous les bulles ; rendu canvas (des centaines de points).
     if (!map.getPane('observations')) map.createPane('observations').style.zIndex = '450'
     const renderer = L.canvas({ pane: 'observations' })
-    const label = SPECIES.find((s) => s.key === species)?.label ?? species
     const group = L.layerGroup()
-    for (const [lat, lon, when, ds, unc] of meta.species[species] ?? []) {
+    // « Tous les cèpes » : les trouvailles des 4 cèpes, chacune avec le nom de son espèce.
+    const points = membersOf(species).flatMap((sp) => (meta.species[sp] ?? []).map((p) => ({ p, label: choiceLabel(sp) })))
+    for (const { p: [lat, lon, when, ds, unc], label } of points) {
       const dataset = meta.datasets[ds]
       const marker = L.circleMarker([lat, lon], {
         pane: 'observations',

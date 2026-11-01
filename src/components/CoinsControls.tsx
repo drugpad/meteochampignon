@@ -1,7 +1,7 @@
 // Mode « Coins » : choix de l'espèce et du jour, légende, palmarès des meilleurs secteurs (voir lib/coins.ts).
 import { usePanelCollapse } from '../lib/usePanelCollapse'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { COINS_LEGEND, SPECIES, scoreLabel, type PousseMeta, type Species } from '../lib/coins'
+import { CHOICES, COINS_LEGEND, scoreLabel, type CoinsChoice, type PousseMeta } from '../lib/coins'
 import { formatRelativeAge } from '../lib/formatRelativeAge'
 import { moonPhase } from '../lib/moon'
 import { useParisToday } from '../lib/useParisToday'
@@ -12,8 +12,8 @@ const DAY_FORMATTER = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 
 export type NamedSpot = { lat: number; lon: number; score: number; name: string | null }
 
 type Props = {
-  species: Species
-  onSpecies: (s: Species) => void
+  species: CoinsChoice
+  onSpecies: (s: CoinsChoice) => void
   dayIndex: number
   onDay: (i: number) => void
   meta: PousseMeta | null
@@ -55,7 +55,7 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
   }, [status])
   const { today, tomorrow } = useParisToday()
   const dayLabel = (date: string) => (date === today ? 'Auj.' : date === tomorrow ? 'Dem.' : DAY_FORMATTER.format(new Date(date)))
-  const sp = SPECIES.find((s) => s.key === species)!
+  const sp = CHOICES.find((s) => s.key === species)!
   const day = meta?.days[dayIndex]
 
   return (
@@ -98,13 +98,13 @@ export function CoinsControls({ species, onSpecies, dayIndex, onDay, meta, statu
             <div key={group} className="coins__group" role="radiogroup" aria-label={group === 'cepe' ? 'Cèpes' : 'Autres espèces'}>
               <div className="coins__group-title">{group === 'cepe' ? 'Cèpes' : 'Autres'}</div>
               <div className={group === 'cepe' ? 'coins__chips' : 'coins__chips coins__chips--3'}>
-                {SPECIES.filter((s) => s.group === group).map((s) => (
+                {CHOICES.filter((s) => s.group === group).map((s) => (
                   <button
                     key={s.key}
                     type="button"
                     role="radio"
                     aria-checked={s.key === species}
-                    className={s.key === species ? 'coins__chip coins__chip--on' : 'coins__chip'}
+                    className={`coins__chip${s.key === species ? ' coins__chip--on' : ''}${s.key === 'cepes' ? ' coins__chip--wide' : ''}`}
                     onClick={() => onSpecies(s.key)}
                   >
                     {s.short}

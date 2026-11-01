@@ -271,6 +271,17 @@ Trois explications, dans l'ordre :
 
 **Lecture de la carte** (question de l'utilisateur, « qu'est-ce qui est entouré de noir ? ») : le trait brun foncé entoure les zones où le MILIEU convient (≥ 50 %), quelle que soit la météo, avec un léger voile brun ; la couleur donne la note (milieu × météo du jour, ou milieu seul). Entouré et coloré = meilleurs coins du moment ; entouré mais pâle = bon milieu, météo défavorable ; coloré sans contour = milieu moyen (l'espèce y pousse, moins souvent) ; rien = milieu peu favorable.
 
+## 9. Front d'altitude testé, « Tous les cèpes » ajouté (01/11/2026)
+
+**Front d'altitude (idée : la pousse descend la montagne au fil de l'automne, corriger la température selon l'altitude réelle du bois)** — testé AVANT de coder :
+- Le front existe dans les trouvailles brutes (altitude médiane du cèpe de Bordeaux : 1 180 m en juillet, 920 m en septembre, 745 m en octobre, 500 m en novembre ; trompette 750 → 440 m ; coulemelle 1 365 → 340 m), mais **les cueilleurs font le même trajet** : les autres champignons notés passent de ~900 m en août à ~400 m en novembre.
+- Corriger la température selon l'altitude du point (−6,5 °C/km) améliore un peu la météo seule (cèpe d'été 0,732 → 0,745, bronzé 0,787 → 0,802, Bordeaux 0,660 → 0,668 ; trompette et coulemelle un peu moins bien), mais **la note finale ne bouge pas** (±0,005) : la courbe d'altitude du milieu tient déjà compte de l'essentiel.
+- **Décision : pas de refonte** (il aurait fallu recalculer la pousse pixel par pixel dans le navigateur) sans gain mesurable. Limite du test : météo ERA5 à 25 km ; à reprendre si l'on valide un jour avec AROME archivé.
+
+**« Tous les cèpes »** (bouton en tête des cèpes) : à chaque endroit, le MEILLEUR des quatre cèpes (milieu × météo, ou milieu seul), carte d'ensemble et carte fine ; contour = meilleur milieu des quatre ; la fiche dit quel cèpe est le plus probable et note les autres (ex. Saint-Amans-Soult : cèpe de Bordeaux 55 %, cèpe des pins 16 %…) ; la courbe sur 15 jours prend chaque jour le meilleur ; les observations réelles affichées sont celles des quatre. Motivation : on cherche souvent « des cèpes » (cas du Fréchet, section 8).
+
+Remarque : la carte du milieu ne couvre que les 8 départements de Midi-Pyrénées (BD Forêt, géologie, couvert téléchargés pour eux seuls) : au-delà de la limite (ex. lac de la Raviège côté Hérault), rien ne s'affiche.
+
 ## État d'avancement et suite
 
 - **Fait et publié (30-31/10/2026)** : sections 5 à 8. Code sur `master` (commits « Coins v4 » puis correctifs d'affichage), tuiles à 20 m sur la branche `habitat` (un seul commit, remplacé à chaque version), cartes de pousse recalculées par `maps.yml` avec le nouveau modèle (historique météo de 60 jours complet). Anciennes sorties gardées dans `.cache-habitat/old-20261030/` (547 Mo, à effacer une fois la nouvelle version jugée bonne ; le disque C: du poste n'a plus que ~5 Go libres).

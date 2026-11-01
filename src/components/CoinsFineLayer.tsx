@@ -6,11 +6,12 @@ import { useEffect, useRef } from 'react'
 import { useMap } from 'react-leaflet'
 import { displayValue, FINE_MAX_ZOOM, FINE_MIN_ZOOM, fineLevel, loadFineTile, paintZones, type CoinsResult } from '../lib/coins'
 
-type Props = { result: CoinsResult; speciesIndex: number; opacity: number }
+// speciesIndices : rang de chaque espèce du choix dans les tuiles (une seule, ou les 4 cèpes : on garde le meilleur).
+type Props = { result: CoinsResult; speciesIndices: number[]; opacity: number }
 
-export function CoinsFineLayer({ result, speciesIndex, opacity }: Props) {
+export function CoinsFineLayer({ result, speciesIndices, opacity }: Props) {
   const map = useMap()
-  const stateRef = useRef({ result, speciesIndex })
+  const stateRef = useRef({ result, speciesIndices })
   const layerRef = useRef<L.GridLayer | null>(null)
 
   useEffect(() => {
@@ -81,7 +82,7 @@ export function CoinsFineLayer({ result, speciesIndex, opacity }: Props) {
     }
 
     const paint = (tile: HTMLCanvasElement, rgba: Uint8ClampedArray, z: number, x: number, y: number, scale: number) => {
-      const { result: res, speciesIndex: idx } = stateRef.current
+      const { result: res, speciesIndices } = stateRef.current
       const ctx = tile.getContext('2d')!
       const img = ctx.createImageData(256, 256)
       const n = 2 ** z
@@ -97,32 +98,37 @@ export function CoinsFineLayer({ result, speciesIndex, opacity }: Props) {
         const lat = (Math.atan(Math.sinh(m)) * 180) / Math.PI
         gy[i] = Math.min(Math.max(((b.latMax - lat) / (b.latMax - b.latMin)) * g.height - 0.5, 0), g.height - 1)
       }
-      const v = g.values
       const score = new Float32Array(256 * 256)
-      const levels = levelsFor(rgba, idx, x, y, scale)
-      for (let r = 0; r < 256; r++) {
-        const y0 = Math.floor(gy[r])
-        const y1 = Math.min(y0 + 1, g.height - 1)
-        const wy = gy[r] - y0
-        for (let c = 0; c < 256; c++) {
-          const i = r * 256 + c
-          const level = levels[i]
-          if (level < 0.5) continue
-          // « Milieu seul » : l'habitat à 20 m, sans la météo.
-          if (res.habitatOnly) {
-            score[i] = level / 7
-            continue
+      // Niveau retenu pour le contour des zones : le meilleur milieu parmi les espèces du choix.
+      const levels = new Float32Array(256 * 256)
+      speciesIndices.forEach((idx, k) => {
+        const own = levelsFor(rgba, idx, x, y, scale)
+        const v = (res.members[k] ?? res.members[0]).pousse.values
+        for (let r = 0; r < 256; r++) {
+          const y0 = Math.floor(gy[r])
+          const y1 = Math.min(y0 + 1, g.height - 1)
+          const wy = gy[r] - y0
+          for (let c = 0; c < 256; c++) {
+            const i = r * 256 + c
+            const level = own[i]
+            if (level > levels[i]) levels[i] = level
+            if (level < 0.5) continue
+            // « Milieu seul » : l'habitat à 20 m, sans la météo.
+            if (res.habitatOnly) {
+              score[i] = Math.max(score[i], level / 7)
+              continue
+            }
+            const x0 = Math.floor(gx[c])
+            const x1 = Math.min(x0 + 1, g.width - 1)
+            const wx = gx[c] - x0
+            const p =
+              ((v[y0 * g.width + x0] * (1 - wx) + v[y0 * g.width + x1] * wx) * (1 - wy) +
+                (v[y1 * g.width + x0] * (1 - wx) + v[y1 * g.width + x1] * wx) * wy) /
+              255
+            score[i] = Math.max(score[i], Math.min(1, (level / 7) * p * res.moonFactor))
           }
-          const x0 = Math.floor(gx[c])
-          const x1 = Math.min(x0 + 1, g.width - 1)
-          const wx = gx[c] - x0
-          const p =
-            ((v[y0 * g.width + x0] * (1 - wx) + v[y0 * g.width + x1] * wx) * (1 - wy) +
-              (v[y1 * g.width + x0] * (1 - wx) + v[y1 * g.width + x1] * wx) * wy) /
-            255
-          score[i] = Math.min(1, (level / 7) * p * res.moonFactor)
         }
-      }
+      })
       // Zone favorable = habitat ≥ 4/7 (≥ 50 %) : voile + contour, couleur de pousse par-dessus.
       // Seuil 3,5 sur le niveau interpolé = mi-chemin entre une case à 3/7 et une case à 4/7.
       paintZones(img.data, 256, 256, (i) => displayValue(res, score[i]), (i) => levels[i] >= 3.5, z >= 15 ? 2 : 1)
@@ -156,9 +162,9 @@ export function CoinsFineLayer({ result, speciesIndex, opacity }: Props) {
 
   // Espèce ou jour changés : on repeint (les tuiles d'habitat restent en mémoire, seul le calcul est refait).
   useEffect(() => {
-    stateRef.current = { result, speciesIndex }
+    stateRef.current = { result, speciesIndices }
     layerRef.current?.redraw()
-  }, [result, speciesIndex])
+  }, [result, speciesIndices])
 
   return null
 }
