@@ -319,6 +319,7 @@ Remarque : la carte du milieu ne couvre que les 8 départements de Midi-Pyréné
   4. Température de pousse corrigée de l'altitude dans la carte réelle (AROME à 1,3 km, 2-3 °C d'écart possible en montagne ; limite connue, CLAUDE.md 3.4ter).
   5. Explications de la fiche d'un coin : la grille d'essences à 250 m (« hors forêt cartographiée ») peut contredire le milieu à 20 m du point (petit bois, haie) ; passer la fiche aux variables à 20 m (`covariates-20m.tif`).
   6. Rafraîchir les observations GBIF de temps en temps (`scripts/validation/gbif_fetch_all.py`, puis `scripts/build-observations.py` et la validation).
+  7. Gel et espèces de fin de saison : la pénalité de gel (minimum < -1 °C sur 3 jours → x 0,3) s'applique aussi au pied de mouton et à la chanterelle en tube, réputés résister aux premières gelées : probablement trop sévère. À vérifier sur les observations GBIF (trouvailles après une gelée) avant de l'adoucir.
 
 ## Sources
 
