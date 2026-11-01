@@ -13,7 +13,9 @@ type Props = { result: CoinsResult; speciesIndices: number[]; opacity: number; o
 export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading }: Props) {
   const map = useMap()
   const loadingRef = useRef(onLoading)
-  loadingRef.current = onLoading
+  useEffect(() => {
+    loadingRef.current = onLoading
+  }, [onLoading])
   const stateRef = useRef({ result, speciesIndices })
   const layerRef = useRef<L.GridLayer | null>(null)
 
