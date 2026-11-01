@@ -7,6 +7,7 @@
 // Fond de carte : le Plan IGN (Géoplateforme, données ouvertes), PAS OpenStreetMap — la politique
 // d'usage des tuiles OSM interdit le téléchargement en masse pour un usage hors ligne.
 import { PHOTOS } from '../data/champignonPhotos'
+import { coinsOfflineUrls, fineTileUrlsFor } from './coins'
 import { fetchRainMapsMeta, rainMapsUrls } from './rainMaps'
 import { HISTORY_FALLBACK_URL, HISTORY_RAW_URL } from './stations'
 import { REGION_BOUNDS } from './regionOutline'
@@ -43,6 +44,7 @@ export type OfflineInfo = {
   files: number
   bytes: number
   mapsFetchedAt: string | null // date de génération des cartes de pluie enregistrées
+  coinsGeneratedAt?: string | null // date de calcul des coins (pousse) enregistrés ; absent = copie d'avant le 01/11/2026
 }
 
 export type OfflineProgress = { done: number; total: number; stage: string }
@@ -336,6 +338,26 @@ export async function downloadOffline(
   lap('maps.json lu')
   done += 10
   const dataUrls = [...rainMapsUrls(meta), HISTORY_RAW_URL]
+  // Coins à champignons : facultatifs (un échec n'empêche pas la copie du reste).
+  const coins = await coinsOfflineUrls().catch(() => null)
+  const coinsUrls = coins?.urls ?? []
+  let coinsFailures = 0
+  await runPool(
+    coinsUrls,
+    async (url) => {
+      try {
+        const fresh = url.endsWith('.json')
+        const size = await store(cache, url, fresh ? { cache: 'no-store' } : undefined)
+        bytes += size
+        files++
+      } catch {
+        coinsFailures++
+      }
+    },
+    signal,
+    6,
+  )
+  lap(`coins enregistrés (${coinsUrls.length - coinsFailures}/${coinsUrls.length})`)
   await runPool(
     dataUrls,
     async (url) => {
@@ -370,6 +392,7 @@ export async function downloadOffline(
     files,
     bytes,
     mapsFetchedAt: meta.fetchedAt,
+    coinsGeneratedAt: coins && coinsFailures === 0 ? coins.generatedAt : null,
   }
   writeOfflineInfo(info)
   return info
@@ -429,8 +452,10 @@ export async function downloadZone(
   signal: AbortSignal,
 ): Promise<OfflineZone> {
   if (!offlineSupported()) throw new Error("Ce navigateur ne permet pas l'enregistrement hors ligne.")
-  const tiles = zoneTileUrls(bounds)
-  if (tiles.length > ZONE_MAX_TILES) throw new Error("Zone trop grande : zoome davantage sur la carte avant d'enregistrer.")
+  const ign = zoneTileUrls(bounds)
+  if (ign.length > ZONE_MAX_TILES) throw new Error("Zone trop grande : zoome davantage sur la carte avant d'enregistrer.")
+  // + milieu des coins à 20 m (zooms 10 à 13) sur la zone : quelques dizaines de tuiles (404 = pas de milieu, normal).
+  const tiles = [...ign, ...fineTileUrlsFor(bounds)]
   const cache = await caches.open(OFFLINE_CACHE)
   let bytes = 0
   let files = 0
@@ -480,11 +505,11 @@ export async function deleteZone(id: string): Promise<void> {
   const rest = zones.filter((z) => z.id !== id)
   writeZones(rest)
   if (!zone || typeof caches === 'undefined') return
-  const keep = new Set(rest.flatMap((z) => zoneTileUrls(z.bounds)))
+  const keep = new Set(rest.flatMap((z) => [...zoneTileUrls(z.bounds), ...fineTileUrlsFor(z.bounds)]))
   const regionMax = readOfflineInfo()?.maxZoom ?? 0
   for (const url of tileUrls(regionMax >= MIN_ZOOM ? regionMax : MIN_ZOOM - 1)) keep.add(url)
   const cache = await caches.open(OFFLINE_CACHE)
-  await Promise.all(zoneTileUrls(zone.bounds).filter((u) => !keep.has(u)).map((u) => cache.delete(u)))
+  await Promise.all([...zoneTileUrls(zone.bounds), ...fineTileUrlsFor(zone.bounds)].filter((u) => !keep.has(u)).map((u) => cache.delete(u)))
 }
 
 // ---------------------------------------------------------------------------------------------

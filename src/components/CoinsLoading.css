@@ -1,0 +1,40 @@
+.coins-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 900;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  color: #78350f;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.coins-loading__spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fde68a;
+  border-top-color: #b45309;
+  border-radius: 50%;
+  animation: coins-loading-spin 0.8s linear infinite;
+}
+
+@keyframes coins-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coins-loading__spinner {
+    animation-duration: 2.4s;
+  }
+}

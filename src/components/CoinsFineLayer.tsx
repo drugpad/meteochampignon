@@ -7,10 +7,13 @@ import { useMap } from 'react-leaflet'
 import { displayValue, FINE_MAX_ZOOM, FINE_MIN_ZOOM, fineLevel, loadFineTile, paintZones, type CoinsResult } from '../lib/coins'
 
 // speciesIndices : rang de chaque espèce du choix dans les tuiles (une seule, ou les 4 cèpes : on garde le meilleur).
-type Props = { result: CoinsResult; speciesIndices: number[]; opacity: number }
+// onLoading : vrai tant que des tuiles visibles sont en cours de calcul (pastille « Calcul des coins… »).
+type Props = { result: CoinsResult; speciesIndices: number[]; opacity: number; onLoading?: (loading: boolean) => void }
 
-export function CoinsFineLayer({ result, speciesIndices, opacity }: Props) {
+export function CoinsFineLayer({ result, speciesIndices, opacity, onLoading }: Props) {
   const map = useMap()
+  const loadingRef = useRef(onLoading)
+  loadingRef.current = onLoading
   const stateRef = useRef({ result, speciesIndices })
   const layerRef = useRef<L.GridLayer | null>(null)
 
@@ -147,11 +150,20 @@ export function CoinsFineLayer({ result, speciesIndices, opacity }: Props) {
       opacity,
       className: 'coins-fine',
     })
+    // Sous le zoom 10, plus aucune tuile n'est demandée : « load » ne viendrait jamais, on coupe la pastille.
+    const busy = () => loadingRef.current?.(map.getZoom() >= FINE_MIN_ZOOM)
+    const idle = () => loadingRef.current?.(false)
+    const onZoom = () => map.getZoom() < FINE_MIN_ZOOM && idle()
+    layer.on('loading', busy)
+    layer.on('load', idle)
+    map.on('zoomend', onZoom)
     layer.addTo(map)
     layerRef.current = layer
     return () => {
+      map.off('zoomend', onZoom)
       layer.remove()
       layerRef.current = null
+      idle()
     }
   }, [map])
 

@@ -151,8 +151,9 @@ export function OfflinePanel({ getViewBounds, onShowZone, onZonesChange }: Props
           ) : (
             <>
               <p className="offline__note">
-                Enregistre sur cet appareil : l'appli, les cartes de pluie, les stations, le guide des champignons
-                (photos comprises) et le fond de carte <b>Plan IGN</b>. À faire avec du réseau (idéalement en Wi-Fi).
+                Enregistre sur cet appareil : l'appli, les cartes de pluie, les stations, les <b>coins à champignons</b>{' '}
+                (vue d'ensemble), le guide des champignons (photos comprises) et le fond de carte <b>Plan IGN</b>. À faire
+                avec du réseau (idéalement en Wi-Fi).
               </p>
 
               <fieldset className="offline__levels" disabled={running}>
@@ -193,7 +194,8 @@ export function OfflinePanel({ getViewBounds, onShowZone, onZonesChange }: Props
                 <strong>🥾 Zone détaillée (sentiers)</strong>
                 <p className="offline__note">
                   Enregistre <b>la zone affichée à l'écran</b> jusqu'au zoom {ZONE_MAX_ZOOM}, où le Plan IGN montre les
-                  chemins et sentiers. Cadre d'abord la carte sur ton coin (une forêt, un massif). Les fonds Topo et
+                  chemins et sentiers, avec <b>la carte détaillée des coins</b> (milieu à 20 m). Cadre d'abord la carte sur
+                  ton coin (une forêt, un massif). Les fonds Topo et
                   « Sentiers balisés » ne sont pas enregistrables (serveurs bénévoles).
                 </p>
                 {!info && <p className="offline__note offline__note--warn">Enregistre d'abord la copie ci-dessus : sans elle, l'appli ne démarre pas sans réseau.</p>}
@@ -239,8 +241,9 @@ export function OfflinePanel({ getViewBounds, onShowZone, onZonesChange }: Props
                     ✓ Copie du <b>{formatWhen(info.savedAt)}</b> — {LEVELS[info.level].label}, {formatMo(info.bytes)}
                   </div>
                   <small>
-                    Cartes de pluie enregistrées : {info.mapsFetchedAt ? formatWhen(info.mapsFetchedAt) : '—'}. La copie ne
-                    se met à jour que si tu rappuies sur le bouton.
+                    Cartes de pluie enregistrées : {info.mapsFetchedAt ? formatWhen(info.mapsFetchedAt) : '—'}. Coins :{' '}
+                    {info.coinsGeneratedAt ? `calculés le ${formatWhen(info.coinsGeneratedAt)}` : 'pas encore enregistrés (mets à jour la copie)'}. La copie
+                    ne se met à jour que si tu rappuies sur le bouton.
                   </small>
                   <button type="button" className="offline__link" onClick={remove}>
                     Supprimer la copie

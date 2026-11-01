@@ -533,6 +533,38 @@ export function loadFineTile(z: number, x: number, y: number): Promise<Rgb | nul
   return fineTiles.get(key)!
 }
 
+// --------------------------------------------------------------------------------------------------
+// Hors ligne (01/11/2026, demande utilisateur : en forêt de montagne, pas de réseau). Adresses EXACTES que l'appli
+// demande, pour que le service worker (public/sw.js) les retrouve dans la copie enregistrée (lib/offline.ts).
+// Copie de la région : pousse des jours publiés (7 espèces + infos), milieu à 250 m, observations, index des tuiles fines.
+export async function coinsOfflineUrls(): Promise<{ urls: string[]; generatedAt: string }> {
+  const { data, base } = await fetchDataJson<PousseMeta>('pousse.json')
+  const v = encodeURIComponent(data.generatedAt)
+  const files = [...new Set(data.days.flatMap((d) => [...Object.values(d.files), d.info]))]
+  const local = ['/habitat/habitat.json', '/habitat/info.png', ...SPECIES.map((s) => `/habitat/${s.key}.png`), '/observations.json']
+  return {
+    urls: [
+      `${base}/pousse.json`,
+      ...files.map((f) => `${base}/${f}?v=${v}`),
+      ...local.map((p) => new URL(p, location.origin).href),
+      `${FINE_TILES_URL}/habitat-tiles.json`,
+    ],
+    generatedAt: data.generatedAt,
+  }
+}
+
+// Zone détaillée : tuiles du milieu à 20 m (zooms 10 à 13) qui couvrent la zone.
+export function fineTileUrlsFor(b: { south: number; west: number; north: number; east: number }): string[] {
+  const urls: string[] = []
+  for (let z = FINE_MIN_ZOOM; z <= FINE_MAX_ZOOM; z++) {
+    const n = 2 ** z
+    const tx = (lon: number) => Math.floor(((lon + 180) / 360) * n)
+    const ty = (lat: number) => Math.floor(((1 - Math.asinh(Math.tan((lat * Math.PI) / 180)) / Math.PI) / 2) * n)
+    for (let x = tx(b.west); x <= tx(b.east); x++) for (let y = ty(b.north); y <= ty(b.south); y++) urls.push(`${FINE_TILES_URL}/${z}/${x}/${y}.png`)
+  }
+  return urls
+}
+
 export const fineLevel = (rgba: Uint8ClampedArray, i: number, speciesIndex: number): number => {
   const v = (rgba[i * 4] << 16) | (rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2]
   return (v >> (3 * speciesIndex)) & 7

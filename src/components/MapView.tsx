@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { MapContainer, LayersControl, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { zoomForResultType, type GeocodeResult } from '../lib/geocoding'
 import { getDailyForecast } from '../lib/openMeteo'
@@ -32,6 +32,8 @@ import { CoinsCodeDialog } from './CoinsCodeDialog'
 import { coinsUnlocked } from '../lib/coinsLock'
 import { moonEnabled, setMoonEnabled } from '../lib/moon'
 import { loadObservations, observationsEnabled, setObservationsEnabled, type ObservationsMeta } from '../lib/observations'
+import { isOnline, subscribe as subscribeOffline } from '../lib/offline'
+import { CoinsLoading } from './CoinsLoading'
 import { ObservationsLayer } from './ObservationsLayer'
 import { collapsePanels } from '../lib/usePanelCollapse'
 import './MapView.css'
@@ -291,6 +293,9 @@ export function MapView() {
       // mémorisation facultative
     }
   }, [])
+  const [fineLoading, setFineLoading] = useState(false)
+  // Sans réseau, seules les zones enregistrées ont le milieu à 20 m : la carte d'ensemble reste affichée à tous les zooms.
+  const online = useSyncExternalStore(subscribeOffline, isOnline)
   const [obsMeta, setObsMeta] = useState<ObservationsMeta | null>(null)
   useEffect(() => {
     if (mode === 'coins' && observations) void loadObservations().then(setObsMeta)
@@ -742,12 +747,12 @@ export function MapView() {
             result={coinsResult}
             spots={spots}
             onSelectSpot={(s) => openSpot(s.lat, s.lon, s.name)}
-            hideFromZoom={fineIndices ? FINE_MIN_ZOOM : undefined}
+            hideFromZoom={fineIndices && online ? FINE_MIN_ZOOM : undefined}
             opacity={coinsOpacity}
           />
         )}
         {mode === 'coins' && coinsResult && coinsStatus === 'ready' && fineIndices && (
-          <CoinsFineLayer result={coinsResult} speciesIndices={fineIndices} opacity={coinsOpacity} />
+          <CoinsFineLayer result={coinsResult} speciesIndices={fineIndices} opacity={coinsOpacity} onLoading={setFineLoading} />
         )}
         {mode === 'coins' && observations && obsMeta && <ObservationsLayer meta={obsMeta} species={coinsSpecies} />}
         {mode === 'coins' && spot && <ForecastCross point={{ lat: spot.lat, lon: spot.lon }} />}
@@ -777,6 +782,7 @@ export function MapView() {
         />
       )}
 
+      {mode === 'coins' && (coinsStatus === 'loading' || fineLoading) && <CoinsLoading text="Calcul des coins…" />}
       {mode === 'coins' && spot && (
         <CoinsSpotCard
           species={coinsSpecies}
